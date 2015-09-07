@@ -1,0 +1,20 @@
+#!/bin/bash
+
+set -e
+
+BASEDIR=$(readlink -f $(dirname $0))
+BINDIR=${BASEDIR}/bin
+
+if [ $PWD != $BASEDIR ]; then
+	cd $BASEDIR
+fi
+
+source ./build
+
+export STKEEPER_BIN=${BINDIR}/stolon-keeper
+export STSENTINEL_BIN=${BINDIR}/stolon-sentinel
+export STPROXY_BIN=${BINDIR}/stolon-proxy
+
+
+echo "Running integration tests..."
+go test -v ./tests/integration

@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: ReplicationController
+metadata:
+  name: stolon-sentinel-rc
+spec:
+  replicas: 1
+  selector:
+    name: stolon-sentinel
+  template:
+    metadata:
+      labels:
+        name: stolon-sentinel
+        stolon-cluster: "kube-stolon"
+        stolon-sentinel: "true"
+    spec:
+      containers:
+      - name: stolon-sentinel
+        image: sorintlab/stolon:0.1
+        env:
+          - name: SENTINEL
+            value: "true"
+          - name: STSENTINEL_CLUSTER_NAME
+            value: "kube-stolon"
+          - name: STSENTINEL_ETCD_ENDPOINTS
+            value: "http://10.245.1.1:4001"
+          - name: STSENTINEL_KEEPER_KUBE_LABEL_SELECTOR
+            value: "stolon-cluster=kube-stolon,stolon-keeper=true"
+            # Enable debugging
+          - name: STSENTINEL_DEBUG
+            value: "true"

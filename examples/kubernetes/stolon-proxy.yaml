@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: ReplicationController
+metadata:
+  name: stolon-proxy-rc
+spec:
+  replicas: 1
+  selector:
+    name: stolon-proxy
+  template:
+    metadata:
+      labels:
+        name: stolon-proxy
+        stolon-cluster: "kube-stolon"
+        stolon-proxy: "true"
+    spec:
+      containers:
+      - name: stolon-proxy
+        image: sorintlab/stolon:0.1
+        env:
+          - name: PROXY
+            value: "true"
+          - name: STPROXY_CLUSTER_NAME
+          # TODO(sgotti) Get cluster name from "stoloncluster" label using a downward volume api instead of duplicating the name here
+            value: "kube-stolon"
+          - name: STPROXY_ETCD_ENDPOINTS
+            value: "http://10.245.1.1:4001"
+            # Enable debugging
+          - name: STPROXY_DEBUG
+            value: "true"
+        ports:
+          - containerPort: 5432

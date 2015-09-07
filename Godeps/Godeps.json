@@ -1,0 +1,78 @@
+{
+	"ImportPath": "github.com/sorintlab/stolon",
+	"GoVersion": "go1.5.1",
+	"Packages": [
+		"./..."
+	],
+	"Deps": [
+		{
+			"ImportPath": "github.com/coreos/etcd/client",
+			"Comment": "v2.2.0-80-g06180be",
+			"Rev": "06180be154083d0c15378e4703def03afac21bdc"
+		},
+		{
+			"ImportPath": "github.com/coreos/etcd/pkg/pathutil",
+			"Comment": "v2.2.0-80-g06180be",
+			"Rev": "06180be154083d0c15378e4703def03afac21bdc"
+		},
+		{
+			"ImportPath": "github.com/coreos/etcd/pkg/types",
+			"Comment": "v2.2.0-80-g06180be",
+			"Rev": "06180be154083d0c15378e4703def03afac21bdc"
+		},
+		{
+			"ImportPath": "github.com/coreos/fleet/pkg/lease",
+			"Comment": "v0.10.1-99-g187dd79",
+			"Rev": "187dd799b8a53647064c53dc3df0e8e67b881da8"
+		},
+		{
+			"ImportPath": "github.com/coreos/go-systemd/journal",
+			"Comment": "v3",
+			"Rev": "be94bc700879ae8217780e9d141789a2defa302b"
+		},
+		{
+			"ImportPath": "github.com/coreos/pkg/capnslog",
+			"Rev": "42a8c3b1a6f917bb8346ef738f32712a7ca0ede7"
+		},
+		{
+			"ImportPath": "github.com/davecgh/go-spew/spew",
+			"Rev": "1aaf839fb07e099361e445273993ccd9adc21b07"
+		},
+		{
+			"ImportPath": "github.com/inconshreveable/mousetrap",
+			"Rev": "76626ae9c91c4f2a10f34cad8ce83ea42c93bb75"
+		},
+		{
+			"ImportPath": "github.com/jmoiron/jsonq",
+			"Rev": "e874b168d07ecc7808bc950a17998a8aa3141d82"
+		},
+		{
+			"ImportPath": "github.com/lib/pq",
+			"Rev": "7175accbed18058468c07811f76440d6e8d7cf19"
+		},
+		{
+			"ImportPath": "github.com/satori/go.uuid",
+			"Rev": "46e1db27972f44c7722f23195ba6a8d2c2f3a0a3"
+		},
+		{
+			"ImportPath": "github.com/sorintlab/pollon",
+			"Rev": "3dd359443c0d5d5aacda60fd6af4da09ab70448d"
+		},
+		{
+			"ImportPath": "github.com/spf13/cobra",
+			"Rev": "66816bcd0378e248c613e3c443c020f544c28804"
+		},
+		{
+			"ImportPath": "github.com/spf13/pflag",
+			"Rev": "67cbc198fd11dab704b214c1e629a97af392c085"
+		},
+		{
+			"ImportPath": "github.com/ugorji/go/codec",
+			"Rev": "5abd4e96a45c386928ed2ca2a7ef63e2533e18ec"
+		},
+		{
+			"ImportPath": "golang.org/x/net/context",
+			"Rev": "1dfe7915deaf3f80b962c163b918868d8a6d8974"
+		}
+	]
+}

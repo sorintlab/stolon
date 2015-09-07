@@ -1,0 +1,18 @@
+{
+	"ImportPath": "github.com/sorintlab/pollon",
+	"GoVersion": "go1.5.1",
+	"Packages": [
+		"./..."
+	],
+	"Deps": [
+		{
+			"ImportPath": "github.com/coreos/go-systemd/journal",
+			"Comment": "v3",
+			"Rev": "be94bc700879ae8217780e9d141789a2defa302b"
+		},
+		{
+			"ImportPath": "github.com/coreos/pkg/capnslog",
+			"Rev": "42a8c3b1a6f917bb8346ef738f32712a7ca0ede7"
+		}
+	]
+}

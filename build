@@ -1,0 +1,35 @@
+#!/bin/bash
+
+set -e
+
+BASEDIR=$(readlink -f $(dirname $0))
+BINDIR=${BASEDIR}/bin
+
+if [ $PWD != $BASEDIR ]; then
+	cd $BASEDIR
+fi
+
+ORG_PATH="github.com/sorintlab"
+REPO_PATH="${ORG_PATH}/stolon"
+
+export GOPATH=${PWD}/gopath
+
+rm -f $GOPATH/src/${REPO_PATH}
+mkdir -p $GOPATH/src/${ORG_PATH}
+ln -s ${PWD} $GOPATH/src/${REPO_PATH}
+
+mkdir -p ${BINDIR}
+
+for cmd in keeper sentinel proxy; do
+	go build -i -o ${BINDIR}/stolon-${cmd} ${REPO_PATH}/cmd/${cmd}
+done
+
+
+# Copy binaries to Dockerfile image directories
+DOCKERIMAGE=${BASEDIR}/examples/kubernetes/image/docker
+
+mkdir -p ${DOCKERIMAGE}/bin/
+for cmd in keeper sentinel proxy; do
+	cp ${BINDIR}/stolon-${cmd} ${DOCKERIMAGE}/bin/stolon-${cmd}
+done
+
