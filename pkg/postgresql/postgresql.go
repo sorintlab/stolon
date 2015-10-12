@@ -16,7 +16,6 @@ package postgresql
 
 import (
 	"bufio"
-	"bytes"
 	"database/sql"
 	"fmt"
 	"io"
@@ -116,18 +115,15 @@ func (p *Manager) Start() error {
 	serverArgs := p.getServerArguments()
 	name := filepath.Join(p.pgBinPath, "pg_ctl")
 	cmd := exec.Command(name, "start", "-w", "-D", p.dataDir, "-o", serverArgs)
-	var out bytes.Buffer
-	err := cmd.Start()
+	// TODO(sgotti) attaching a pipe to sdtout/stderr makes the postgres
+	// process executed by pg_ctl inheriting it's file descriptors. So
+	// cmd.Wait() will block and waiting on them to be closed (will happend
+	// only when postgres is stopped). So this functions will never return.
+	// To avoid this no output is captured. If needed there's the need to
+	// find a way to get the output whitout blocking.
+	err := cmd.Run()
 	if err != nil {
-		return fmt.Errorf("error: %v, output: %s", err, out)
-	}
-
-	log.Infof("pid: %d\n", cmd.Process.Pid)
-
-	err = cmd.Wait()
-
-	if err != nil {
-		return fmt.Errorf("error: %v, output: %s", err, out)
+		return fmt.Errorf("error: %v")
 	}
 	return nil
 }
@@ -141,7 +137,7 @@ func (p *Manager) Stop(fast bool) error {
 	}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("error: %v, output: %s", err, out)
+		return fmt.Errorf("error: %v, output: %s", err, string(out))
 	}
 	return nil
 }
@@ -167,7 +163,7 @@ func (p *Manager) Reload() error {
 	cmd := exec.Command(name, "reload", "-D", p.dataDir, "-o", "-c unix_socket_directories=/tmp")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("error: %v, output: %s", err, out)
+		return fmt.Errorf("error: %v, output: %s", err, string(out))
 	}
 	return nil
 }
@@ -191,7 +187,7 @@ func (p *Manager) Promote() error {
 	cmd := exec.Command(name, "promote", "-w", "-D", p.dataDir)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("error: %v, output: %s", err, out)
+		return fmt.Errorf("error: %v, output: %s", err, string(out))
 	}
 	return nil
 }
@@ -442,7 +438,7 @@ func (p *Manager) SyncFromMaster(masterconnString string) error {
 	log.Debugf("execing cmd: %s", cmd)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("error: %v, output: %s", err, out)
+		return fmt.Errorf("error: %v, output: %s", err, string(out))
 	}
 	return nil
 }
