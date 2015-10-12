@@ -405,7 +405,7 @@ func getMembersPGState(ctx context.Context, mi cluster.MembersInfo) map[string]*
 		case res := <-ch:
 			count++
 			if res.err != nil {
-				log.Errorf("error getting member pg state for member: %s, err: %v", mi[res.id], res.err)
+				log.Errorf("error getting member pg state for member: %s, err: %v", res.id, res.err)
 				break
 			}
 			membersPGState[res.id] = res.pgState
