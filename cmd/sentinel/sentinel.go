@@ -221,7 +221,7 @@ func (s *Sentinel) GetBestSlave(cv *cluster.ClusterView, membersState cluster.Me
 			continue
 		}
 		if m.ClusterViewVersion != cv.Version {
-			log.Debugf("ignoring node as its clusterView versioni (%d) is different that the actual one (%d)", m.ClusterViewVersion, cv.Version)
+			log.Debugf("ignoring node as its clusterView version (%d) is different that the actual one (%d)", m.ClusterViewVersion, cv.Version)
 			continue
 		}
 		if masterState.PGState.TimelineID != membersState[id].PGState.TimelineID {
@@ -497,6 +497,7 @@ func (s *Sentinel) updateClusterView(cv *cluster.ClusterView, membersState clust
 				log.Infof("Initializing cluster with master: %s", id)
 				return &cluster.ClusterView{
 					Version:     1,
+					Master:      id,
 					MembersRole: updateMembersRole(membersState, id),
 					ChangeTime:  time.Now(),
 				}
@@ -506,13 +507,13 @@ func (s *Sentinel) updateClusterView(cv *cluster.ClusterView, membersState clust
 	}
 
 	if cv != nil {
-		masterID := cv.GetMasterID()
+		masterID := cv.Master
 		log.Debugf("masterID: %s", masterID)
 
 		masterOK := true
 		master, ok := membersState[masterID]
 		if !ok {
-			log.Errorf("member info for master %q not available. This shouldn't happen!", masterID)
+			log.Errorf("member state for master %q not available. This shouldn't happen!", masterID)
 			return nil
 		}
 		log.Debugf(spew.Sprintf("master: %#v", master))
@@ -546,6 +547,7 @@ func (s *Sentinel) updateClusterView(cv *cluster.ClusterView, membersState clust
 		if wantedMasterID != masterID {
 			return &cluster.ClusterView{
 				Version:     cv.Version + 1,
+				Master:      wantedMasterID,
 				MembersRole: updateMembersRole(membersState, wantedMasterID),
 				ChangeTime:  time.Now(),
 			}
@@ -556,6 +558,7 @@ func (s *Sentinel) updateClusterView(cv *cluster.ClusterView, membersState clust
 		if len(followersIDs) < len(membersState)-1 {
 			return &cluster.ClusterView{
 				Version:     cv.Version + 1,
+				Master:      wantedMasterID,
 				MembersRole: updateMembersRole(membersState, wantedMasterID),
 				ChangeTime:  time.Now(),
 			}
@@ -566,7 +569,7 @@ func (s *Sentinel) updateClusterView(cv *cluster.ClusterView, membersState clust
 
 func (s *Sentinel) updateProxyView(prevCV *cluster.ClusterView, cv *cluster.ClusterView, membersState cluster.MembersState, prevPVIndex uint64) error {
 	if prevCV != nil && cv != nil {
-		if prevCV.GetMasterID() != cv.GetMasterID() {
+		if prevCV.Master != cv.Master {
 			if prevPVIndex != 0 {
 				log.Infof("deleting proxy view")
 				// Tell proxy to close connection to old master
@@ -576,7 +579,7 @@ func (s *Sentinel) updateProxyView(prevCV *cluster.ClusterView, cv *cluster.Clus
 		}
 	}
 	if prevCV != nil {
-		masterID := cv.GetMasterID()
+		masterID := cv.Master
 		master, ok := membersState[masterID]
 		if !ok {
 			return fmt.Errorf("member info for master %q not available. This shouldn't happen!", masterID)

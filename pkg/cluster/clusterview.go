@@ -85,6 +85,7 @@ func (mr *MemberRole) Copy() *MemberRole {
 
 type ClusterView struct {
 	Version     int
+	Master      string
 	MembersRole MembersRole
 	ChangeTime  time.Time
 }
@@ -96,21 +97,6 @@ func (cv *ClusterView) Copy() *ClusterView {
 	ncv := *cv
 	ncv.MembersRole = cv.MembersRole.Copy()
 	return &ncv
-}
-
-func (cv *ClusterView) GetMasterID() string {
-	if cv == nil {
-		return ""
-	}
-	if cv.MembersRole == nil {
-		return ""
-	}
-	for id, mr := range cv.MembersRole {
-		if mr.Follow == "" {
-			return id
-		}
-	}
-	return ""
 }
 
 func (cv *ClusterView) GetFollowersIDs(id string) []string {

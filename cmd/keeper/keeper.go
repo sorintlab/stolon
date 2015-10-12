@@ -327,7 +327,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 	}
 
 	if cv != nil {
-		if !started && p.id == cv.GetMasterID() {
+		if !started && p.id == cv.Master {
 			// If the clusterView says we are master but we cannot get
 			// instance status or start then stop here, if we are slave then we can
 			// recover
@@ -360,7 +360,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 
 	// cv != nil
 
-	masterID := cv.GetMasterID()
+	masterID := cv.Master
 	log.Debugf("masterID: %s", masterID)
 
 	master := membersState[masterID]
