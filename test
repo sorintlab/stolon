@@ -1,5 +1,19 @@
 #!/bin/bash
 
+# Test script code thanks to coreos/etcd
+#
+# Run all etcd tests
+# ./test
+# ./test -v
+#
+# Run tests for one package
+#
+# PKG=./wal ./test
+# PKG=snap ./test
+#
+# Run also integration tests
+# INTEGRATION=1 ./test
+#
 set -e
 
 BASEDIR=$(readlink -f $(dirname $0))
@@ -11,10 +25,75 @@ fi
 
 source ./build
 
-export STKEEPER_BIN=${BINDIR}/stolon-keeper
-export STSENTINEL_BIN=${BINDIR}/stolon-sentinel
-export STPROXY_BIN=${BINDIR}/stolon-proxy
+TESTABLE="cmd/keeper cmd/sentinel cmd/proxy pkg/cluster pkg/etcd pkg/flagutil pkg/kubernetes pkg/postgresql pkg/util"
+
+# user has not provided PKG override
+if [ -z "$PKG" ]; then
+	TEST=$TESTABLE
+	FMT=$TESTABLE
+
+# user has provided PKG override
+else
+	# strip out leading dotslashes and trailing slashes from PKG=./foo/
+	TEST=${PKG/#./}
+	TEST=${TEST/#\//}
+	TEST=${TEST/%\//}
+
+	FMT=$TEST
+fi
+
+# split TEST into an array and prepend REPO_PATH to each local package
+split=(${TEST// / })
+TEST=${split[@]/#/${REPO_PATH}/}
+split=(${NO_RACE_TEST// / })
+NO_RACE_TEST=${split[@]/#/${REPO_PATH}/}
+
+echo "Running tests..."
+
+# Invoke ./cover for HTML output
+COVER=${COVER:-"-cover"}
+
+go test -timeout 3m ${COVER} $@ ${TEST} ${RACE}
+
+if [ -n "$INTEGRATION" ]; then
+	echo "Running integration tests..."
+	export STKEEPER_BIN=${BINDIR}/stolon-keeper
+	export STSENTINEL_BIN=${BINDIR}/stolon-sentinel
+	export STPROXY_BIN=${BINDIR}/stolon-proxy
+	go test $@ -v ${REPO_PATH}/tests/integration
+fi
+
+echo "Checking gofmt..."
+fmtRes=$(gofmt -l $FMT)
+if [ -n "${fmtRes}" ]; then
+	echo -e "gofmt checking failed:\n${fmtRes}"
+	exit 255
+fi
+
+echo "Checking govet..."
+vetRes=$(go vet $TEST)
+if [ -n "${vetRes}" ]; then
+	echo -e "govet checking failed:\n${vetRes}"
+	exit 255
+fi
+
+echo "Checking govet -shadow..."
+for path in $FMT; do
+	vetRes=$(go tool vet -shadow ${path})
+	if [ -n "${vetRes}" ]; then
+		echo -e "govet checking ${path} failed:\n${vetRes}"
+		exit 255
+	fi
+done
 
 
-echo "Running integration tests..."
-go test -v ./tests/integration
+echo "Checking for license header..."
+licRes=$(for file in $(find . -type f -iname '*.go' ! -path './Godeps/*'); do
+		head -n3 "${file}" | grep -Eq "(Copyright|generated|GENERATED)" || echo -e "  ${file}"
+	done;)
+if [ -n "${licRes}" ]; then
+	echo -e "license header checking failed:\n${licRes}"
+	exit 255
+fi
+
+echo "Success"

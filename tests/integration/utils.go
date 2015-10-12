@@ -1,3 +1,17 @@
+// Copyright 2015 Sorint.lab
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package integration
 
 import (
@@ -19,12 +33,12 @@ import (
 )
 
 type TestKeeper struct {
-	id         string
-	dataDir    string
+	id        string
+	dataDir   string
 	keeperBin string
-	args       []string
-	cmd        *exec.Cmd
-	db         *sql.DB
+	args      []string
+	cmd       *exec.Cmd
+	db        *sql.DB
 }
 
 func NewTestKeeper(dir string, cluster string) (*TestKeeper, error) {
@@ -74,11 +88,11 @@ func NewTestKeeper(dir string, cluster string) (*TestKeeper, error) {
 		return nil, fmt.Errorf("missing STKEEPER_BIN env")
 	}
 	tm := &TestKeeper{
-		id:         id,
-		dataDir:    dataDir,
+		id:        id,
+		dataDir:   dataDir,
 		keeperBin: keeperBin,
-		args:       args,
-		db:         db,
+		args:      args,
+		db:        db,
 	}
 	return tm, nil
 }

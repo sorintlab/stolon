@@ -312,7 +312,6 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 	started := false
 
 	if initialized {
-		var err error
 		started, err = pgm.IsStarted()
 		if err != nil {
 			log.Errorf("failed to retrieve instance status: %v", err)
@@ -377,7 +376,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 		log.Infof("our cluster requested state is master")
 		if role != common.MasterRole {
 			log.Infof("promoting to master")
-			err = pgm.Promote()
+			err := pgm.Promote()
 			if err != nil {
 				log.Errorf("err: %v", err)
 				return
@@ -385,7 +384,8 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 		} else {
 			log.Infof("already master")
 
-			replSlots, err := pgm.GetReplicatinSlots()
+			replSlots := []string{}
+			replSlots, err = pgm.GetReplicatinSlots()
 			if err != nil {
 				log.Errorf("err: %v", err)
 				return
