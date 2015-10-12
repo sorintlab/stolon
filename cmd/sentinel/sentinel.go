@@ -499,7 +499,6 @@ func (s *Sentinel) updateClusterView(cv *cluster.ClusterView, membersState clust
 					Version:     1,
 					Master:      id,
 					MembersRole: updateMembersRole(membersState, id),
-					ChangeTime:  time.Now(),
 				}
 			}
 			break
@@ -549,7 +548,6 @@ func (s *Sentinel) updateClusterView(cv *cluster.ClusterView, membersState clust
 				Version:     cv.Version + 1,
 				Master:      wantedMasterID,
 				MembersRole: updateMembersRole(membersState, wantedMasterID),
-				ChangeTime:  time.Now(),
 			}
 		}
 
@@ -560,7 +558,6 @@ func (s *Sentinel) updateClusterView(cv *cluster.ClusterView, membersState clust
 				Version:     cv.Version + 1,
 				Master:      wantedMasterID,
 				MembersRole: updateMembersRole(membersState, wantedMasterID),
-				ChangeTime:  time.Now(),
 			}
 		}
 	}
@@ -747,6 +744,8 @@ func (s *Sentinel) clusterKeeperSM(pctx context.Context) {
 		log.Debugf(spew.Sprintf("newcv: %#v", newcv))
 		if newcv == nil {
 			newcv = cv
+		} else {
+			newcv.ChangeTime = time.Now()
 		}
 		if err := s.updateProxyView(cv, newcv, newMembersState, prevPVIndex); err != nil {
 			log.Errorf("error updating proxyView: %v", err)

@@ -123,7 +123,7 @@ func (p *Manager) Start() error {
 	// find a way to get the output whitout blocking.
 	err := cmd.Run()
 	if err != nil {
-		return fmt.Errorf("error: %v")
+		return fmt.Errorf("error: %v", err)
 	}
 	return nil
 }
