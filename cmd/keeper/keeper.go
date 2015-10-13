@@ -256,7 +256,7 @@ func (p *PostgresKeeper) Start() {
 				endCh <- struct{}{}
 			}()
 		case <-endCh:
-			timerCh = time.NewTimer(p.clusterConfig.CheckInterval).C
+			timerCh = time.NewTimer(p.clusterConfig.SleepInterval).C
 		case err := <-endApiCh:
 			if err != nil {
 				log.Fatal("ListenAndServe: ", err)
