@@ -60,7 +60,7 @@ func TestUpdateClusterView(t *testing.T) {
 			outCV: cluster.NewClusterView(),
 			err:   fmt.Errorf("cannot init cluster, more than 1 member registered"),
 		},
-		// One master and one slave, both healthy: no change from previous cv
+		// One master and one standby, both healthy: no change from previous cv
 		{
 			cv: &cluster.ClusterView{
 				Version: 1,
@@ -95,7 +95,7 @@ func TestUpdateClusterView(t *testing.T) {
 				},
 			},
 		},
-		// One master and one slave, master not healthy: slave elected as new master
+		// One master and one standby, master not healthy: standby elected as new master
 		{
 			cv: &cluster.ClusterView{
 				Version: 1,
@@ -166,8 +166,8 @@ func TestUpdateClusterView(t *testing.T) {
 			},
 		},
 
-		// One master and one slave, master not healthy, slave with old
-		// clusterview: no slave elected as new master.
+		// One master and one standby, master not healthy, standby with old
+		// clusterview: no standby elected as new master.
 		{
 			cv: &cluster.ClusterView{
 				Version: 2,
@@ -202,8 +202,8 @@ func TestUpdateClusterView(t *testing.T) {
 				},
 			},
 		},
-		// One master and one slave, master not converged to current
-		// cv: slave elected as new master.
+		// One master and one standby, master not converged to current
+		// cv: standby elected as new master.
 		{
 			cv: &cluster.ClusterView{
 				Version: 2,

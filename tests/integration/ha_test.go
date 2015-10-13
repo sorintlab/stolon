@@ -61,7 +61,7 @@ func setupServers(t *testing.T, dir string, numKeepers, numSentinels uint8) ([]*
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	// Start slaves
+	// Start standbys
 	for i := uint8(1); i < numKeepers; i++ {
 		tm, err := NewTestKeeper(dir, cluster)
 		if err != nil {
@@ -73,7 +73,7 @@ func setupServers(t *testing.T, dir string, numKeepers, numSentinels uint8) ([]*
 		if err := tm.WaitDBUp(60 * time.Second); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
-		if err := tm.WaitRole(common.SlaveRole, 30*time.Second); err != nil {
+		if err := tm.WaitRole(common.StandbyRole, 30*time.Second); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
 		tms = append(tms, tm)
@@ -117,7 +117,7 @@ func shutdown(tms []*TestKeeper, tss []*TestSentinel) {
 	}
 }
 
-func getRoles(t *testing.T, tms []*TestKeeper) (master *TestKeeper, slaves []*TestKeeper, err error) {
+func getRoles(t *testing.T, tms []*TestKeeper) (master *TestKeeper, standbys []*TestKeeper, err error) {
 	for _, tm := range tms {
 		ok, err := tm.IsMaster()
 		if err != nil {
@@ -126,13 +126,13 @@ func getRoles(t *testing.T, tms []*TestKeeper) (master *TestKeeper, slaves []*Te
 		if ok {
 			master = tm
 		} else {
-			slaves = append(slaves, tm)
+			standbys = append(standbys, tm)
 		}
 	}
 	return
 }
 
-func TestMasterSlave(t *testing.T) {
+func TestMasterStandby(t *testing.T) {
 	dir, err := ioutil.TempDir("", "stolon")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -142,7 +142,7 @@ func TestMasterSlave(t *testing.T) {
 	tms, tss := setupServers(t, dir, 2, 1)
 	defer shutdown(tms, tss)
 
-	master, slaves, err := getRoles(t, tms)
+	master, standbys, err := getRoles(t, tms)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -161,7 +161,7 @@ func TestMasterSlave(t *testing.T) {
 		t.Fatalf("wrong number of lines, want: %d, got: %d", 1, c)
 	}
 	time.Sleep(1 * time.Second)
-	c, err = getLines(t, slaves[0])
+	c, err = getLines(t, standbys[0])
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -181,7 +181,7 @@ func TestFailover(t *testing.T) {
 	tms, tss := setupServers(t, dir, 2, 1)
 	defer shutdown(tms, tss)
 
-	master, slaves, err := getRoles(t, tms)
+	master, standbys, err := getRoles(t, tms)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -197,11 +197,11 @@ func TestFailover(t *testing.T) {
 	fmt.Printf("Stopping current master keeper: %s\n", master.id)
 	master.Stop()
 
-	if err := slaves[0].WaitRole(common.MasterRole, 30*time.Second); err != nil {
+	if err := standbys[0].WaitRole(common.MasterRole, 30*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	c, err := getLines(t, slaves[0])
+	c, err := getLines(t, standbys[0])
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -220,7 +220,7 @@ func TestOldMasterRestart(t *testing.T) {
 	tms, tss := setupServers(t, dir, 2, 1)
 	defer shutdown(tms, tss)
 
-	master, slaves, err := getRoles(t, tms)
+	master, standbys, err := getRoles(t, tms)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -236,11 +236,11 @@ func TestOldMasterRestart(t *testing.T) {
 	fmt.Printf("Stopping current master keeper: %s\n", master.id)
 	master.Stop()
 
-	if err := slaves[0].WaitRole(common.MasterRole, 30*time.Second); err != nil {
+	if err := standbys[0].WaitRole(common.MasterRole, 30*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	c, err := getLines(t, slaves[0])
+	c, err := getLines(t, standbys[0])
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -248,7 +248,7 @@ func TestOldMasterRestart(t *testing.T) {
 		t.Fatalf("wrong number of lines, want: %d, got: %d", 1, c)
 	}
 
-	if err := write(t, slaves[0], 2, 2); err != nil {
+	if err := write(t, standbys[0], 2, 2); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
@@ -257,7 +257,7 @@ func TestOldMasterRestart(t *testing.T) {
 	if err := master.Start(); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	if err := master.WaitRole(common.SlaveRole, 30*time.Second); err != nil {
+	if err := master.WaitRole(common.StandbyRole, 30*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	c, err = getLines(t, master)
@@ -279,7 +279,7 @@ func TestPartition1(t *testing.T) {
 	tms, tss := setupServers(t, dir, 2, 1)
 	defer shutdown(tms, tss)
 
-	master, slaves, err := getRoles(t, tms)
+	master, standbys, err := getRoles(t, tms)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -300,11 +300,11 @@ func TestPartition1(t *testing.T) {
 	if err := master.SignalPG(syscall.SIGSTOP); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	if err := slaves[0].WaitRole(common.MasterRole, 60*time.Second); err != nil {
+	if err := standbys[0].WaitRole(common.MasterRole, 60*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	c, err := getLines(t, slaves[0])
+	c, err := getLines(t, standbys[0])
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -312,7 +312,7 @@ func TestPartition1(t *testing.T) {
 		t.Fatalf("wrong number of lines, want: %d, got: %d", 1, c)
 	}
 
-	if err := write(t, slaves[0], 2, 2); err != nil {
+	if err := write(t, standbys[0], 2, 2); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
@@ -325,7 +325,7 @@ func TestPartition1(t *testing.T) {
 	if err := master.SignalPG(syscall.SIGCONT); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	if err := master.WaitRole(common.SlaveRole, 60*time.Second); err != nil {
+	if err := master.WaitRole(common.StandbyRole, 60*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	c, err = getLines(t, master)
