@@ -15,7 +15,7 @@
 package main
 
 import (
-	"reflect"
+	"fmt"
 	"testing"
 	"time"
 
@@ -28,15 +28,17 @@ func TestUpdateClusterView(t *testing.T) {
 		cv           *cluster.ClusterView
 		membersState cluster.MembersState
 		outCV        *cluster.ClusterView
+		err          error
 	}{
 		{
-			cv:           nil,
+			cv:           cluster.NewClusterView(),
 			membersState: nil,
-			outCV:        nil,
+			outCV:        cluster.NewClusterView(),
+			err:          fmt.Errorf("cannot init cluster, no members registered"),
 		},
 		// cluster initialization, one member
 		{
-			cv: nil,
+			cv: cluster.NewClusterView(),
 			membersState: cluster.MembersState{
 				"01": &cluster.MemberState{},
 			},
@@ -50,12 +52,13 @@ func TestUpdateClusterView(t *testing.T) {
 		},
 		// cluster initialization, too many members
 		{
-			cv: nil,
+			cv: cluster.NewClusterView(),
 			membersState: cluster.MembersState{
 				"01": &cluster.MemberState{},
 				"02": &cluster.MemberState{},
 			},
-			outCV: nil,
+			outCV: cluster.NewClusterView(),
+			err:   fmt.Errorf("cannot init cluster, more than 1 member registered"),
 		},
 		// One master and one slave, both healthy: no change from previous cv
 		{
@@ -83,7 +86,14 @@ func TestUpdateClusterView(t *testing.T) {
 					},
 				},
 			},
-			outCV: nil,
+			outCV: &cluster.ClusterView{
+				Version: 1,
+				Master:  "01",
+				MembersRole: cluster.MembersRole{
+					"01": &cluster.MemberRole{Follow: ""},
+					"02": &cluster.MemberRole{Follow: "01"},
+				},
+			},
 		},
 		// One master and one slave, master not healthy: slave elected as new master
 		{
@@ -115,11 +125,47 @@ func TestUpdateClusterView(t *testing.T) {
 				Version: 2,
 				Master:  "02",
 				MembersRole: cluster.MembersRole{
+					"01": &cluster.MemberRole{Follow: ""},
+					"02": &cluster.MemberRole{Follow: ""},
+				},
+			},
+		},
+		// From the previous test, new master (02) converged. Old master setup to follow new master (02).
+		{
+			cv: &cluster.ClusterView{
+				Version: 2,
+				Master:  "02",
+				MembersRole: cluster.MembersRole{
+					"01": &cluster.MemberRole{Follow: ""},
+					"02": &cluster.MemberRole{Follow: ""},
+				},
+			},
+			membersState: cluster.MembersState{
+				"01": &cluster.MemberState{
+					ClusterViewVersion: 1,
+					ErrorStartTime:     time.Unix(0, 0),
+					PGState: &cluster.PostgresState{
+						TimelineID: 0,
+					},
+				},
+				"02": &cluster.MemberState{
+					ClusterViewVersion: 2,
+					ErrorStartTime:     time.Time{},
+					PGState: &cluster.PostgresState{
+						TimelineID: 0,
+					},
+				},
+			},
+			outCV: &cluster.ClusterView{
+				Version: 3,
+				Master:  "02",
+				MembersRole: cluster.MembersRole{
 					"01": &cluster.MemberRole{Follow: "02"},
 					"02": &cluster.MemberRole{Follow: ""},
 				},
 			},
 		},
+
 		// One master and one slave, master not healthy, slave with old
 		// clusterview: no slave elected as new master.
 		{
@@ -147,7 +193,14 @@ func TestUpdateClusterView(t *testing.T) {
 					},
 				},
 			},
-			outCV: nil,
+			outCV: &cluster.ClusterView{
+				Version: 2,
+				Master:  "01",
+				MembersRole: cluster.MembersRole{
+					"01": &cluster.MemberRole{Follow: ""},
+					"02": &cluster.MemberRole{Follow: "01"},
+				},
+			},
 		},
 		// One master and one slave, master not converged to current
 		// cv: slave elected as new master.
@@ -180,7 +233,7 @@ func TestUpdateClusterView(t *testing.T) {
 				Version: 3,
 				Master:  "02",
 				MembersRole: cluster.MembersRole{
-					"01": &cluster.MemberRole{Follow: "02"},
+					"01": &cluster.MemberRole{Follow: ""},
 					"02": &cluster.MemberRole{Follow: ""},
 				},
 			},
@@ -190,11 +243,22 @@ func TestUpdateClusterView(t *testing.T) {
 	cfg := config{}
 	s := NewSentinel("id", cfg, nil, nil)
 	for i, tt := range tests {
-		outCV := s.updateClusterView(tt.cv, tt.membersState)
+		outCV, err := s.updateClusterView(tt.cv, tt.membersState)
 		t.Logf("test #%d", i)
 		t.Logf(spew.Sprintf("outCV: %#v", outCV))
-		if !reflect.DeepEqual(tt.outCV, outCV) {
-			t.Errorf(spew.Sprintf("#%d: wrong outCV: got: %#v, want: %#v", i, outCV, tt.outCV))
+		if tt.err != nil {
+			if err == nil {
+				t.Errorf("got no error, wanted error: %v", tt.err)
+			} else if tt.err.Error() != err.Error() {
+				t.Errorf("got error: %v, wanted error: %v", err, tt.err)
+			}
+		} else {
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+			if !outCV.Equals(tt.outCV) {
+				t.Errorf(spew.Sprintf("#%d: wrong outCV: got: %#v, want: %#v", i, outCV, tt.outCV))
+			}
 		}
 	}
 }

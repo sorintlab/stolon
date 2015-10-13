@@ -414,18 +414,6 @@ func getMembersPGState(ctx context.Context, mi cluster.MembersInfo) map[string]*
 	return membersPGState
 }
 
-func updateMembersRole(membersState cluster.MembersState, masterID string) cluster.MembersRole {
-	membersRole := cluster.MembersRole{}
-	for id, _ := range membersState {
-		if id == masterID {
-			membersRole[id] = &cluster.MemberRole{}
-		} else {
-			membersRole[id] = &cluster.MemberRole{Follow: masterID}
-		}
-	}
-	return membersRole
-}
-
 func (s *Sentinel) updateMembersState(membersState cluster.MembersState, membersInfo cluster.MembersInfo, membersPGState map[string]*cluster.PostgresState) cluster.MembersState {
 	// Create newMembersState as a copy of the current membersState
 	newMembersState := membersState.Copy()
@@ -478,56 +466,49 @@ func (s *Sentinel) updateMembersState(membersState cluster.MembersState, members
 	return newMembersState
 }
 
-func (s *Sentinel) updateClusterView(cv *cluster.ClusterView, membersState cluster.MembersState) *cluster.ClusterView {
+func (s *Sentinel) updateClusterView(cv *cluster.ClusterView, membersState cluster.MembersState) (*cluster.ClusterView, error) {
+	var wantedMasterID string
 	// Cluster first initialization
-	if cv == nil {
+	if cv.Version == 0 {
 		log.Debugf("finding initial master")
 		// Check for an initial master
 		if len(membersState) < 1 {
-			log.Infof("cannot init cluster, no members registered")
-			return nil
+			return nil, fmt.Errorf("cannot init cluster, no members registered")
 		}
 		if len(membersState) > 1 {
-			log.Errorf("cannot init cluster, more than 1 member registered")
-			return nil
+			return nil, fmt.Errorf("cannot init cluster, more than 1 member registered")
 		}
 		for id, _ := range membersState {
 			log.Debugf("masterID: %s", id)
 			if id != "" {
 				log.Infof("Initializing cluster with master: %s", id)
-				return &cluster.ClusterView{
-					Version:     1,
-					Master:      id,
-					MembersRole: updateMembersRole(membersState, id),
-				}
+				wantedMasterID = id
 			}
 			break
 		}
-	}
-
-	if cv != nil {
+	} else {
 		masterID := cv.Master
 		log.Debugf("masterID: %s", masterID)
 
 		masterOK := true
 		master, ok := membersState[masterID]
 		if !ok {
-			log.Errorf("member state for master %q not available. This shouldn't happen!", masterID)
-			return nil
+			return nil, fmt.Errorf("member state for master %q not available. This shouldn't happen!", masterID)
 		}
 		log.Debugf(spew.Sprintf("master: %#v", master))
-		// Check that the wanted master is in master state (i.e. check that promotion from slave to master happened)
-		if !s.isMemberConverged(master, cv) {
-			log.Infof("member %s not yet master", masterID)
-			masterOK = false
-		}
 
 		if !s.isMemberHealthy(master) {
 			log.Infof("master is failed")
 			masterOK = false
 		}
 
-		wantedMasterID := masterID
+		// Check that the wanted master is in master state (i.e. check that promotion from slave to master happened)
+		if !s.isMemberConverged(master, cv) {
+			log.Infof("member %s not yet master", masterID)
+			masterOK = false
+		}
+
+		wantedMasterID = masterID
 		if !masterOK {
 			log.Infof("trying to find a slave to replace failed master")
 			bestSlave, err := s.GetBestSlave(cv, membersState, masterID)
@@ -542,26 +523,44 @@ func (s *Sentinel) updateClusterView(cv *cluster.ClusterView, membersState clust
 				}
 			}
 		}
+	}
 
-		if wantedMasterID != masterID {
-			return &cluster.ClusterView{
-				Version:     cv.Version + 1,
-				Master:      wantedMasterID,
-				MembersRole: updateMembersRole(membersState, wantedMasterID),
-			}
+	newCV := cv.Copy()
+	newMembersRole := newCV.MembersRole
+
+	// Add new members from membersState
+	for id, _ := range membersState {
+		if _, ok := newMembersRole[id]; !ok {
+			newMembersRole[id] = &cluster.MemberRole{}
 		}
 
-		// Setup new slaves and update current slaves to new master
-		followersIDs := cv.GetFollowersIDs(masterID)
-		if len(followersIDs) < len(membersState)-1 {
-			return &cluster.ClusterView{
-				Version:     cv.Version + 1,
-				Master:      wantedMasterID,
-				MembersRole: updateMembersRole(membersState, wantedMasterID),
+	}
+
+	// Setup master role
+	if cv.Master != wantedMasterID {
+		newCV.Master = wantedMasterID
+		newMembersRole[wantedMasterID] = &cluster.MemberRole{Follow: ""}
+	}
+
+	// Setup slaves
+	if cv.Master == wantedMasterID {
+		// wanted master is the previous one
+		masterState := membersState[wantedMasterID]
+		if s.isMemberHealthy(masterState) && s.isMemberConverged(masterState, cv) {
+			for id, _ := range newMembersRole {
+				if id == wantedMasterID {
+					continue
+				}
+				newMembersRole[id] = &cluster.MemberRole{Follow: wantedMasterID}
 			}
 		}
 	}
-	return nil
+
+	if !newCV.Equals(cv) {
+		newCV.Version = cv.Version + 1
+		newCV.ChangeTime = time.Now()
+	}
+	return newCV, nil
 }
 
 func (s *Sentinel) updateProxyView(prevCV *cluster.ClusterView, cv *cluster.ClusterView, membersState cluster.MembersState, prevPVIndex uint64) error {
@@ -649,7 +648,7 @@ func (s *Sentinel) Start() {
 			return
 		case <-timerCh:
 			go func() {
-				s.clusterKeeperSM(ctx)
+				s.clusterSentinelSM(ctx)
 				endCh <- struct{}{}
 			}()
 		case <-endCh:
@@ -658,7 +657,7 @@ func (s *Sentinel) Start() {
 	}
 }
 
-func (s *Sentinel) clusterKeeperSM(pctx context.Context) {
+func (s *Sentinel) clusterSentinelSM(pctx context.Context) {
 	e := s.e
 
 	cd, res, err := e.GetClusterData()
@@ -674,7 +673,7 @@ func (s *Sentinel) clusterKeeperSM(pctx context.Context) {
 	var cv *cluster.ClusterView
 	var membersState cluster.MembersState
 	if cd == nil {
-		cv = nil
+		cv = cluster.NewClusterView()
 		membersState = nil
 	} else {
 		cv = cd.ClusterView
@@ -740,21 +739,23 @@ func (s *Sentinel) clusterKeeperSM(pctx context.Context) {
 	s.l = l
 
 	if isLeader(s.l, s.id) {
-		newcv := s.updateClusterView(cv, newMembersState)
-		log.Debugf(spew.Sprintf("newcv: %#v", newcv))
-		if newcv == nil {
-			newcv = cv
-		} else {
-			newcv.ChangeTime = time.Now()
-		}
-		if err := s.updateProxyView(cv, newcv, newMembersState, prevPVIndex); err != nil {
-			log.Errorf("error updating proxyView: %v", err)
+		newcv, err := s.updateClusterView(cv, newMembersState)
+		if err != nil {
+			log.Errorf("failed to update clusterView: %v", err)
 			return
 		}
+		log.Debugf(spew.Sprintf("newcv: %#v", newcv))
+		if cv.Version < newcv.Version {
+			log.Debugf("newcv changed from previous cv")
+			if err := s.updateProxyView(cv, newcv, newMembersState, prevPVIndex); err != nil {
+				log.Errorf("error updating proxyView: %v", err)
+				return
+			}
 
-		_, err = e.SetClusterData(newMembersState, newcv, prevCDIndex)
-		if err != nil {
-			log.Errorf("error saving clusterdata: %v", err)
+			_, err = e.SetClusterData(newMembersState, newcv, prevCDIndex)
+			if err != nil {
+				log.Errorf("error saving clusterdata: %v", err)
+			}
 		}
 	}
 }
