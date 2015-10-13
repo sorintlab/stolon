@@ -328,7 +328,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 	if cv != nil {
 		if !started && p.id == cv.Master {
 			// If the clusterView says we are master but we cannot get
-			// instance status or start then stop here, if we are slave then we can
+			// instance status or start then stop here, if we are standby then we can
 			// recover
 			return
 		}
@@ -344,7 +344,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 		log.Infof("current pg state: master")
 		isMaster = true
 	} else {
-		log.Infof("current pg state: slave")
+		log.Infof("current pg state: standby")
 	}
 
 	// publish ourself for discovery
@@ -414,7 +414,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 			}
 		}
 	} else {
-		log.Infof("our cluster requested state is slave of %q", memberRole.Follow)
+		log.Infof("our cluster requested state is standby following %q", memberRole.Follow)
 		if isMaster {
 			if initialized && started {
 				err := pgm.Stop(true)
@@ -437,7 +437,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 			}
 			log.Infof("sync from master %q successfully finished", masterID)
 
-			err = pgm.BecomeSlave(replConnString)
+			err = pgm.BecomeStandby(replConnString)
 			if err != nil {
 				log.Errorf("err: %v", err)
 				return
@@ -450,7 +450,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 			}
 
 		} else {
-			log.Infof("already slave")
+			log.Infof("already standby")
 			curConnParams, err := pgm.GetPrimaryConninfo()
 			if err != nil {
 				log.Errorf("err: %v", err)
@@ -467,13 +467,13 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 			}
 
 			// TODO(sgotti) if the master changed, check that we are not ahead of the current master or force a full resync
-			// This can happen with async replication if the slave elected as new master is behind us.
+			// This can happen with async replication if the standby elected as new master is behind us.
 
 			// Update our primary_conninfo if replConnString changed
 			if !curConnParams.Equals(newConnParams) {
 				log.Infof("master connection parameters changed. Reconfiguring...")
 				log.Infof("following %s with connection url %s", memberRole.Follow, replConnString)
-				err = pgm.BecomeSlave(replConnString)
+				err = pgm.BecomeStandby(replConnString)
 				if err != nil {
 					log.Errorf("err: %v", err)
 					return

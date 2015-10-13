@@ -102,7 +102,7 @@ func GetRole(ctx context.Context, connString string) (common.Role, error) {
 			return 0, err
 		}
 		if isInRecovery {
-			return common.SlaveRole, nil
+			return common.StandbyRole, nil
 		}
 		return common.MasterRole, nil
 	}

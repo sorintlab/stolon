@@ -192,7 +192,7 @@ func (p *Manager) Promote() error {
 	return nil
 }
 
-func (p *Manager) BecomeSlave(masterconnString string) error {
+func (p *Manager) BecomeStandby(masterconnString string) error {
 	err := p.WriteRecoveryConf(masterconnString)
 	if err != nil {
 		return err
@@ -315,7 +315,7 @@ func (p *Manager) GetRoleFromDB() (common.Role, error) {
 			return 0, err
 		}
 		if isInRecovery {
-			return common.SlaveRole, nil
+			return common.StandbyRole, nil
 		}
 		return common.MasterRole, nil
 	}
@@ -330,7 +330,7 @@ func (p *Manager) GetRole() (common.Role, error) {
 	if curConnParams == nil {
 		return common.MasterRole, nil
 	}
-	return common.SlaveRole, nil
+	return common.StandbyRole, nil
 }
 
 func (p *Manager) GetPrimaryConninfo() (connParams, error) {

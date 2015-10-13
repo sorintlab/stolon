@@ -261,7 +261,7 @@ func (tm *TestKeeper) WaitRole(r common.Role, timeout time.Duration) error {
 		if ok && r == common.MasterRole {
 			return nil
 		}
-		if !ok && r == common.SlaveRole {
+		if !ok && r == common.StandbyRole {
 			return nil
 		}
 	}

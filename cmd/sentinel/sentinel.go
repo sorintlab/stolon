@@ -207,7 +207,7 @@ func httpDo(ctx context.Context, req *http.Request, tlsConfig *tls.Config, f fun
 	}
 }
 
-func (s *Sentinel) GetBestSlave(cv *cluster.ClusterView, membersState cluster.MembersState, master string) (string, error) {
+func (s *Sentinel) GetBestStandby(cv *cluster.ClusterView, membersState cluster.MembersState, master string) (string, error) {
 	var bestID string
 	masterState := membersState[master]
 	for id, m := range membersState {
@@ -237,7 +237,7 @@ func (s *Sentinel) GetBestSlave(cv *cluster.ClusterView, membersState cluster.Me
 		}
 	}
 	if bestID == "" {
-		return "", fmt.Errorf("no slaves available")
+		return "", fmt.Errorf("no standbys available")
 	}
 	return bestID, nil
 }
@@ -502,7 +502,7 @@ func (s *Sentinel) updateClusterView(cv *cluster.ClusterView, membersState clust
 			masterOK = false
 		}
 
-		// Check that the wanted master is in master state (i.e. check that promotion from slave to master happened)
+		// Check that the wanted master is in master state (i.e. check that promotion from standby to master happened)
 		if !s.isMemberConverged(master, cv) {
 			log.Infof("member %s not yet master", masterID)
 			masterOK = false
@@ -510,16 +510,16 @@ func (s *Sentinel) updateClusterView(cv *cluster.ClusterView, membersState clust
 
 		wantedMasterID = masterID
 		if !masterOK {
-			log.Infof("trying to find a slave to replace failed master")
-			bestSlave, err := s.GetBestSlave(cv, membersState, masterID)
+			log.Infof("trying to find a standby to replace failed master")
+			bestStandby, err := s.GetBestStandby(cv, membersState, masterID)
 			if err != nil {
-				log.Errorf("error trying to find the best slave: %v", err)
+				log.Errorf("error trying to find the best standby: %v", err)
 			} else {
-				if bestSlave != masterID {
-					log.Debugf("electing new master: %s", bestSlave)
-					wantedMasterID = bestSlave
+				if bestStandby != masterID {
+					log.Debugf("electing new master: %s", bestStandby)
+					wantedMasterID = bestStandby
 				} else {
-					log.Infof("cannot find a good slave to replace failed master")
+					log.Infof("cannot find a good standby to replace failed master")
 				}
 			}
 		}
@@ -542,7 +542,7 @@ func (s *Sentinel) updateClusterView(cv *cluster.ClusterView, membersState clust
 		newMembersRole[wantedMasterID] = &cluster.MemberRole{Follow: ""}
 	}
 
-	// Setup slaves
+	// Setup standbys
 	if cv.Master == wantedMasterID {
 		// wanted master is the previous one
 		masterState := membersState[wantedMasterID]

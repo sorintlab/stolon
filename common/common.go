@@ -25,12 +25,12 @@ type Role uint8
 
 const (
 	MasterRole Role = iota
-	SlaveRole
+	StandbyRole
 )
 
 func (r Role) String() string {
 	if r == MasterRole {
 		return "master"
 	}
-	return "slave"
+	return "standby"
 }
