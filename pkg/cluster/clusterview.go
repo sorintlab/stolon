@@ -14,7 +14,10 @@
 
 package cluster
 
-import "time"
+import (
+	"reflect"
+	"time"
+)
 
 type MembersState map[string]*MemberState
 
@@ -63,6 +66,10 @@ func (m *MemberState) MarkOK() {
 
 type MembersRole map[string]*MemberRole
 
+func NewMembersRole() MembersRole {
+	return make(MembersRole)
+}
+
 func (msr MembersRole) Copy() MembersRole {
 	nmsr := MembersRole{}
 	for k, v := range msr {
@@ -88,6 +95,27 @@ type ClusterView struct {
 	Master      string
 	MembersRole MembersRole
 	ChangeTime  time.Time
+}
+
+// NewClusterView return an initialized clusterView with Version: 0, zero
+// ChangeTime, no Master and empty MembersRole.
+func NewClusterView() *ClusterView {
+	return &ClusterView{
+		MembersRole: NewMembersRole(),
+	}
+}
+
+// Equals checks if the clusterViews are the same. It ignores the ChangeTime.
+func (cv *ClusterView) Equals(ncv *ClusterView) bool {
+	if cv == nil {
+		if ncv == nil {
+			return true
+		}
+		return false
+	}
+	return cv.Version == ncv.Version &&
+		cv.Master == cv.Master &&
+		reflect.DeepEqual(cv.MembersRole, ncv.MembersRole)
 }
 
 func (cv *ClusterView) Copy() *ClusterView {
