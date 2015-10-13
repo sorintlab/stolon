@@ -660,6 +660,51 @@ func (s *Sentinel) Start() {
 func (s *Sentinel) clusterSentinelSM(pctx context.Context) {
 	e := s.e
 
+	ctx, cancel := context.WithTimeout(pctx, s.clusterConfig.RequestTimeout)
+	membersDiscoveryInfo, err := s.discover(ctx)
+	cancel()
+	if err != nil {
+		log.Errorf("err: %v", err)
+		return
+	}
+	log.Debugf(spew.Sprintf("membersDiscoveryInfo: %#v", membersDiscoveryInfo))
+
+	ctx, cancel = context.WithTimeout(pctx, s.clusterConfig.RequestTimeout)
+	membersInfo, err := getMembersInfo(ctx, membersDiscoveryInfo)
+	cancel()
+	if err != nil {
+		log.Errorf("err: %v", err)
+		return
+	}
+	log.Debugf(spew.Sprintf("membersInfo: %#v", membersInfo))
+
+	ctx, cancel = context.WithTimeout(pctx, s.clusterConfig.RequestTimeout)
+	membersPGState := getMembersPGState(ctx, membersInfo)
+	cancel()
+	log.Debugf(spew.Sprintf("membersPGState: %#v", membersPGState))
+
+	var l lease.Lease
+	if isLeader(s.l, s.id) {
+		log.Infof("I'm the sentinels leader")
+		l = renewLeadership(s.l, s.clusterConfig.LeaseTTL)
+	} else {
+		log.Infof("trying to acquire sentinels leadership")
+		l = acquireLeadership(s.lManager, s.id, 1, s.clusterConfig.LeaseTTL)
+	}
+
+	// log all leadership changes
+	if l != nil && s.l == nil && l.MachineID() != s.id {
+		log.Infof("sentinel leader is %s", l.MachineID())
+	} else if l != nil && s.l != nil && l.MachineID() != l.MachineID() {
+		log.Infof("sentinel leadership changed from %s to %s", l.MachineID(), l.MachineID())
+	}
+
+	s.l = l
+
+	if !isLeader(s.l, s.id) {
+		return
+	}
+
 	cd, res, err := e.GetClusterData()
 	if err != nil {
 		log.Errorf("error retrieving cluster data: %v", err)
@@ -694,68 +739,25 @@ func (s *Sentinel) clusterSentinelSM(pctx context.Context) {
 		prevPVIndex = res.Node.ModifiedIndex
 	}
 
-	ctx, cancel := context.WithTimeout(pctx, s.clusterConfig.RequestTimeout)
-	membersDiscoveryInfo, err := s.discover(ctx)
-	cancel()
-	if err != nil {
-		log.Errorf("err: %v", err)
-		return
-	}
-	log.Debugf(spew.Sprintf("membersDiscoveryInfo: %#v", membersDiscoveryInfo))
-
-	ctx, cancel = context.WithTimeout(pctx, s.clusterConfig.RequestTimeout)
-	membersInfo, err := getMembersInfo(ctx, membersDiscoveryInfo)
-	cancel()
-	if err != nil {
-		log.Errorf("err: %v", err)
-		return
-	}
-	log.Debugf(spew.Sprintf("membersInfo: %#v", membersInfo))
-
-	ctx, cancel = context.WithTimeout(pctx, s.clusterConfig.RequestTimeout)
-	membersPGState := getMembersPGState(ctx, membersInfo)
-	cancel()
-	log.Debugf(spew.Sprintf("membersPGState: %#v", membersPGState))
-
 	newMembersState := s.updateMembersState(membersState, membersInfo, membersPGState)
 	log.Debugf(spew.Sprintf("newMembersState: %#v", newMembersState))
 
-	var l lease.Lease
-	if isLeader(s.l, s.id) {
-		log.Infof("I'm the sentinels leader")
-		l = renewLeadership(s.l, s.clusterConfig.LeaseTTL)
-	} else {
-		log.Infof("trying to acquire sentinels leadership")
-		l = acquireLeadership(s.lManager, s.id, 1, s.clusterConfig.LeaseTTL)
+	newcv, err := s.updateClusterView(cv, newMembersState)
+	if err != nil {
+		log.Errorf("failed to update clusterView: %v", err)
+		return
 	}
-
-	// log all leadership changes
-	if l != nil && s.l == nil && l.MachineID() != s.id {
-		log.Infof("sentinel leader is %s", l.MachineID())
-	} else if l != nil && s.l != nil && l.MachineID() != l.MachineID() {
-		log.Infof("sentinel leadership changed from %s to %s", l.MachineID(), l.MachineID())
-	}
-
-	s.l = l
-
-	if isLeader(s.l, s.id) {
-		newcv, err := s.updateClusterView(cv, newMembersState)
-		if err != nil {
-			log.Errorf("failed to update clusterView: %v", err)
+	log.Debugf(spew.Sprintf("newcv: %#v", newcv))
+	if cv.Version < newcv.Version {
+		log.Debugf("newcv changed from previous cv")
+		if err := s.updateProxyView(cv, newcv, newMembersState, prevPVIndex); err != nil {
+			log.Errorf("error updating proxyView: %v", err)
 			return
 		}
-		log.Debugf(spew.Sprintf("newcv: %#v", newcv))
-		if cv.Version < newcv.Version {
-			log.Debugf("newcv changed from previous cv")
-			if err := s.updateProxyView(cv, newcv, newMembersState, prevPVIndex); err != nil {
-				log.Errorf("error updating proxyView: %v", err)
-				return
-			}
 
-			_, err = e.SetClusterData(newMembersState, newcv, prevCDIndex)
-			if err != nil {
-				log.Errorf("error saving clusterdata: %v", err)
-			}
+		_, err = e.SetClusterData(newMembersState, newcv, prevCDIndex)
+		if err != nil {
+			log.Errorf("error saving clusterdata: %v", err)
 		}
 	}
 }
