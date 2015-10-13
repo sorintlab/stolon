@@ -10,7 +10,7 @@ stolon is a cloud native postgreSQL manager for postgreSQL high availability. It
 * works inside kubernetes letting you handle persistent high availability
 * uses [etcd](https://github.com/coreos/etcd) as an high available data store and for leader election
 
-## Architectures
+## Architecture
 
 Stolon is composed of 3 main components
 
@@ -18,6 +18,7 @@ Stolon is composed of 3 main components
 * sentinel: it discovers and monitors members (keepers) and calculates the optimal clusterview.
 * proxy: the client's access point. It enforce connections to the right postgreSQL master and forcibly closes connections to unelected masters.
 
+![Stolon architecture](doc/architecture_small.png)
 
 ## Requirements
 
