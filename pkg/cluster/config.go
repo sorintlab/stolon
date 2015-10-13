@@ -14,40 +14,131 @@
 
 package cluster
 
-import "time"
-
-const (
-	DefaultLeaseTTL           = 30 * time.Second
-	DefaultRequestTimeout     = 10 * time.Second
-	DefaultEtcdRequestTimeout = DefaultRequestTimeout
-	DefaultCheckInterval      = 5 * time.Second
-	DefaultMemberFailInterval = 4 * DefaultCheckInterval
-	DefaultPGReplUser         = "repluser"
-	DefaultPGReplPassword     = "replpassword"
-	DefaultMaxSlaves          = 3
+import (
+	"encoding/json"
+	"fmt"
+	"strings"
+	"time"
 )
 
+var (
+	DefaultConfig = Config{
+		LeaseTTL:             30 * time.Second,
+		RequestTimeout:       10 * time.Second,
+		SleepInterval:        5 * time.Second,
+		MemberFailInterval:   20 * time.Second,
+		PGReplUser:           "repluser",
+		PGReplPassword:       "replpassword",
+		MaxStandbysPerSender: 3,
+	}
+)
+
+// jsonConfig is a copy of Config with all the time.Duration types converted to duration.
+type jsonConfig struct {
+	LeaseTTL             duration `json:",omitempty"`
+	RequestTimeout       duration `json:",omitempty"`
+	SleepInterval        duration `json:",omitempty"`
+	MemberFailInterval   duration `json:",omitempty"`
+	PGReplUser           string   `json:",omitempty"`
+	PGReplPassword       string   `json:",omitempty"`
+	MaxStandbysPerSender uint     `json:",omitempty"`
+}
+
 type Config struct {
-	LeaseTTL           time.Duration
-	RequestTimeout     time.Duration
-	EtcdRequestTimeout time.Duration
-	CheckInterval      time.Duration
+	// Sentinels leader timetolive
+	LeaseTTL time.Duration
+	// Time after which any request (to etcd, keepers checks from sentinel etc...) will fail.
+	RequestTimeout time.Duration
+	// Interval to wait before next check (for every component: keeper, sentinel, proxy).
+	SleepInterval time.Duration
+	// Interval after the first fail to declare a member as not healthy.
 	MemberFailInterval time.Duration
-	PGReplUser         string
-	PGReplPassword     string
-	MaxSlaves          uint
+	// PostgreSQL replication username
+	PGReplUser string `json:",omitempty"`
+	// PostgreSQL replication password
+	PGReplPassword string `json:",omitempty"`
+	// Max number of standbys for every sender. A sender can be a master or
+	// another standby (with cascading replication).
+	MaxStandbysPerSender uint `json:",omitempty"`
+}
+
+func configToJsonConfig(c *Config) *jsonConfig {
+	return &jsonConfig{
+		LeaseTTL:             duration(c.LeaseTTL),
+		RequestTimeout:       duration(c.RequestTimeout),
+		SleepInterval:        duration(c.SleepInterval),
+		MemberFailInterval:   duration(c.MemberFailInterval),
+		PGReplUser:           c.PGReplUser,
+		PGReplPassword:       c.PGReplPassword,
+		MaxStandbysPerSender: c.MaxStandbysPerSender,
+	}
+}
+
+func jsonConfigToConfig(c *jsonConfig) *Config {
+	return &Config{
+		LeaseTTL:             time.Duration(c.LeaseTTL),
+		RequestTimeout:       time.Duration(c.RequestTimeout),
+		SleepInterval:        time.Duration(c.SleepInterval),
+		MemberFailInterval:   time.Duration(c.MemberFailInterval),
+		PGReplUser:           c.PGReplUser,
+		PGReplPassword:       c.PGReplPassword,
+		MaxStandbysPerSender: c.MaxStandbysPerSender,
+	}
+}
+
+// duration is needed to be able to marshal/unmarshal json strings with time
+// unit (eg. 3s, 100ms) instead of ugly times in nanoseconds.
+type duration time.Duration
+
+func (d duration) MarshalJSON() ([]byte, error) {
+	return []byte(time.Duration(d).String()), nil
+}
+
+func (d *duration) UnmarshalJSON(b []byte) error {
+	s := strings.Trim(string(b), `"`)
+	du, err := time.ParseDuration(s)
+	if err != nil {
+		return err
+	}
+	*d = duration(du)
+	return nil
 }
 
 func NewDefaultConfig() *Config {
-	return &Config{
-		LeaseTTL:           DefaultLeaseTTL,
-		RequestTimeout:     DefaultRequestTimeout,
-		EtcdRequestTimeout: DefaultEtcdRequestTimeout,
-		CheckInterval:      DefaultCheckInterval,
-		MemberFailInterval: DefaultMemberFailInterval,
-		PGReplUser:         DefaultPGReplUser,
-		PGReplPassword:     DefaultPGReplPassword,
-		MaxSlaves:          DefaultMaxSlaves,
+	c := DefaultConfig
+	return &c
+}
+
+func ParseConfig(jcfg []byte) (*Config, error) {
+	jc := configToJsonConfig(NewDefaultConfig())
+	err := json.Unmarshal(jcfg, &jc)
+	if err != nil {
+		return nil, err
 	}
 
+	c := jsonConfigToConfig(jc)
+
+	if c.LeaseTTL < 0 {
+		return nil, fmt.Errorf("LeaseTTL must be positive")
+	}
+	if c.RequestTimeout < 0 {
+		return nil, fmt.Errorf("RequestTimeout must be positive")
+	}
+	if c.SleepInterval < 0 {
+		return nil, fmt.Errorf("SleepInterval must be positive")
+	}
+	if c.MemberFailInterval < 0 {
+		return nil, fmt.Errorf("MemberFailInterval must be positive")
+	}
+	if c.PGReplUser == "" {
+		return nil, fmt.Errorf("PGReplUser cannot be empty")
+	}
+	if c.PGReplPassword == "" {
+		return nil, fmt.Errorf("PGReplPassword cannot be empty")
+	}
+	if c.MaxStandbysPerSender < 1 {
+		return nil, fmt.Errorf("MaxStandbysPerSender must greater than 0")
+	}
+
+	return c, nil
 }

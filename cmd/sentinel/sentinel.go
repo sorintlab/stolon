@@ -652,7 +652,7 @@ func (s *Sentinel) Start() {
 				endCh <- struct{}{}
 			}()
 		case <-endCh:
-			timerCh = time.NewTimer(s.clusterConfig.CheckInterval).C
+			timerCh = time.NewTimer(s.clusterConfig.SleepInterval).C
 		}
 	}
 }

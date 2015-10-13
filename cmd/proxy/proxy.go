@@ -129,7 +129,7 @@ func proxy(cmd *cobra.Command, args []string) {
 	clusterConfig := cluster.NewDefaultConfig()
 	proxyConfig := &pollon.Config{
 		ConfChecker:        NewClusterChecker(cfg),
-		CheckInterval:      clusterConfig.CheckInterval,
+		CheckInterval:      clusterConfig.SleepInterval,
 		ExitOnCheckerError: false,
 	}
 	proxy, err := pollon.NewProxy(listener, proxyConfig)
