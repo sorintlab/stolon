@@ -27,7 +27,6 @@ const (
 
 var (
 	DefaultConfig = Config{
-		LeaseTTL:             30 * time.Second,
 		RequestTimeout:       10 * time.Second,
 		SleepInterval:        5 * time.Second,
 		MemberFailInterval:   20 * time.Second,
@@ -39,7 +38,6 @@ var (
 
 // jsonConfig is a copy of Config with all the time.Duration types converted to duration.
 type jsonConfig struct {
-	LeaseTTL             duration `json:",omitempty"`
 	RequestTimeout       duration `json:",omitempty"`
 	SleepInterval        duration `json:",omitempty"`
 	MemberFailInterval   duration `json:",omitempty"`
@@ -49,8 +47,6 @@ type jsonConfig struct {
 }
 
 type Config struct {
-	// Sentinels leader timetolive
-	LeaseTTL time.Duration
 	// Time after which any request (to etcd, keepers checks from sentinel etc...) will fail.
 	RequestTimeout time.Duration
 	// Interval to wait before next check (for every component: keeper, sentinel, proxy).
@@ -68,7 +64,6 @@ type Config struct {
 
 func configToJsonConfig(c *Config) *jsonConfig {
 	return &jsonConfig{
-		LeaseTTL:             duration(c.LeaseTTL),
 		RequestTimeout:       duration(c.RequestTimeout),
 		SleepInterval:        duration(c.SleepInterval),
 		MemberFailInterval:   duration(c.MemberFailInterval),
@@ -80,7 +75,6 @@ func configToJsonConfig(c *Config) *jsonConfig {
 
 func jsonConfigToConfig(c *jsonConfig) *Config {
 	return &Config{
-		LeaseTTL:             time.Duration(c.LeaseTTL),
 		RequestTimeout:       time.Duration(c.RequestTimeout),
 		SleepInterval:        time.Duration(c.SleepInterval),
 		MemberFailInterval:   time.Duration(c.MemberFailInterval),
@@ -119,30 +113,31 @@ func ParseConfig(jcfg []byte) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	c := jsonConfigToConfig(jc)
-
-	if c.LeaseTTL < 0 {
-		return nil, fmt.Errorf("LeaseTTL must be positive")
+	if err := ValidateConfig(c); err != nil {
+		return nil, fmt.Errorf("config validation failed: %v", err)
 	}
+	return c, nil
+}
+
+func ValidateConfig(c *Config) error {
 	if c.RequestTimeout < 0 {
-		return nil, fmt.Errorf("RequestTimeout must be positive")
+		return fmt.Errorf("RequestTimeout must be positive")
 	}
 	if c.SleepInterval < 0 {
-		return nil, fmt.Errorf("SleepInterval must be positive")
+		return fmt.Errorf("SleepInterval must be positive")
 	}
 	if c.MemberFailInterval < 0 {
-		return nil, fmt.Errorf("MemberFailInterval must be positive")
+		return fmt.Errorf("MemberFailInterval must be positive")
 	}
 	if c.PGReplUser == "" {
-		return nil, fmt.Errorf("PGReplUser cannot be empty")
+		return fmt.Errorf("PGReplUser cannot be empty")
 	}
 	if c.PGReplPassword == "" {
-		return nil, fmt.Errorf("PGReplPassword cannot be empty")
+		return fmt.Errorf("PGReplPassword cannot be empty")
 	}
 	if c.MaxStandbysPerSender < 1 {
-		return nil, fmt.Errorf("MaxStandbysPerSender must greater than 0")
+		return fmt.Errorf("MaxStandbysPerSender must be at least 1")
 	}
-
-	return c, nil
+	return nil
 }

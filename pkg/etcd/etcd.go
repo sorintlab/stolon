@@ -34,6 +34,7 @@ import (
 var log = capnslog.NewPackageLogger("github.com/sorintlab/stolon/pkg", "etcd")
 
 const (
+	configFile       = "config"
 	discoveryInfoDir = "discovery"
 	clusterDataFile  = "clusterdata"
 	proxyViewFile    = "proxyview"
@@ -67,6 +68,32 @@ func NewEtcdManager(etcdEndpoints string, path string, requestTimeout time.Durat
 
 func (e *EtcdManager) NewLeaseManager() lease.Manager {
 	return lease.NewEtcdLeaseManager(e.kAPI, e.etcdPath, e.requestTimeout)
+}
+
+func (e *EtcdManager) SetClusterConfig(cfg cluster.Config) (*etcd.Response, error) {
+	cfgj, err := json.Marshal(cfg)
+	if err != nil {
+		return nil, err
+	}
+	path := filepath.Join(e.etcdPath, configFile)
+	opts := &etcd.SetOptions{}
+	return e.kAPI.Set(context.Background(), path, string(cfgj), opts)
+}
+
+func (e *EtcdManager) GetClusterConfig() (*cluster.Config, *etcd.Response, error) {
+	path := filepath.Join(e.etcdPath, configFile)
+	res, err := e.kAPI.Get(context.Background(), path, &etcd.GetOptions{Quorum: true})
+	if err != nil && !IsEtcdNotFound(err) {
+		log.Errorf("err: %v", err)
+		return nil, nil, err
+	} else if !IsEtcdNotFound(err) {
+		cfg, err := cluster.ParseConfig([]byte(res.Node.Value))
+		if err != nil {
+			return nil, nil, err
+		}
+		return cfg, res, nil
+	}
+	return cluster.NewDefaultConfig(), res, nil
 }
 
 func (e *EtcdManager) SetClusterData(mss cluster.MembersState, cv *cluster.ClusterView, prevIndex uint64) (*etcd.Response, error) {

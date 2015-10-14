@@ -36,55 +36,54 @@ func TestParseConfig(t *testing.T) {
 		},
 		// Test duration parsing
 		{
-			in:  `{ "leasettl": "3s" }`,
-			cfg: mergeDefaultConfig(&Config{LeaseTTL: 3 * time.Second}),
+			in:  `{ "requesttimeout": "3s" }`,
+			cfg: mergeDefaultConfig(&Config{RequestTimeout: 3 * time.Second}),
 			err: nil,
 		},
 		{
-			in:  `{ "leasettl": "3000ms" }`,
-			cfg: mergeDefaultConfig(&Config{LeaseTTL: 3 * time.Second}),
+			in:  `{ "requesttimeout": "3000ms" }`,
+			cfg: mergeDefaultConfig(&Config{RequestTimeout: 3 * time.Second}),
 			err: nil,
-		},
-		{
-			in:  `{ "leasettl": "-3s" }`,
-			cfg: nil,
-			err: fmt.Errorf("LeaseTTL must be positive"),
 		},
 		{
 			in:  `{ "requesttimeout": "-3s" }`,
 			cfg: nil,
-			err: fmt.Errorf("RequestTimeout must be positive"),
+			err: fmt.Errorf("config validation failed: RequestTimeout must be positive"),
+		},
+		{
+			in:  `{ "requesttimeout": "-3s" }`,
+			cfg: nil,
+			err: fmt.Errorf("config validation failed: RequestTimeout must be positive"),
 		},
 		{
 			in:  `{ "sleepinterval": "-3s" }`,
 			cfg: nil,
-			err: fmt.Errorf("SleepInterval must be positive"),
+			err: fmt.Errorf("config validation failed: SleepInterval must be positive"),
 		},
 		{
 			in:  `{ "memberfailinterval": "-3s" }`,
 			cfg: nil,
-			err: fmt.Errorf("MemberFailInterval must be positive"),
+			err: fmt.Errorf("config validation failed: MemberFailInterval must be positive"),
 		},
 		{
 			in:  `{ "pgrepluser": "" }`,
 			cfg: nil,
-			err: fmt.Errorf("PGReplUser cannot be empty"),
+			err: fmt.Errorf("config validation failed: PGReplUser cannot be empty"),
 		},
 		{
 			in:  `{ "pgreplpassword": "" }`,
 			cfg: nil,
-			err: fmt.Errorf("PGReplPassword cannot be empty"),
+			err: fmt.Errorf("config validation failed: PGReplPassword cannot be empty"),
 		},
 		{
 			in:  `{ "maxstandbyspersender": 0 }`,
 			cfg: nil,
-			err: fmt.Errorf("MaxStandbysPerSender must greater than 0"),
+			err: fmt.Errorf("config validation failed: MaxStandbysPerSender must be at least 1"),
 		},
 		// All options defined
 		{
-			in: `{ "leasettl": "60s", "requestTimeout": "10s", "sleepInterval": "10s", "memberFailInterval": "100s", "pgrepluser": "username", "pgreplpassword": "password", "maxstandbyspersender": 5 }`,
+			in: `{ "requestTimeout": "10s", "sleepInterval": "10s", "memberFailInterval": "100s", "pgrepluser": "username", "pgreplpassword": "password", "maxstandbyspersender": 5 }`,
 			cfg: mergeDefaultConfig(&Config{
-				LeaseTTL:             60 * time.Second,
 				RequestTimeout:       10 * time.Second,
 				SleepInterval:        10 * time.Second,
 				MemberFailInterval:   100 * time.Second,
@@ -118,9 +117,6 @@ func TestParseConfig(t *testing.T) {
 
 func mergeDefaultConfig(ic *Config) *Config {
 	c := DefaultConfig
-	if ic.LeaseTTL != 0 {
-		c.LeaseTTL = ic.LeaseTTL
-	}
 	if ic.RequestTimeout != 0 {
 		c.RequestTimeout = ic.RequestTimeout
 	}
