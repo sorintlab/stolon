@@ -10,27 +10,28 @@ import (
 	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/sorintlab/pollon"
 )
 
-type ConfChecker struct{}
-
-func (c *ConfChecker) Check() (*net.TCPAddr, error) {
+func Check(c chan pollon.ConfData) {
 	conf, err := ioutil.ReadFile("./conf")
 	if err != nil {
 		log.Printf("err: %v", err)
-		return nil, err
+		c <- pollon.ConfData{DestAddr: nil}
+		return
 	}
 	addrStr := strings.TrimSpace(string(conf))
 	_, _, err = net.SplitHostPort(addrStr)
 	if err != nil {
 		log.Printf("err: %v", err)
-		return nil, err
+		c <- pollon.ConfData{DestAddr: nil}
+		return
 	}
 	addr, err := net.ResolveTCPAddr("tcp", addrStr)
 	if err != nil {
 		log.Printf("error resolving address: %v", err)
-		return nil, err
+		c <- pollon.ConfData{DestAddr: nil}
+		return
 	}
 	log.Printf("address: %s", addr)
-	return addr, nil
+	c <- pollon.ConfData{DestAddr: addr}
 }
 
 func main() {
@@ -43,15 +44,18 @@ func main() {
 		log.Fatalf("error: %v", err)
 	}
 
-	proxyConfig := &pollon.Config{
-		ConfChecker:        &ConfChecker{},
-		CheckInterval:      1 * time.Second,
-		ExitOnCheckerError: false,
-	}
-	proxy, err := pollon.NewProxy(listener, proxyConfig)
+	proxy, err := pollon.NewProxy(listener)
 	if err != nil {
 		log.Fatalf("error: %v", err)
 	}
+
+	go func() {
+		for {
+			Check(proxy.C)
+			time.Sleep(2 * time.Second)
+		}
+	}()
+
 	err = proxy.Start()
 	if err != nil {
 		log.Fatalf("error: %v", err)

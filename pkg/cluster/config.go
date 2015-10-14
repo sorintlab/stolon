@@ -21,6 +21,10 @@ import (
 	"time"
 )
 
+const (
+	DefaultProxyCheckInterval = 5 * time.Second
+)
+
 var (
 	DefaultConfig = Config{
 		LeaseTTL:             30 * time.Second,
