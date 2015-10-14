@@ -240,8 +240,7 @@ func TestUpdateClusterView(t *testing.T) {
 		},
 	}
 
-	cfg := config{}
-	s := NewSentinel("id", cfg, nil, nil)
+	s := &Sentinel{id: "id", clusterConfig: cluster.NewDefaultConfig()}
 	for i, tt := range tests {
 		outCV, err := s.updateClusterView(tt.cv, tt.membersState)
 		t.Logf("test #%d", i)

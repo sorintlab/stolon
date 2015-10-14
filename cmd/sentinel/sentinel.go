@@ -622,16 +622,22 @@ type Sentinel struct {
 	clusterConfig *cluster.Config
 }
 
-func NewSentinel(id string, cfg config, stop chan bool, end chan bool) *Sentinel {
-	clusterConfig := cluster.NewDefaultConfig()
+func NewSentinel(id string, cfg config, stop chan bool, end chan bool) (*Sentinel, error) {
 	etcdPath := filepath.Join(common.EtcdBasePath, cfg.clusterName)
-	e, err := etcdm.NewEtcdManager(cfg.etcdEndpoints, etcdPath, clusterConfig.RequestTimeout)
+	e, err := etcdm.NewEtcdManager(cfg.etcdEndpoints, etcdPath, common.DefaultEtcdRequestTimeout)
 	if err != nil {
-		log.Fatalf("error: %v", err)
+		return nil, fmt.Errorf("cannot create etcd manager: %v", err)
 	}
+
+	clusterConfig, _, err := e.GetClusterConfig()
+	if err != nil {
+		return nil, fmt.Errorf("cannot get cluster config: %v", err)
+	}
+	log.Debugf(spew.Sprintf("clusterConfig: %+v", clusterConfig))
+
 	lManager := e.NewLeaseManager()
 
-	return &Sentinel{id: id, e: e, lManager: lManager, clusterConfig: clusterConfig, stop: stop, end: end}
+	return &Sentinel{id: id, e: e, lManager: lManager, clusterConfig: clusterConfig, stop: stop, end: end}, nil
 }
 
 func (s *Sentinel) Start() {
@@ -660,6 +666,19 @@ func (s *Sentinel) Start() {
 func (s *Sentinel) clusterSentinelSM(pctx context.Context) {
 	e := s.e
 
+	// Update cluster config
+	clusterConfig, _, err := e.GetClusterConfig()
+	if err != nil {
+		log.Errorf("cannot get cluster config: %v", err)
+		return
+	}
+	log.Debugf(spew.Sprintf("clusterConfig: %+v", clusterConfig))
+	// This shouldn't need a lock
+	s.clusterConfig = clusterConfig
+
+	// TODO(sgotti) better ways to calculate leaseTTL?
+	leaseTTL := clusterConfig.SleepInterval + clusterConfig.RequestTimeout*4
+
 	ctx, cancel := context.WithTimeout(pctx, s.clusterConfig.RequestTimeout)
 	membersDiscoveryInfo, err := s.discover(ctx)
 	cancel()
@@ -686,10 +705,10 @@ func (s *Sentinel) clusterSentinelSM(pctx context.Context) {
 	var l lease.Lease
 	if isLeader(s.l, s.id) {
 		log.Infof("I'm the sentinels leader")
-		l = renewLeadership(s.l, s.clusterConfig.LeaseTTL)
+		l = renewLeadership(s.l, leaseTTL)
 	} else {
 		log.Infof("trying to acquire sentinels leadership")
-		l = acquireLeadership(s.lManager, s.id, 1, s.clusterConfig.LeaseTTL)
+		l = acquireLeadership(s.lManager, s.id, 1, leaseTTL)
 	}
 
 	// log all leadership changes
@@ -798,7 +817,10 @@ func sentinel(cmd *cobra.Command, args []string) {
 	signal.Notify(sigs, os.Interrupt, os.Kill)
 	go sigHandler(sigs, stop)
 
-	s := NewSentinel(id, cfg, stop, end)
+	s, err := NewSentinel(id, cfg, stop, end)
+	if err != nil {
+		log.Fatalf("cannot create sentinel: %v", err)
+	}
 	go s.Start()
 
 	<-end

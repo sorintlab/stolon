@@ -109,18 +109,22 @@ type PostgresKeeper struct {
 	cvVersion int
 }
 
-func NewPostgresKeeper(id string, cfg config, stop chan bool, end chan error) *PostgresKeeper {
-
-	clusterConfig := cluster.NewDefaultConfig()
-	pgm, err := postgresql.NewManager(id, cfg.pgBinPath, cfg.dataDir, cfg.pgListenAddress, cfg.pgPort, clusterConfig.PGReplUser, clusterConfig.PGReplPassword, clusterConfig.RequestTimeout)
+func NewPostgresKeeper(id string, cfg config, stop chan bool, end chan error) (*PostgresKeeper, error) {
+	etcdPath := filepath.Join(common.EtcdBasePath, cfg.clusterName)
+	e, err := etcdm.NewEtcdManager(cfg.etcdEndpoints, etcdPath, common.DefaultEtcdRequestTimeout)
 	if err != nil {
-		log.Fatalf("error: %v", err)
+		return nil, fmt.Errorf("cannot create etcd manager: %v", err)
 	}
 
-	etcdPath := filepath.Join(common.EtcdBasePath, cfg.clusterName)
-	e, err := etcdm.NewEtcdManager(cfg.etcdEndpoints, etcdPath, clusterConfig.RequestTimeout)
+	clusterConfig, _, err := e.GetClusterConfig()
 	if err != nil {
-		log.Fatalf("error: %v", err)
+		return nil, fmt.Errorf("cannot get cluster config: %v", err)
+	}
+	log.Debugf(spew.Sprintf("clusterConfig: %+v", clusterConfig))
+
+	pgm, err := postgresql.NewManager(id, cfg.pgBinPath, cfg.dataDir, cfg.pgListenAddress, cfg.pgPort, clusterConfig.PGReplUser, clusterConfig.PGReplPassword, clusterConfig.RequestTimeout)
+	if err != nil {
+		return nil, fmt.Errorf("cannot create postgres manager: %v", err)
 	}
 
 	return &PostgresKeeper{id: id,
@@ -133,7 +137,7 @@ func NewPostgresKeeper(id string, cfg config, stop chan bool, end chan error) *P
 		pgPort:          cfg.pgPort,
 		clusterConfig:   clusterConfig,
 		stop:            stop,
-		end:             end}
+		end:             end}, nil
 }
 
 func (p *PostgresKeeper) publish() error {
@@ -270,6 +274,16 @@ func (p *PostgresKeeper) Start() {
 func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 	e := p.e
 	pgm := p.pgm
+
+	// Update cluster config
+	clusterConfig, _, err := e.GetClusterConfig()
+	if err != nil {
+		log.Errorf("cannot get cluster config: %v", err)
+		return
+	}
+	log.Debugf(spew.Sprintf("clusterConfig: %+v", clusterConfig))
+	// This shouldn't need a lock
+	p.clusterConfig = clusterConfig
 
 	cv, _, err := e.GetClusterView()
 	if err != nil {
@@ -569,7 +583,10 @@ func keeper(cmd *cobra.Command, args []string) {
 	signal.Notify(sigs, os.Interrupt, os.Kill)
 	go sigHandler(sigs, stop)
 
-	p := NewPostgresKeeper(id, cfg, stop, end)
+	p, err := NewPostgresKeeper(id, cfg, stop, end)
+	if err != nil {
+		log.Fatalf("cannot create keeper: %v", err)
+	}
 	go p.Start()
 
 	<-end
