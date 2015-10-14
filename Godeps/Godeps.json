@@ -56,7 +56,7 @@
 		},
 		{
 			"ImportPath": "github.com/sorintlab/pollon",
-			"Rev": "3dd359443c0d5d5aacda60fd6af4da09ab70448d"
+			"Rev": "0fc4e27d6290f15d02d35f438ffa58068dee2014"
 		},
 		{
 			"ImportPath": "github.com/spf13/cobra",

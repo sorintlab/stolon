@@ -14,11 +14,15 @@
 
 package common
 
+import "time"
+
 const (
 	EtcdBasePath  = "/stolon/cluster"
 	EtcdLeaderKey = "leader"
 
 	SentinelLeaseName = "sentinel-leader"
+
+	DefaultEtcdRequestTimeout = 5 * time.Second
 )
 
 type Role uint8

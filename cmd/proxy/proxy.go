@@ -19,6 +19,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/sorintlab/stolon/common"
 	"github.com/sorintlab/stolon/pkg/cluster"
@@ -62,39 +63,59 @@ func init() {
 }
 
 type ClusterChecker struct {
+	C            chan pollon.ConfData
 	e            *etcdm.EtcdManager
 	prevMasterID string
 }
 
-func NewClusterChecker(cfg config) *ClusterChecker {
-	clusterConfig := cluster.NewDefaultConfig()
+func NewClusterChecker(cfg config, C chan pollon.ConfData) *ClusterChecker {
 	etcdPath := filepath.Join(common.EtcdBasePath, cfg.clusterName)
-	e, err := etcdm.NewEtcdManager(cfg.etcdEndpoints, etcdPath, clusterConfig.RequestTimeout)
+	e, err := etcdm.NewEtcdManager(cfg.etcdEndpoints, etcdPath, common.DefaultEtcdRequestTimeout)
 	if err != nil {
 		log.Fatalf("error: %v", err)
 	}
 
-	return &ClusterChecker{e: e}
+	return &ClusterChecker{e: e, C: C}
 }
 
-func (c *ClusterChecker) Check() (*net.TCPAddr, error) {
+func (c *ClusterChecker) Check() {
 	pv, _, err := c.e.GetProxyView()
 	if err != nil {
 		log.Errorf("err: %v", err)
-		return nil, err
+		c.C <- pollon.ConfData{DestAddr: nil}
+		return
 	}
 	log.Debugf("proxyview: %v", pv)
 	if pv == nil {
 		log.Infof("no proxyview available")
-		return nil, nil
+		c.C <- pollon.ConfData{DestAddr: nil}
+		return
 	}
 	addr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%s", pv.Host, pv.Port))
 	if err != nil {
 		log.Errorf("err: %v", err)
-		return nil, err
+		c.C <- pollon.ConfData{DestAddr: nil}
+		return
 	}
 	log.Infof("addr: %v", addr)
-	return addr, nil
+	c.C <- pollon.ConfData{DestAddr: addr}
+}
+
+func (c *ClusterChecker) Start() {
+	endCh := make(chan struct{})
+	timerCh := time.NewTimer(0).C
+
+	for true {
+		select {
+		case <-timerCh:
+			go func() {
+				c.Check()
+				endCh <- struct{}{}
+			}()
+		case <-endCh:
+			timerCh = time.NewTimer(cluster.DefaultProxyCheckInterval).C
+		}
+	}
 }
 
 func main() {
@@ -126,16 +147,14 @@ func proxy(cmd *cobra.Command, args []string) {
 		log.Fatalf("error: %v", err)
 	}
 
-	clusterConfig := cluster.NewDefaultConfig()
-	proxyConfig := &pollon.Config{
-		ConfChecker:        NewClusterChecker(cfg),
-		CheckInterval:      clusterConfig.SleepInterval,
-		ExitOnCheckerError: false,
-	}
-	proxy, err := pollon.NewProxy(listener, proxyConfig)
+	proxy, err := pollon.NewProxy(listener)
 	if err != nil {
 		log.Fatalf("error: %v", err)
 	}
+
+	clusterChecker := NewClusterChecker(cfg, proxy.C)
+	go clusterChecker.Start()
+
 	err = proxy.Start()
 	if err != nil {
 		log.Fatalf("error: %v", err)
