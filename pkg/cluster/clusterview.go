@@ -30,6 +30,7 @@ func (mss MembersState) Copy() MembersState {
 }
 
 type MemberState struct {
+	ID                 string
 	ErrorStartTime     time.Time
 	ClusterViewVersion int
 	Host               string
@@ -79,6 +80,7 @@ func (msr MembersRole) Copy() MembersRole {
 }
 
 type MemberRole struct {
+	ID     string
 	Follow string
 }
 
