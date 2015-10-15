@@ -94,13 +94,31 @@ func write(t *testing.T, tm *TestKeeper, id, value int) error {
 func getLines(t *testing.T, tm *TestKeeper) (int, error) {
 	rows, err := tm.Query("SELECT FROM table01")
 	if err != nil {
-		t.Fatalf("unexpected err: %v", err)
+		return 0, err
 	}
 	c := 0
 	for rows.Next() {
 		c++
 	}
 	return c, rows.Err()
+}
+
+func waitLines(t *testing.T, tm *TestKeeper, num int, timeout time.Duration) error {
+	start := time.Now()
+	c := -1
+	for time.Now().Add(-timeout).Before(start) {
+		c, err := getLines(t, tm)
+		if err != nil {
+			goto end
+		}
+		if c == num {
+			return nil
+		}
+	end:
+		time.Sleep(2 * time.Second)
+	}
+	return fmt.Errorf("timeout with wrong number of lines: %d", c)
+
 }
 
 func shutdown(tms []*TestKeeper, tss []*TestSentinel) {
@@ -160,6 +178,7 @@ func TestMasterStandby(t *testing.T) {
 	if c != 1 {
 		t.Fatalf("wrong number of lines, want: %d, got: %d", 1, c)
 	}
+	// TODO(sgotti) do not sleep but make a loop
 	time.Sleep(1 * time.Second)
 	c, err = getLines(t, standbys[0])
 	if err != nil {
@@ -334,5 +353,92 @@ func TestPartition1(t *testing.T) {
 	}
 	if c != 2 {
 		t.Fatalf("wrong number of lines, want: %d, got: %d", 2, c)
+	}
+}
+
+func TestTimelineFork(t *testing.T) {
+	dir, err := ioutil.TempDir("", "stolon")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer os.RemoveAll(dir)
+
+	tms, tss := setupServers(t, dir, 3, 1)
+	defer shutdown(tms, tss)
+
+	master, standbys, err := getRoles(t, tms)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	if err := populate(t, master); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := write(t, master, 1, 1); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// Stop one standby
+	fmt.Printf("Stopping standby[0]: %s\n", master.id)
+	standbys[0].Stop()
+	if err := standbys[0].WaitDBDown(60 * time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// Write to master (and replicated to remaining standby)
+	if err := write(t, master, 2, 2); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// Wait replicated data to standby
+	// TODO(sgotti) do not sleep but make a loop
+	time.Sleep(1 * time.Second)
+	c, err := getLines(t, standbys[1])
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if c != 2 {
+		t.Fatalf("wrong number of lines, want: %d, got: %d", 1, c)
+	}
+
+	// Stop the master and remaining standby
+	master.Stop()
+	standbys[1].Stop()
+	if err := master.WaitDBDown(60 * time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := standbys[1].WaitDBDown(60 * time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// Start standby[0]. It will be elected as master but it'll be behind (having only one line).
+	fmt.Printf("Starting standby[0]: %s\n", standbys[0].id)
+	standbys[0].Start()
+	if err := standbys[0].WaitDBUp(60 * time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := standbys[0].WaitRole(common.MasterRole, 60*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	c, err = getLines(t, standbys[0])
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if c != 1 {
+		t.Fatalf("wrong number of lines, want: %d, got: %d", 1, c)
+	}
+
+	// Start the other stadby, it should be ahead of current on previous timeline and should full resync himself
+	fmt.Printf("Starting standby[1]: %s\n", standbys[1].id)
+	standbys[1].Start()
+	// Standby[1] will start, then it'll detect it's in another timelinehistory,
+	// will stop, full resync and start. We have to avoid detecting it up
+	// at the first start.
+	// Wait for the number of expected lines.
+	if err := waitLines(t, standbys[1], 1, 60*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := standbys[1].WaitRole(common.StandbyRole, 60*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
 	}
 }

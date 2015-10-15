@@ -15,9 +15,11 @@
 package postgresql
 
 import (
+	"bufio"
 	"database/sql"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -176,7 +178,6 @@ func GetPGState(ctx context.Context, replConnString string) (*cluster.PostgresSt
 		if err := rows.Scan(&pgState.SystemID, &pgState.TimelineID, &xLogPosLsn, &unused); err != nil {
 			return nil, err
 		}
-		log.Debugf("pgState: %#v", pgState)
 		pgState.XLogPos, err = PGLSNToInt(xLogPosLsn)
 		if err != nil {
 			return nil, err
@@ -186,11 +187,38 @@ func GetPGState(ctx context.Context, replConnString string) (*cluster.PostgresSt
 	return nil, fmt.Errorf("query returned 0 rows")
 }
 
-func GetTimelineHistory(ctx context.Context, timeline uint64, replConnString string) (string, error) {
+func parseTimeLinesHistory(contents string) (cluster.PostgresTimeLinesHistory, error) {
+	tlsh := cluster.PostgresTimeLinesHistory{}
+	regex, err := regexp.Compile(`(\S+)\s+(\S+)\s+(.*)$`)
+	if err != nil {
+		return nil, err
+	}
+
+	scanner := bufio.NewScanner(strings.NewReader(contents))
+	scanner.Split(bufio.ScanLines)
+
+	for scanner.Scan() {
+		m := regex.FindStringSubmatch(scanner.Text())
+		if len(m) == 4 {
+			var tlh cluster.PostgresTimeLineHistory
+			if tlh.TimelineID, err = strconv.ParseUint(m[1], 10, 64); err != nil {
+				return nil, fmt.Errorf("cannot parse timelineID in timeline history line %q: %v", scanner.Text(), err)
+			}
+			if tlh.SwitchPoint, err = PGLSNToInt(m[2]); err != nil {
+				return nil, fmt.Errorf("cannot parse start lsn in timeline history line %q: %v", scanner.Text(), err)
+			}
+			tlh.Reason = m[3]
+			tlsh = append(tlsh, &tlh)
+		}
+	}
+	return tlsh, err
+}
+
+func GetTimelinesHistory(ctx context.Context, timeline uint64, replConnString string) (cluster.PostgresTimeLinesHistory, error) {
 	// Add "replication=1" connection option
 	u, err := url.Parse(replConnString)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	v := u.Query()
 	v.Add("replication", "1")
@@ -198,23 +226,26 @@ func GetTimelineHistory(ctx context.Context, timeline uint64, replConnString str
 	replConnString = u.String()
 	db, err := sql.Open("postgres", replConnString)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer db.Close()
 
-	log.Debugf("timeline: %d", timeline)
 	rows, err := Query(ctx, db, fmt.Sprintf("TIMELINE_HISTORY %d", timeline))
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var timelineFile string
 		var contents string
 		if err := rows.Scan(&timelineFile, &contents); err != nil {
-			return "", err
+			return nil, err
 		}
-		return contents, nil
+		tlsh, err := parseTimeLinesHistory(contents)
+		if err != nil {
+			return nil, err
+		}
+		return tlsh, nil
 	}
-	return "", fmt.Errorf("query returned 0 rows")
+	return nil, fmt.Errorf("query returned 0 rows")
 }
