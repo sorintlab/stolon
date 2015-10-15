@@ -775,11 +775,11 @@ func (s *Sentinel) clusterSentinelSM(pctx context.Context) {
 			log.Errorf("error updating proxyView: %v", err)
 			return
 		}
+	}
 
-		_, err = e.SetClusterData(newMembersState, newcv, prevCDIndex)
-		if err != nil {
-			log.Errorf("error saving clusterdata: %v", err)
-		}
+	_, err = e.SetClusterData(newMembersState, newcv, prevCDIndex)
+	if err != nil {
+		log.Errorf("error saving clusterdata: %v", err)
 	}
 }
 
