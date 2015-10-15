@@ -40,7 +40,7 @@ func TestUpdateClusterView(t *testing.T) {
 		{
 			cv: cluster.NewClusterView(),
 			membersState: cluster.MembersState{
-				"01": &cluster.MemberState{},
+				"01": &cluster.MemberState{PGState: &cluster.PostgresState{Initialized: true}},
 			},
 			outCV: &cluster.ClusterView{
 				Version: 1,
