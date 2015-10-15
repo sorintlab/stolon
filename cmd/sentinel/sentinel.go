@@ -484,17 +484,16 @@ func (s *Sentinel) updateClusterView(cv *cluster.ClusterView, membersState clust
 		if len(membersState) > 1 {
 			return nil, fmt.Errorf("cannot init cluster, more than 1 member registered")
 		}
-		for id, _ := range membersState {
-			log.Debugf("masterID: %s", id)
-			if id != "" {
-				log.Infof("Initializing cluster with master: %s", id)
-				wantedMasterID = id
+		for id, m := range membersState {
+			if m.PGState == nil {
+				return nil, fmt.Errorf("cannot init cluster using member %q since its pg state is unknown", id)
 			}
+			log.Infof("Initializing cluster with master: %q", id)
+			wantedMasterID = id
 			break
 		}
 	} else {
 		masterID := cv.Master
-		log.Debugf("masterID: %s", masterID)
 
 		masterOK := true
 		master, ok := membersState[masterID]
