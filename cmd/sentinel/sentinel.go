@@ -224,7 +224,11 @@ func (s *Sentinel) GetBestStandby(cv *cluster.ClusterView, membersState cluster.
 			log.Debugf("ignoring node as its clusterView version (%d) is different that the actual one (%d)", m.ClusterViewVersion, cv.Version)
 			continue
 		}
-		if masterState.PGState.TimelineID != membersState[id].PGState.TimelineID {
+		if m.PGState == nil {
+			log.Debugf("ignoring node as its pg state is unknown")
+			continue
+		}
+		if masterState.PGState.TimelineID != m.PGState.TimelineID {
 			log.Debugf("ignoring node as its pg timeline (%s) is different than master timeline (%d)", membersState[id].PGState.TimelineID, masterState.PGState.TimelineID)
 			continue
 		}
