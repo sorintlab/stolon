@@ -236,7 +236,7 @@ func (s *Sentinel) GetBestStandby(cv *cluster.ClusterView, membersState cluster.
 			bestID = id
 			continue
 		}
-		if membersState[id].PGState.XLogPos > m.PGState.XLogPos {
+		if m.PGState.XLogPos > membersState[bestID].PGState.XLogPos {
 			bestID = id
 		}
 	}
