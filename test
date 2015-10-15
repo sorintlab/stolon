@@ -53,16 +53,6 @@ echo "Running tests..."
 # Invoke ./cover for HTML output
 COVER=${COVER:-"-cover"}
 
-go test -timeout 3m ${COVER} $@ ${TEST} ${RACE}
-
-if [ -n "$INTEGRATION" ]; then
-	echo "Running integration tests..."
-	export STKEEPER_BIN=${BINDIR}/stolon-keeper
-	export STSENTINEL_BIN=${BINDIR}/stolon-sentinel
-	export STPROXY_BIN=${BINDIR}/stolon-proxy
-	go test $@ -v ${REPO_PATH}/tests/integration
-fi
-
 echo "Checking gofmt..."
 fmtRes=$(gofmt -l $FMT)
 if [ -n "${fmtRes}" ]; then
@@ -86,7 +76,6 @@ for path in $FMT; do
 	fi
 done
 
-
 echo "Checking for license header..."
 licRes=$(for file in $(find . -type f -iname '*.go' ! -path './Godeps/*'); do
 		head -n3 "${file}" | grep -Eq "(Copyright|generated|GENERATED)" || echo -e "  ${file}"
@@ -94,6 +83,16 @@ licRes=$(for file in $(find . -type f -iname '*.go' ! -path './Godeps/*'); do
 if [ -n "${licRes}" ]; then
 	echo -e "license header checking failed:\n${licRes}"
 	exit 255
+fi
+
+go test -timeout 3m ${COVER} $@ ${TEST} ${RACE}
+
+if [ -n "$INTEGRATION" ]; then
+	echo "Running integration tests..."
+	export STKEEPER_BIN=${BINDIR}/stolon-keeper
+	export STSENTINEL_BIN=${BINDIR}/stolon-sentinel
+	export STPROXY_BIN=${BINDIR}/stolon-proxy
+	go test $@ -v ${REPO_PATH}/tests/integration
 fi
 
 echo "Success"
