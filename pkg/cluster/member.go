@@ -44,9 +44,9 @@ func (mi *MemberInfo) Changed(m *MemberState) bool {
 }
 
 type PostgresTimeLineHistory struct {
-	TimelineID uint64
-	Start      uint64
-	Reason     string
+	TimelineID  uint64
+	SwitchPoint uint64
+	Reason      string
 }
 type PostgresState struct {
 	Initialized     bool
