@@ -27,12 +27,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/golang.org/x/net/context"
-
 	"github.com/sorintlab/stolon/common"
 
 	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/coreos/pkg/capnslog"
 	_ "github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/lib/pq"
+	"github.com/sorintlab/stolon/Godeps/_workspace/src/golang.org/x/net/context"
 )
 
 var (

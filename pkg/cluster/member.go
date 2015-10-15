@@ -43,18 +43,30 @@ func (mi *MemberInfo) Changed(m *MemberState) bool {
 	return false
 }
 
+type PostgresTimeLinesHistory []*PostgresTimeLineHistory
+
 type PostgresTimeLineHistory struct {
 	TimelineID  uint64
 	SwitchPoint uint64
 	Reason      string
 }
+
+func (tlsh PostgresTimeLinesHistory) GetTimelineHistory(id uint64) *PostgresTimeLineHistory {
+	for _, tlh := range tlsh {
+		if tlh.TimelineID == id {
+			return tlh
+		}
+	}
+	return nil
+}
+
 type PostgresState struct {
-	Initialized     bool
-	Role            common.Role
-	SystemID        string
-	TimelineID      uint64
-	XLogPos         uint64
-	TimelineHistory []PostgresTimeLineHistory
+	Initialized      bool
+	Role             common.Role
+	SystemID         string
+	TimelineID       uint64
+	XLogPos          uint64
+	TimelinesHistory PostgresTimeLinesHistory
 }
 
 type MembersDiscoveryInfo []*MemberDiscoveryInfo

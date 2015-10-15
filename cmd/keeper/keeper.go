@@ -214,12 +214,25 @@ func (p *PostgresKeeper) pgStateHandler(w http.ResponseWriter, req *http.Request
 		pgState, err = pg.GetPGState(ctx, p.getOurReplConnString())
 		cancel()
 		if err != nil {
+			log.Errorf("error getting pg state: %v", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 		pgState.Initialized = true
 
-		// TODO(sgotti) also get timeline history. Useful to detect if a member needs to be fully resynced.
+		// if timeline <= 1 then no timeline history file exists.
+		pgState.TimelinesHistory = cluster.PostgresTimeLinesHistory{}
+		if pgState.TimelineID > 1 {
+			ctx, cancel = context.WithTimeout(context.Background(), p.clusterConfig.RequestTimeout)
+			tlsh, err := pg.GetTimelinesHistory(ctx, pgState.TimelineID, p.getOurReplConnString())
+			cancel()
+			if err != nil {
+				log.Errorf("error getting timeline history: %v", err)
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			pgState.TimelinesHistory = tlsh
+		}
 	}
 	if err := json.NewEncoder(w).Encode(&pgState); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -269,6 +282,57 @@ func (p *PostgresKeeper) Start() {
 			return
 		}
 	}
+}
+
+func (p *PostgresKeeper) fullResync(master *cluster.MemberState, initialized, started bool) error {
+	pgm := p.pgm
+	if initialized && started {
+		err := pgm.Stop(true)
+		if err != nil {
+			return fmt.Errorf("failed to stop pg instance: %v", err)
+		}
+	}
+	err := pgm.RemoveAll()
+	if err != nil {
+		return fmt.Errorf("failed to remove the postgres data dir: %v", err)
+	}
+	replConnString := p.getReplConnString(master)
+	log.Infof("syncing from master %q with connection url %q", master.ID, replConnString)
+	err = pgm.SyncFromMaster(replConnString)
+	if err != nil {
+		return fmt.Errorf("error: %v", err)
+	}
+	log.Infof("sync from master %q successfully finished", master.ID)
+
+	err = pgm.BecomeStandby(replConnString)
+	if err != nil {
+		return fmt.Errorf("err: %v", err)
+	}
+
+	err = pgm.Start()
+	if err != nil {
+		return fmt.Errorf("err: %v", err)
+	}
+	return nil
+}
+
+func (p *PostgresKeeper) isDifferentTimelineBranch(mPGState *cluster.PostgresState, pgState *cluster.PostgresState) bool {
+	if mPGState.TimelineID < pgState.TimelineID {
+		return true
+	}
+	if mPGState.TimelineID == pgState.TimelineID {
+		return false
+	}
+
+	// mPGState.TimelineID > pgState.TimelineID
+	tlh := mPGState.TimelinesHistory.GetTimelineHistory(pgState.TimelineID)
+	if tlh != nil {
+		if tlh.SwitchPoint < pgState.XLogPos {
+			log.Debugf("master timeline %d forked at xlog pos %d before our current state (timeline %d at xlog pos %d)", mPGState.TimelineID, tlh.SwitchPoint, pgState.TimelineID, pgState.XLogPos)
+			return true
+		}
+	}
+	return false
 }
 
 func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
@@ -430,39 +494,10 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 	} else {
 		log.Infof("our cluster requested state is standby following %q", memberRole.Follow)
 		if isMaster {
-			if initialized && started {
-				err := pgm.Stop(true)
-				if err != nil {
-					log.Errorf("failed to stop pg instance: %v", err)
-					return
-				}
-			}
-			err = pgm.RemoveAll()
-			if err != nil {
-				log.Errorf("failed to remove the postgres data dir: %v", err)
+			if err := p.fullResync(master, initialized, started); err != nil {
+				log.Errorf("failed to full resync from master: %v", err)
 				return
 			}
-			replConnString := p.getReplConnString(master)
-			log.Infof("syncing from master %q with connection url %q", memberRole.Follow, replConnString)
-			err = pgm.SyncFromMaster(replConnString)
-			if err != nil {
-				log.Errorf("error: %v", err)
-				return
-			}
-			log.Infof("sync from master %q successfully finished", masterID)
-
-			err = pgm.BecomeStandby(replConnString)
-			if err != nil {
-				log.Errorf("err: %v", err)
-				return
-			}
-
-			err = pgm.Start()
-			if err != nil {
-				log.Errorf("err: %v", err)
-				return
-			}
-
 		} else {
 			log.Infof("already standby")
 			curConnParams, err := pgm.GetPrimaryConninfo()
@@ -480,8 +515,25 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				return
 			}
 
-			// TODO(sgotti) if the master changed, check that we are not ahead of the current master or force a full resync
-			// This can happen with async replication if the standby elected as new master is behind us.
+			// Check that we can sync with master
+
+			// Check timeline history
+			ctx, cancel := context.WithTimeout(context.Background(), p.clusterConfig.RequestTimeout)
+			pgState, err := pg.GetPGState(ctx, p.getOurReplConnString())
+			cancel()
+			if err != nil {
+				log.Errorf("cannot get our pgstate: %v", err)
+				return
+			}
+			mPGState := master.PGState
+			if p.isDifferentTimelineBranch(mPGState, pgState) {
+				if err := p.fullResync(master, initialized, started); err != nil {
+					log.Errorf("failed to full resync from master: %v", err)
+					return
+				}
+			}
+
+			// TODO(sgotti) Check that the master has all the needed WAL segments
 
 			// Update our primary_conninfo if replConnString changed
 			if !curConnParams.Equals(newConnParams) {
