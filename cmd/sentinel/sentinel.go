@@ -423,6 +423,7 @@ func (s *Sentinel) updateMembersState(membersState cluster.MembersState, members
 		if _, ok := newMembersState[id]; !ok {
 			newMembersState[id] = &cluster.MemberState{
 				ErrorStartTime:     time.Time{},
+				ID:                 mi.ID,
 				ClusterViewVersion: mi.ClusterViewVersion,
 				Host:               mi.Host,
 				Port:               mi.Port,
@@ -436,6 +437,7 @@ func (s *Sentinel) updateMembersState(membersState cluster.MembersState, members
 	for id, mi := range membersInfo {
 		if mi.Changed(newMembersState[id]) {
 			newMembersState[id] = &cluster.MemberState{
+				ID:                 mi.ID,
 				ClusterViewVersion: mi.ClusterViewVersion,
 				Host:               mi.Host,
 				Port:               mi.Port,
