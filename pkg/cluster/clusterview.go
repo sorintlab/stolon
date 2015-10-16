@@ -16,6 +16,7 @@ package cluster
 
 import (
 	"reflect"
+	"sort"
 	"time"
 )
 
@@ -129,6 +130,7 @@ func (cv *ClusterView) Copy() *ClusterView {
 	return &ncv
 }
 
+// Returns a sorted list of followersIDs
 func (cv *ClusterView) GetFollowersIDs(id string) []string {
 	followersIDs := []string{}
 	for memberID, mr := range cv.MembersRole {
@@ -136,6 +138,7 @@ func (cv *ClusterView) GetFollowersIDs(id string) []string {
 			followersIDs = append(followersIDs, memberID)
 		}
 	}
+	sort.Strings(followersIDs)
 	return followersIDs
 }
 

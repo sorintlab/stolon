@@ -23,6 +23,8 @@ const (
 	SentinelLeaseName = "sentinel-leader"
 
 	DefaultEtcdRequestTimeout = 5 * time.Second
+
+	DefaultEtcdEndpoints = "http://127.0.0.1:4001,http://127.0.0.1:2379"
 )
 
 type Role uint8

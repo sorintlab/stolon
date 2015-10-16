@@ -18,21 +18,31 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"syscall"
 	"testing"
 	"time"
 
 	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/satori/go.uuid"
 	"github.com/sorintlab/stolon/common"
+	"github.com/sorintlab/stolon/pkg/cluster"
+	etcdm "github.com/sorintlab/stolon/pkg/etcd"
 )
 
-func setupServers(t *testing.T, dir string, numKeepers, numSentinels uint8) ([]*TestKeeper, []*TestSentinel) {
-	cluster := uuid.NewV4().String()
+func setupServers(t *testing.T, dir string, numKeepers, numSentinels uint8, syncRepl bool) ([]*TestKeeper, []*TestSentinel) {
+	clusterName := uuid.NewV4().String()
+
+	etcdPath := filepath.Join(common.EtcdBasePath, clusterName)
+	e, err := etcdm.NewEtcdManager(common.DefaultEtcdEndpoints, etcdPath, common.DefaultEtcdRequestTimeout)
+	if err != nil {
+		t.Fatalf("cannot create etcd manager: %v", err)
+	}
+	e.SetClusterConfig(&cluster.Config{SynchronousReplication: syncRepl})
 
 	tms := []*TestKeeper{}
 	tss := []*TestSentinel{}
 
-	tm, err := NewTestKeeper(dir, cluster)
+	tm, err := NewTestKeeper(dir, clusterName)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -42,7 +52,7 @@ func setupServers(t *testing.T, dir string, numKeepers, numSentinels uint8) ([]*
 
 	// Start sentinels
 	for i := uint8(0); i < numSentinels; i++ {
-		ts, err := NewTestSentinel(dir, cluster)
+		ts, err := NewTestSentinel(dir, clusterName)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -63,7 +73,7 @@ func setupServers(t *testing.T, dir string, numKeepers, numSentinels uint8) ([]*
 
 	// Start standbys
 	for i := uint8(1); i < numKeepers; i++ {
-		tm, err := NewTestKeeper(dir, cluster)
+		tm, err := NewTestKeeper(dir, clusterName)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -129,8 +139,7 @@ func shutdown(tms []*TestKeeper, tss []*TestSentinel) {
 	}
 	for _, tm := range tms {
 		if tm.cmd != nil {
-			tm.SignalPG(os.Kill)
-			tm.Signal(os.Kill)
+			tm.Stop()
 		}
 	}
 }
@@ -150,14 +159,14 @@ func getRoles(t *testing.T, tms []*TestKeeper) (master *TestKeeper, standbys []*
 	return
 }
 
-func TestMasterStandby(t *testing.T) {
+func testMasterStandby(t *testing.T, syncRepl bool) {
 	dir, err := ioutil.TempDir("", "stolon")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	defer os.RemoveAll(dir)
 
-	tms, tss := setupServers(t, dir, 2, 1)
+	tms, tss := setupServers(t, dir, 2, 1, syncRepl)
 	defer shutdown(tms, tss)
 
 	master, standbys, err := getRoles(t, tms)
@@ -190,14 +199,22 @@ func TestMasterStandby(t *testing.T) {
 
 }
 
-func TestFailover(t *testing.T) {
+func TestMasterStandbySyncRepl(t *testing.T) {
+	testMasterStandby(t, false)
+}
+
+func TestMasterStandby(t *testing.T) {
+	testMasterStandby(t, true)
+}
+
+func testFailover(t *testing.T, syncRepl bool) {
 	dir, err := ioutil.TempDir("", "stolon")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	defer os.RemoveAll(dir)
 
-	tms, tss := setupServers(t, dir, 2, 1)
+	tms, tss := setupServers(t, dir, 2, 1, syncRepl)
 	defer shutdown(tms, tss)
 
 	master, standbys, err := getRoles(t, tms)
@@ -229,14 +246,21 @@ func TestFailover(t *testing.T) {
 	}
 }
 
-func TestOldMasterRestart(t *testing.T) {
+func TestFailover(t *testing.T) {
+	testFailover(t, false)
+}
+func TestFailoverSyncRepl(t *testing.T) {
+	testFailover(t, true)
+}
+
+func testOldMasterRestart(t *testing.T, syncRepl bool) {
 	dir, err := ioutil.TempDir("", "stolon")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	defer os.RemoveAll(dir)
 
-	tms, tss := setupServers(t, dir, 2, 1)
+	tms, tss := setupServers(t, dir, 2, 1, syncRepl)
 	defer shutdown(tms, tss)
 
 	master, standbys, err := getRoles(t, tms)
@@ -288,14 +312,22 @@ func TestOldMasterRestart(t *testing.T) {
 	}
 }
 
-func TestPartition1(t *testing.T) {
+func TestOldMasterRestart(t *testing.T) {
+	testOldMasterRestart(t, false)
+}
+
+func TestOldMasterRestartSyncRepl(t *testing.T) {
+	testOldMasterRestart(t, true)
+}
+
+func testPartition1(t *testing.T, syncRepl bool) {
 	dir, err := ioutil.TempDir("", "stolon")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	defer os.RemoveAll(dir)
 
-	tms, tss := setupServers(t, dir, 2, 1)
+	tms, tss := setupServers(t, dir, 2, 1, syncRepl)
 	defer shutdown(tms, tss)
 
 	master, standbys, err := getRoles(t, tms)
@@ -356,14 +388,22 @@ func TestPartition1(t *testing.T) {
 	}
 }
 
-func TestTimelineFork(t *testing.T) {
+func TestPartition1(t *testing.T) {
+	testPartition1(t, false)
+}
+
+func TestPartition1SyncRepl(t *testing.T) {
+	testPartition1(t, true)
+}
+
+func testTimelineFork(t *testing.T, syncRepl bool) {
 	dir, err := ioutil.TempDir("", "stolon")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	defer os.RemoveAll(dir)
 
-	tms, tss := setupServers(t, dir, 3, 1)
+	tms, tss := setupServers(t, dir, 3, 1, syncRepl)
 	defer shutdown(tms, tss)
 
 	master, standbys, err := getRoles(t, tms)
@@ -441,4 +481,12 @@ func TestTimelineFork(t *testing.T) {
 	if err := standbys[1].WaitRole(common.StandbyRole, 60*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
+}
+
+func TestTimelineFork(t *testing.T) {
+	testTimelineFork(t, false)
+}
+
+func TestTimelineForkSyncRepl(t *testing.T) {
+	testTimelineFork(t, true)
 }

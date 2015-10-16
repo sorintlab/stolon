@@ -92,7 +92,7 @@ if [ -n "$INTEGRATION" ]; then
 	export STKEEPER_BIN=${BINDIR}/stolon-keeper
 	export STSENTINEL_BIN=${BINDIR}/stolon-sentinel
 	export STPROXY_BIN=${BINDIR}/stolon-proxy
-	go test $@ -v ${REPO_PATH}/tests/integration
+	go test -timeout 20m $@ -v ${REPO_PATH}/tests/integration
 fi
 
 echo "Success"

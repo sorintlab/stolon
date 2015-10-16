@@ -27,23 +27,25 @@ const (
 
 var (
 	DefaultConfig = Config{
-		RequestTimeout:       10 * time.Second,
-		SleepInterval:        5 * time.Second,
-		MemberFailInterval:   20 * time.Second,
-		PGReplUser:           "repluser",
-		PGReplPassword:       "replpassword",
-		MaxStandbysPerSender: 3,
+		RequestTimeout:         10 * time.Second,
+		SleepInterval:          5 * time.Second,
+		MemberFailInterval:     20 * time.Second,
+		PGReplUser:             "repluser",
+		PGReplPassword:         "replpassword",
+		MaxStandbysPerSender:   3,
+		SynchronousReplication: false,
 	}
 )
 
 // jsonConfig is a copy of Config with all the time.Duration types converted to duration.
 type jsonConfig struct {
-	RequestTimeout       duration `json:",omitempty"`
-	SleepInterval        duration `json:",omitempty"`
-	MemberFailInterval   duration `json:",omitempty"`
-	PGReplUser           string   `json:",omitempty"`
-	PGReplPassword       string   `json:",omitempty"`
-	MaxStandbysPerSender uint     `json:",omitempty"`
+	RequestTimeout         duration `json:",omitempty"`
+	SleepInterval          duration `json:",omitempty"`
+	MemberFailInterval     duration `json:",omitempty"`
+	PGReplUser             string   `json:",omitempty"`
+	PGReplPassword         string   `json:",omitempty"`
+	MaxStandbysPerSender   uint     `json:",omitempty"`
+	SynchronousReplication bool     `json:",omitempty"`
 }
 
 type Config struct {
@@ -54,33 +56,41 @@ type Config struct {
 	// Interval after the first fail to declare a member as not healthy.
 	MemberFailInterval time.Duration
 	// PostgreSQL replication username
-	PGReplUser string `json:",omitempty"`
+	PGReplUser string
 	// PostgreSQL replication password
-	PGReplPassword string `json:",omitempty"`
+	PGReplPassword string
 	// Max number of standbys for every sender. A sender can be a master or
 	// another standby (with cascading replication).
-	MaxStandbysPerSender uint `json:",omitempty"`
+	MaxStandbysPerSender uint
+	// Use Synchronous replication between master and its standbys
+	SynchronousReplication bool
+}
+
+func (c *Config) MarshalJSON() ([]byte, error) {
+	return json.Marshal(configToJsonConfig(c))
 }
 
 func configToJsonConfig(c *Config) *jsonConfig {
 	return &jsonConfig{
-		RequestTimeout:       duration(c.RequestTimeout),
-		SleepInterval:        duration(c.SleepInterval),
-		MemberFailInterval:   duration(c.MemberFailInterval),
-		PGReplUser:           c.PGReplUser,
-		PGReplPassword:       c.PGReplPassword,
-		MaxStandbysPerSender: c.MaxStandbysPerSender,
+		RequestTimeout:         duration(c.RequestTimeout),
+		SleepInterval:          duration(c.SleepInterval),
+		MemberFailInterval:     duration(c.MemberFailInterval),
+		PGReplUser:             c.PGReplUser,
+		PGReplPassword:         c.PGReplPassword,
+		MaxStandbysPerSender:   c.MaxStandbysPerSender,
+		SynchronousReplication: c.SynchronousReplication,
 	}
 }
 
 func jsonConfigToConfig(c *jsonConfig) *Config {
 	return &Config{
-		RequestTimeout:       time.Duration(c.RequestTimeout),
-		SleepInterval:        time.Duration(c.SleepInterval),
-		MemberFailInterval:   time.Duration(c.MemberFailInterval),
-		PGReplUser:           c.PGReplUser,
-		PGReplPassword:       c.PGReplPassword,
-		MaxStandbysPerSender: c.MaxStandbysPerSender,
+		RequestTimeout:         time.Duration(c.RequestTimeout),
+		SleepInterval:          time.Duration(c.SleepInterval),
+		MemberFailInterval:     time.Duration(c.MemberFailInterval),
+		PGReplUser:             c.PGReplUser,
+		PGReplPassword:         c.PGReplPassword,
+		MaxStandbysPerSender:   c.MaxStandbysPerSender,
+		SynchronousReplication: c.SynchronousReplication,
 	}
 }
 

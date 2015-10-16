@@ -368,8 +368,7 @@ func (p *Manager) GetPrimaryConninfo() (connParams, error) {
 	for scanner.Scan() {
 		m := regex.FindStringSubmatch(scanner.Text())
 		if len(m) == 2 {
-			connString := m[1]
-			return ParseConnString(connString)
+			return ParseConnString(m[1])
 		}
 	}
 	return nil, nil
@@ -483,11 +482,15 @@ func (p *Manager) SyncFromMaster(masterconnString string) error {
 	defer os.Remove(pgpass.Name())
 	defer pgpass.Close()
 
-	pgpass.WriteString(fmt.Sprintf("%s:%s:*:%s:%s\n", cp.Get("host"), cp.Get("port"), cp.Get("user"), cp.Get("password")))
+	host := cp.Get("host")
+	port := cp.Get("port")
+	user := cp.Get("user")
+	password := cp.Get("password")
+	pgpass.WriteString(fmt.Sprintf("%s:%s:*:%s:%s\n", host, port, user, password))
 
 	log.Infof("Running pg_basebackup\n")
 	name := filepath.Join(p.pgBinPath, "pg_basebackup")
-	cmd := exec.Command(name, "-R", "-D", p.dataDir, "--host="+cp.Get("host"), "--port="+cp.Get("port"), "-U", cp.Get("user"))
+	cmd := exec.Command(name, "-R", "-D", p.dataDir, "--host="+host, "--port="+port, "-U", user)
 	cmd.Env = append(cmd.Env, fmt.Sprintf("PGPASSFILE=%s", pgpass.Name()))
 	log.Debugf("execing cmd: %s", cmd)
 	out, err := cmd.CombinedOutput()
