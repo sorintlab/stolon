@@ -82,8 +82,25 @@ func init() {
 	cmdKeeper.PersistentFlags().BoolVar(&cfg.debug, "debug", false, "enable debug logging")
 }
 
+var defaultServerParameters = pg.ServerParameters{
+	"unix_socket_directories": "/tmp",
+	"archive_mode":            "on",
+	"wal_level":               "hot_standby",
+	"archive_command":         "mkdir -p ../wal_archive && cp %p ../wal_archive/%f",
+	"max_wal_senders":         "5",
+	"wal_keep_segments":       "8",
+	"archive_timeout":         "1800s",
+	// TODO(sgotti) generate this based on cluster config MaxStandbysPerSender
+	"max_replication_slots": "5",
+	"hot_standby":           "on",
+}
+
 func (p *PostgresKeeper) getReplConnString(memberState *cluster.MemberState) string {
 	return fmt.Sprintf("postgres://%s:%s@%s:%s?sslmode=disable", p.clusterConfig.PGReplUser, p.clusterConfig.PGReplPassword, memberState.PGListenAddress, memberState.PGPort)
+}
+
+func (p *PostgresKeeper) getOurConnString() string {
+	return fmt.Sprintf("postgres://%s:%s/postgres?sslmode=disable", "localhost", p.pgPort)
 }
 
 func (p *PostgresKeeper) getOurReplConnString() string {
@@ -122,22 +139,27 @@ func NewPostgresKeeper(id string, cfg config, stop chan bool, end chan error) (*
 	}
 	log.Debugf(spew.Sprintf("clusterConfig: %+v", clusterConfig))
 
-	pgm, err := postgresql.NewManager(id, cfg.pgBinPath, cfg.dataDir, cfg.pgListenAddress, cfg.pgPort, clusterConfig.PGReplUser, clusterConfig.PGReplPassword, clusterConfig.RequestTimeout)
-	if err != nil {
-		return nil, fmt.Errorf("cannot create postgres manager: %v", err)
-	}
-
-	return &PostgresKeeper{id: id,
+	p := &PostgresKeeper{id: id,
 		dataDir:         cfg.dataDir,
 		e:               e,
-		pgm:             pgm,
 		listenAddress:   cfg.listenAddress,
 		port:            cfg.port,
 		pgListenAddress: cfg.pgListenAddress,
 		pgPort:          cfg.pgPort,
 		clusterConfig:   clusterConfig,
 		stop:            stop,
-		end:             end}, nil
+		end:             end,
+	}
+
+	serverParameters := defaultServerParameters.Copy()
+	serverParameters["listen_addresses"] = fmt.Sprintf("127.0.0.1,%s", cfg.pgListenAddress)
+	serverParameters["port"] = cfg.pgPort
+	pgm, err := postgresql.NewManager(id, cfg.pgBinPath, cfg.dataDir, serverParameters, p.getOurConnString(), p.getOurReplConnString(), clusterConfig.PGReplUser, clusterConfig.PGReplPassword, clusterConfig.RequestTimeout)
+	if err != nil {
+		return nil, fmt.Errorf("cannot create postgres manager: %v", err)
+	}
+	p.pgm = pgm
+	return p, nil
 }
 
 func (p *PostgresKeeper) publish() error {

@@ -23,6 +23,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"syscall"
 	"time"
@@ -41,11 +42,10 @@ var (
 type Manager struct {
 	name             string
 	dataDir          string
-	listenAddress    string
-	port             string
 	replUser         string
 	replPassword     string
 	connString       string
+	replConnString   string
 	pgBinPath        string
 	requestTimeout   time.Duration
 	serverParameters ServerParameters
@@ -53,9 +53,9 @@ type Manager struct {
 
 type ServerParameters map[string]string
 
-func NewServerParameters() ServerParameters {
+func (s ServerParameters) Copy() ServerParameters {
 	serverParameters := ServerParameters{}
-	for k, v := range defaultServerParameters {
+	for k, v := range s {
 		serverParameters[k] = v
 	}
 	return serverParameters
@@ -70,32 +70,18 @@ func (s ServerParameters) Get(k string) (string, bool) {
 	return v, ok
 }
 
-var defaultServerParameters = ServerParameters{
-	"unix_socket_directories": "/tmp",
-	"archive_mode":            "on",
-	"wal_level":               "hot_standby",
-	"archive_command":         "mkdir -p ../wal_archive && cp %p ../wal_archive/%f",
-	"max_wal_senders":         "5",
-	"wal_keep_segments":       "8",
-	"archive_timeout":         "1800s",
-	// TODO(sgotti) generate this based on cluster config MaxStandbysPerSender
-	"max_replication_slots": "5",
-	"hot_standby":           "on",
+func (s ServerParameters) Equals(is ServerParameters) bool {
+	return reflect.DeepEqual(s, is)
 }
 
-func NewManager(name string, pgBinPath string, dataDir string, listenAddress, port, replUser, replPassword string, requestTimeout time.Duration) (*Manager, error) {
-	connString := fmt.Sprintf("postgres://%s:%s/postgres?sslmode=disable", "127.0.0.1", port)
-	serverParameters := NewServerParameters()
-	serverParameters["listen_addresses"] = fmt.Sprintf("127.0.0.1,%s", listenAddress)
-	serverParameters["port"] = port
+func NewManager(name string, pgBinPath string, dataDir string, serverParameters ServerParameters, connString, replConnString, replUser, replPassword string, requestTimeout time.Duration) (*Manager, error) {
 	return &Manager{
 		name:             name,
 		dataDir:          filepath.Join(dataDir, "postgres"),
-		listenAddress:    listenAddress,
-		port:             port,
 		replUser:         replUser,
 		replPassword:     replPassword,
 		connString:       connString,
+		replConnString:   replConnString,
 		pgBinPath:        pgBinPath,
 		requestTimeout:   requestTimeout,
 		serverParameters: serverParameters,
