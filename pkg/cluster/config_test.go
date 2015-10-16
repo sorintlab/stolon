@@ -82,14 +82,15 @@ func TestParseConfig(t *testing.T) {
 		},
 		// All options defined
 		{
-			in: `{ "requestTimeout": "10s", "sleepInterval": "10s", "memberFailInterval": "100s", "pgrepluser": "username", "pgreplpassword": "password", "maxstandbyspersender": 5 }`,
+			in: `{ "requestTimeout": "10s", "sleepInterval": "10s", "memberFailInterval": "100s", "pgrepluser": "username", "pgreplpassword": "password", "maxstandbyspersender": 5, "synchronousreplication": true}`,
 			cfg: mergeDefaultConfig(&Config{
-				RequestTimeout:       10 * time.Second,
-				SleepInterval:        10 * time.Second,
-				MemberFailInterval:   100 * time.Second,
-				PGReplUser:           "username",
-				PGReplPassword:       "password",
-				MaxStandbysPerSender: 5,
+				RequestTimeout:         10 * time.Second,
+				SleepInterval:          10 * time.Second,
+				MemberFailInterval:     100 * time.Second,
+				PGReplUser:             "username",
+				PGReplPassword:         "password",
+				MaxStandbysPerSender:   5,
+				SynchronousReplication: true,
 			}),
 			err: nil,
 		},
@@ -134,6 +135,9 @@ func mergeDefaultConfig(ic *Config) *Config {
 	}
 	if ic.MaxStandbysPerSender != 0 {
 		c.MaxStandbysPerSender = ic.MaxStandbysPerSender
+	}
+	if ic.SynchronousReplication != false {
+		c.SynchronousReplication = ic.SynchronousReplication
 	}
 	return &c
 }

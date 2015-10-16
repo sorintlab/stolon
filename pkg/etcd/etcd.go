@@ -70,7 +70,7 @@ func (e *EtcdManager) NewLeaseManager() lease.Manager {
 	return lease.NewEtcdLeaseManager(e.kAPI, e.etcdPath, e.requestTimeout)
 }
 
-func (e *EtcdManager) SetClusterConfig(cfg cluster.Config) (*etcd.Response, error) {
+func (e *EtcdManager) SetClusterConfig(cfg *cluster.Config) (*etcd.Response, error) {
 	cfgj, err := json.Marshal(cfg)
 	if err != nil {
 		return nil, err

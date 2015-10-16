@@ -23,6 +23,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -71,7 +72,7 @@ var cfg config
 
 func init() {
 	cmdKeeper.PersistentFlags().StringVar(&cfg.id, "id", "", "keeper id (must be unique in the cluster)")
-	cmdKeeper.PersistentFlags().StringVar(&cfg.etcdEndpoints, "etcd-endpoints", "http://127.0.0.1:4001,http://127.0.0.1:2379", "a comma-delimited list of etcd endpoints")
+	cmdKeeper.PersistentFlags().StringVar(&cfg.etcdEndpoints, "etcd-endpoints", common.DefaultEtcdEndpoints, "a comma-delimited list of etcd endpoints")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.dataDir, "data-dir", "", "data directory")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.clusterName, "cluster-name", "", "cluster name")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.listenAddress, "listen-address", "localhost", "keeper listening address")
@@ -96,7 +97,7 @@ var defaultServerParameters = pg.ServerParameters{
 }
 
 func (p *PostgresKeeper) getReplConnString(memberState *cluster.MemberState) string {
-	return fmt.Sprintf("postgres://%s:%s@%s:%s?sslmode=disable", p.clusterConfig.PGReplUser, p.clusterConfig.PGReplPassword, memberState.PGListenAddress, memberState.PGPort)
+	return fmt.Sprintf("postgres://%s:%s@%s:%s?sslmode=disable&application_name=%s", p.clusterConfig.PGReplUser, p.clusterConfig.PGReplPassword, memberState.PGListenAddress, memberState.PGPort, p.id)
 }
 
 func (p *PostgresKeeper) getOurConnString() string {
@@ -510,6 +511,23 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 					if err != nil {
 						log.Errorf("err: %v", err)
 					}
+				}
+			}
+
+			// Setup synchronous replication
+			syncStandbyNames, _ := pgm.GetServerParameter("synchronous_standby_names")
+			if p.clusterConfig.SynchronousReplication {
+				newSyncStandbyNames := strings.Join(followersIDs, ",")
+				if syncStandbyNames != newSyncStandbyNames {
+					log.Debugf("needed synchronous_standby_names changed from %q to %q, reconfiguring", syncStandbyNames, newSyncStandbyNames)
+					pgm.SetServerParameter("synchronous_standby_names", newSyncStandbyNames)
+					pgm.Reload()
+				}
+			} else {
+				if syncStandbyNames != "" {
+					log.Debugf("sync replication disabled, removing current synchronous_standby_names %q", syncStandbyNames)
+					pgm.SetServerParameter("synchronous_standby_names", "")
+					pgm.Reload()
 				}
 			}
 		}

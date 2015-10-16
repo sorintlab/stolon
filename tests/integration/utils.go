@@ -41,7 +41,7 @@ type TestKeeper struct {
 	db        *sql.DB
 }
 
-func NewTestKeeper(dir string, cluster string) (*TestKeeper, error) {
+func NewTestKeeper(dir string, clusterName string) (*TestKeeper, error) {
 	configFile, err := ioutil.TempFile(dir, "conf")
 	if err != nil {
 		return nil, err
@@ -70,7 +70,7 @@ func NewTestKeeper(dir string, cluster string) (*TestKeeper, error) {
 	port2 := ln2.Addr().(*net.TCPAddr).Port
 
 	args = append(args, fmt.Sprintf("--id=%s", id))
-	args = append(args, fmt.Sprintf("--cluster-name=%s", cluster))
+	args = append(args, fmt.Sprintf("--cluster-name=%s", clusterName))
 	args = append(args, fmt.Sprintf("--port=%d", port))
 	args = append(args, fmt.Sprintf("--pg-port=%d", port2))
 	args = append(args, fmt.Sprintf("--data-dir=%s", dataDir))
@@ -298,12 +298,12 @@ type TestSentinel struct {
 	args        []string
 }
 
-func NewTestSentinel(dir string, cluster string) (*TestSentinel, error) {
+func NewTestSentinel(dir string, clusterName string) (*TestSentinel, error) {
 	u := uuid.NewV4()
 	id := fmt.Sprintf("%x", u[:4])
 
 	args := []string{}
-	args = append(args, fmt.Sprintf("--cluster-name=%s", cluster))
+	args = append(args, fmt.Sprintf("--cluster-name=%s", clusterName))
 	args = append(args, "--debug")
 	sentinelBin := os.Getenv("STSENTINEL_BIN")
 	if sentinelBin == "" {
