@@ -39,18 +39,38 @@ var (
 )
 
 type Manager struct {
-	name           string
-	dataDir        string
-	listenAddress  string
-	port           string
-	replUser       string
-	replPassword   string
-	connString     string
-	pgBinPath      string
-	requestTimeout time.Duration
+	name             string
+	dataDir          string
+	listenAddress    string
+	port             string
+	replUser         string
+	replPassword     string
+	connString       string
+	pgBinPath        string
+	requestTimeout   time.Duration
+	serverParameters ServerParameters
 }
 
-var DefaultParameters = map[string]string{
+type ServerParameters map[string]string
+
+func NewServerParameters() ServerParameters {
+	serverParameters := ServerParameters{}
+	for k, v := range defaultServerParameters {
+		serverParameters[k] = v
+	}
+	return serverParameters
+}
+
+func (s ServerParameters) Set(k, v string) {
+	s[k] = v
+}
+
+func (s ServerParameters) Get(k string) (string, bool) {
+	v, ok := s[k]
+	return v, ok
+}
+
+var defaultServerParameters = ServerParameters{
 	"unix_socket_directories": "/tmp",
 	"archive_mode":            "on",
 	"wal_level":               "hot_standby",
@@ -58,23 +78,36 @@ var DefaultParameters = map[string]string{
 	"max_wal_senders":         "5",
 	"wal_keep_segments":       "8",
 	"archive_timeout":         "1800s",
-	"max_replication_slots":   "5",
-	"hot_standby":             "on",
+	// TODO(sgotti) generate this based on cluster config MaxStandbysPerSender
+	"max_replication_slots": "5",
+	"hot_standby":           "on",
 }
 
 func NewManager(name string, pgBinPath string, dataDir string, listenAddress, port, replUser, replPassword string, requestTimeout time.Duration) (*Manager, error) {
 	connString := fmt.Sprintf("postgres://%s:%s/postgres?sslmode=disable", "127.0.0.1", port)
+	serverParameters := NewServerParameters()
+	serverParameters["listen_addresses"] = fmt.Sprintf("127.0.0.1,%s", listenAddress)
+	serverParameters["port"] = port
 	return &Manager{
-		name:           name,
-		dataDir:        filepath.Join(dataDir, "postgres"),
-		listenAddress:  listenAddress,
-		port:           port,
-		replUser:       replUser,
-		replPassword:   replPassword,
-		connString:     connString,
-		pgBinPath:      pgBinPath,
-		requestTimeout: requestTimeout,
+		name:             name,
+		dataDir:          filepath.Join(dataDir, "postgres"),
+		listenAddress:    listenAddress,
+		port:             port,
+		replUser:         replUser,
+		replPassword:     replPassword,
+		connString:       connString,
+		pgBinPath:        pgBinPath,
+		requestTimeout:   requestTimeout,
+		serverParameters: serverParameters,
 	}, nil
+}
+
+func (p *Manager) SetServerParameter(k, v string) {
+	p.serverParameters.Set(k, v)
+}
+
+func (p *Manager) GetServerParameter(k string) (string, bool) {
+	return p.serverParameters.Get(k)
 }
 
 func (p *Manager) Init() error {
@@ -83,20 +116,25 @@ func (p *Manager) Init() error {
 	if err != nil {
 		return fmt.Errorf("error: %v, output: %s", err, out)
 	}
-	err = p.Start()
+	// Move current (initdb generated) postgresql.conf ot postgresql-base.conf
+	err = os.Rename(filepath.Join(p.dataDir, "postgresql.conf"), filepath.Join(p.dataDir, "postgresql-base.conf"))
 	if err != nil {
-		return err
+		return fmt.Errorf("error moving postgresql.conf file to postgresql-base.conf: %v", err)
 	}
+	if err := p.WriteConf(); err != nil {
+		return fmt.Errorf("error writing postgresql.conf file: %v", err)
+	}
+
 	log.Infof("Setting required accesses to pg_hba.conf\n")
 	err = p.writePgHba()
 	if err != nil {
 		return fmt.Errorf("error setting requires accesses to pg_hba.conf: %v", err)
 	}
-	err = p.Reload()
-	if err != nil {
-		return err
-	}
 
+	err = p.Start()
+	if err != nil {
+		return fmt.Errorf("error starting instance: %v", err)
+	}
 	log.Infof("Creating repl user\n")
 	err = p.CreateReplUser()
 	if err != nil {
@@ -111,9 +149,11 @@ func (p *Manager) Init() error {
 
 func (p *Manager) Start() error {
 	log.Infof("Starting database\n")
-	serverArgs := p.getServerArguments()
+	if err := p.WriteConf(); err != nil {
+		return fmt.Errorf("error writing conf file: %v", err)
+	}
 	name := filepath.Join(p.pgBinPath, "pg_ctl")
-	cmd := exec.Command(name, "start", "-w", "-D", p.dataDir, "-o", serverArgs)
+	cmd := exec.Command(name, "start", "-w", "-D", p.dataDir)
 	// TODO(sgotti) attaching a pipe to sdtout/stderr makes the postgres
 	// process executed by pg_ctl inheriting it's file descriptors. So
 	// cmd.Wait() will block and waiting on them to be closed (will happend
@@ -158,6 +198,9 @@ func (p *Manager) IsStarted() (bool, error) {
 }
 
 func (p *Manager) Reload() error {
+	if err := p.WriteConf(); err != nil {
+		return fmt.Errorf("error writing conf file: %v", err)
+	}
 	name := filepath.Join(p.pgBinPath, "pg_ctl")
 	cmd := exec.Command(name, "reload", "-D", p.dataDir, "-o", "-c unix_socket_directories=/tmp")
 	out, err := cmd.CombinedOutput()
@@ -284,16 +327,6 @@ func (p *Manager) IsInitialized() (bool, error) {
 	return false, nil
 }
 
-func (p *Manager) getServerArguments() string {
-	var args string
-	args += fmt.Sprintf("-c listen_addresses=127.0.0.1,%s -c port=%s", p.listenAddress, p.port)
-	for k, v := range DefaultParameters {
-		args += fmt.Sprintf(" -c \"%s=%s\"", k, v)
-	}
-	log.Debugf("server arguments: %s", args)
-	return args
-}
-
 func (p *Manager) GetRoleFromDB() (common.Role, error) {
 	db, err := sql.Open("postgres", p.connString)
 	if err != nil {
@@ -378,8 +411,35 @@ func (p *Manager) HasconnString() (bool, error) {
 	return false, nil
 }
 
+func (p *Manager) WriteConf() error {
+	f, err := ioutil.TempFile(p.dataDir, "postgresql.conf")
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	f.WriteString("include 'postgresql-base.conf'\n")
+	for k, v := range p.serverParameters {
+		// TODO(sgotti) escape single quotes inside parameter value
+		_, err = f.WriteString(fmt.Sprintf("%s = '%s'\n", k, v))
+		if err != nil {
+			os.Remove(f.Name())
+			return err
+		}
+	}
+	if err := f.Sync(); err != nil {
+		return err
+	}
+	if err = os.Rename(f.Name(), filepath.Join(p.dataDir, "postgresql.conf")); err != nil {
+		os.Remove(f.Name())
+		return err
+	}
+
+	return nil
+}
+
 func (p *Manager) WriteRecoveryConf(masterconnString string) error {
-	f, err := os.Create(filepath.Join(p.dataDir, "recovery.conf"))
+	f, err := ioutil.TempFile(p.dataDir, "recovery.conf")
 	if err != nil {
 		return err
 	}
@@ -390,11 +450,20 @@ func (p *Manager) WriteRecoveryConf(masterconnString string) error {
 	f.WriteString("recovery_target_timeline = 'latest'\n")
 
 	if masterconnString != "" {
-		cp, err := URLToConnParams(masterconnString)
+		var cp connParams
+		cp, err = URLToConnParams(masterconnString)
 		if err != nil {
 			return err
 		}
 		f.WriteString(fmt.Sprintf("primary_conninfo = '%s'", cp.ConnString()))
+	}
+	if err := f.Sync(); err != nil {
+		return err
+	}
+
+	if err = os.Rename(f.Name(), filepath.Join(p.dataDir, "recovery.conf")); err != nil {
+		os.Remove(f.Name())
+		return err
 	}
 	return nil
 }
