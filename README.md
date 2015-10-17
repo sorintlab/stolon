@@ -9,7 +9,7 @@ stolon is a cloud native PostgreSQL manager for PostgreSQL high availability. It
 * leverages PostgreSQL streaming replication
 * works inside kubernetes letting you handle persistent high availability
 * uses [etcd](https://github.com/coreos/etcd) as an high available data store and for leader election
-* asynchronous (default) and synchronous replication.
+* asynchronous (default) and [synchronous](doc/syncrepl.md) replication.
 
 ## Architecture
 
