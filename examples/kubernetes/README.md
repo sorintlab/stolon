@@ -153,7 +153,7 @@ You can take a look at the leader sentinel log and will see that after some seco
 ```
 2015-10-16 19:20:53.766228 [sentinel.go:506] I | sentinel: master is failed
 2015-10-16 19:20:53.766243 [sentinel.go:518] I | sentinel: trying to find a standby to replace failed master
-2015-10-16 19:20:53.767604 [sentinel.go:524] D | sentinel: electing new master: 1749142f
+2015-10-16 19:20:53.767604 [sentinel.go:524] I | sentinel: electing new master: "1749142f"
 ```
 
 Now, inside the previous `psql` session you can redo the last select. The first time `psql` will report that the connection was closed and then it successfully reconnected:
