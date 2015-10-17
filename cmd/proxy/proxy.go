@@ -32,7 +32,7 @@ import (
 	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/spf13/cobra"
 )
 
-var log = capnslog.NewPackageLogger("github.com/sorintlab/stolon/cmd", "pgproxy")
+var log = capnslog.NewPackageLogger("github.com/sorintlab/stolon/cmd", "proxy")
 
 func init() {
 	capnslog.SetFormatter(capnslog.NewPrettyFormatter(os.Stderr, true))
@@ -63,9 +63,8 @@ func init() {
 }
 
 type ClusterChecker struct {
-	C            chan pollon.ConfData
-	e            *etcdm.EtcdManager
-	prevMasterID string
+	C chan pollon.ConfData
+	e *etcdm.EtcdManager
 }
 
 func NewClusterChecker(cfg config, C chan pollon.ConfData) *ClusterChecker {
@@ -85,9 +84,9 @@ func (c *ClusterChecker) Check() {
 		c.C <- pollon.ConfData{DestAddr: nil}
 		return
 	}
-	log.Debugf("proxyview: %v", pv)
+	log.Debugf("proxyview: %#v", pv)
 	if pv == nil {
-		log.Infof("no proxyview available")
+		log.Infof("no proxyview available, closing connections to previous master")
 		c.C <- pollon.ConfData{DestAddr: nil}
 		return
 	}
@@ -97,7 +96,7 @@ func (c *ClusterChecker) Check() {
 		c.C <- pollon.ConfData{DestAddr: nil}
 		return
 	}
-	log.Infof("addr: %v", addr)
+	log.Infof("master address: %v", addr)
 	c.C <- pollon.ConfData{DestAddr: addr}
 }
 
