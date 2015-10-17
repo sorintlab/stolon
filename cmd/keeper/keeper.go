@@ -138,7 +138,7 @@ func NewPostgresKeeper(id string, cfg config, stop chan bool, end chan error) (*
 	if err != nil {
 		return nil, fmt.Errorf("cannot get cluster config: %v", err)
 	}
-	log.Debugf(spew.Sprintf("clusterConfig: %+v", clusterConfig))
+	log.Debugf(spew.Sprintf("clusterConfig: %#v", clusterConfig))
 
 	p := &PostgresKeeper{id: id,
 		dataDir:         cfg.dataDir,
@@ -351,7 +351,7 @@ func (p *PostgresKeeper) isDifferentTimelineBranch(mPGState *cluster.PostgresSta
 	tlh := mPGState.TimelinesHistory.GetTimelineHistory(pgState.TimelineID)
 	if tlh != nil {
 		if tlh.SwitchPoint < pgState.XLogPos {
-			log.Debugf("master timeline %d forked at xlog pos %d before our current state (timeline %d at xlog pos %d)", mPGState.TimelineID, tlh.SwitchPoint, pgState.TimelineID, pgState.XLogPos)
+			log.Infof("master timeline %d forked at xlog pos %d before our current state (timeline %d at xlog pos %d)", mPGState.TimelineID, tlh.SwitchPoint, pgState.TimelineID, pgState.XLogPos)
 			return true
 		}
 	}
@@ -368,7 +368,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 		log.Errorf("cannot get cluster config: %v", err)
 		return
 	}
-	log.Debugf(spew.Sprintf("clusterConfig: %+v", clusterConfig))
+	log.Debugf(spew.Sprintf("clusterConfig: %#v", clusterConfig))
 	// This shouldn't need a lock
 	p.clusterConfig = clusterConfig
 
@@ -377,7 +377,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 		log.Errorf("err: %v", err)
 		return
 	}
-	log.Debugf(spew.Sprintf("clusterView: %v", cv))
+	log.Debugf(spew.Sprintf("clusterView: %#v", cv))
 
 	membersState, _, err := e.GetMembersState()
 	if err != nil {
@@ -387,10 +387,10 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 	if membersState == nil {
 		membersState = cluster.MembersState{}
 	}
-	log.Debugf(spew.Sprintf("membersState: %v", membersState))
+	log.Debugf(spew.Sprintf("membersState: %#v", membersState))
 
 	member := membersState[p.id]
-	log.Debugf(spew.Sprintf("member: %v", member))
+	log.Debugf(spew.Sprintf("memberState: %#v", member))
 
 	initialized, err := pgm.IsInitialized()
 	if err != nil {
@@ -461,10 +461,10 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 	// cv != nil
 
 	masterID := cv.Master
-	log.Debugf("masterID: %s", masterID)
+	log.Debugf("masterID: %q", masterID)
 
 	master := membersState[masterID]
-	log.Debugf(spew.Sprintf("master: %v", master))
+	log.Debugf(spew.Sprintf("masterState: %#v", master))
 
 	followersIDs := cv.GetFollowersIDs(p.id)
 
@@ -519,13 +519,13 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 			if p.clusterConfig.SynchronousReplication {
 				newSyncStandbyNames := strings.Join(followersIDs, ",")
 				if syncStandbyNames != newSyncStandbyNames {
-					log.Debugf("needed synchronous_standby_names changed from %q to %q, reconfiguring", syncStandbyNames, newSyncStandbyNames)
+					log.Infof("needed synchronous_standby_names changed from %q to %q, reconfiguring", syncStandbyNames, newSyncStandbyNames)
 					pgm.SetServerParameter("synchronous_standby_names", newSyncStandbyNames)
 					pgm.Reload()
 				}
 			} else {
 				if syncStandbyNames != "" {
-					log.Debugf("sync replication disabled, removing current synchronous_standby_names %q", syncStandbyNames)
+					log.Infof("sync replication disabled, removing current synchronous_standby_names %q", syncStandbyNames)
 					pgm.SetServerParameter("synchronous_standby_names", "")
 					pgm.Reload()
 				}
@@ -545,15 +545,15 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				log.Errorf("err: %v", err)
 				return
 			}
-			log.Debugf(spew.Sprintf("curConnParams: %s", curConnParams))
+			log.Debugf(spew.Sprintf("curConnParams: %v", curConnParams))
 
 			replConnString := p.getReplConnString(master)
 			newConnParams, err := pg.URLToConnParams(replConnString)
-			log.Debugf(spew.Sprintf("newConnParams: %s", newConnParams))
 			if err != nil {
-				log.Errorf("err: %v", err)
+				log.Errorf("cannot get conn params: %v", err)
 				return
 			}
+			log.Debugf(spew.Sprintf("newConnParams: %v", newConnParams))
 
 			// Check that we can sync with master
 
@@ -618,7 +618,7 @@ func saveIDToFile(conf config, id string) error {
 
 func sigHandler(sigs chan os.Signal, stop chan bool) {
 	s := <-sigs
-	log.Debugf("Got signal: %s", s)
+	log.Debugf("got signal: %s", s)
 	close(stop)
 }
 

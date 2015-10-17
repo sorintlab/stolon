@@ -111,7 +111,7 @@ func (p *Manager) Init() error {
 		return fmt.Errorf("error writing postgresql.conf file: %v", err)
 	}
 
-	log.Infof("Setting required accesses to pg_hba.conf\n")
+	log.Infof("Setting required accesses to pg_hba.conf")
 	err = p.writePgHba()
 	if err != nil {
 		return fmt.Errorf("error setting requires accesses to pg_hba.conf: %v", err)
@@ -121,7 +121,7 @@ func (p *Manager) Init() error {
 	if err != nil {
 		return fmt.Errorf("error starting instance: %v", err)
 	}
-	log.Infof("Creating repl user\n")
+	log.Infof("Creating repl user")
 	err = p.CreateReplUser()
 	if err != nil {
 		return fmt.Errorf("error creating replication user: %v", err)
@@ -134,7 +134,7 @@ func (p *Manager) Init() error {
 }
 
 func (p *Manager) Start() error {
-	log.Infof("Starting database\n")
+	log.Infof("Starting database")
 	if err := p.WriteConf(); err != nil {
 		return fmt.Errorf("error writing conf file: %v", err)
 	}
@@ -154,7 +154,7 @@ func (p *Manager) Start() error {
 }
 
 func (p *Manager) Stop(fast bool) error {
-	log.Infof("Stopping database\n")
+	log.Infof("Stopping database")
 	name := filepath.Join(p.pgBinPath, "pg_ctl")
 	cmd := exec.Command(name, "stop", "-w", "-D", p.dataDir, "-o", "-c unix_socket_directories=/tmp")
 	if fast {
@@ -184,6 +184,7 @@ func (p *Manager) IsStarted() (bool, error) {
 }
 
 func (p *Manager) Reload() error {
+	log.Infof("Reloading database configuration")
 	if err := p.WriteConf(); err != nil {
 		return fmt.Errorf("error writing conf file: %v", err)
 	}
@@ -197,7 +198,7 @@ func (p *Manager) Reload() error {
 }
 
 func (p *Manager) Restart(fast bool) error {
-	log.Infof("Restarting database\n")
+	log.Infof("Restarting database")
 	err := p.Stop(true)
 	if err != nil {
 		return err
@@ -210,7 +211,7 @@ func (p *Manager) Restart(fast bool) error {
 }
 
 func (p *Manager) Promote() error {
-	log.Infof("Promoting database\n")
+	log.Infof("Promoting database")
 	name := filepath.Join(p.pgBinPath, "pg_ctl")
 	cmd := exec.Command(name, "promote", "-w", "-D", p.dataDir)
 	out, err := cmd.CombinedOutput()
@@ -488,7 +489,7 @@ func (p *Manager) SyncFromMaster(masterconnString string) error {
 	password := cp.Get("password")
 	pgpass.WriteString(fmt.Sprintf("%s:%s:*:%s:%s\n", host, port, user, password))
 
-	log.Infof("Running pg_basebackup\n")
+	log.Infof("Running pg_basebackup")
 	name := filepath.Join(p.pgBinPath, "pg_basebackup")
 	cmd := exec.Command(name, "-R", "-D", p.dataDir, "--host="+host, "--port="+port, "-U", user)
 	cmd.Env = append(cmd.Env, fmt.Sprintf("PGPASSFILE=%s", pgpass.Name()))

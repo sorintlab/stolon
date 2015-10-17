@@ -213,23 +213,23 @@ func (s *Sentinel) GetBestStandby(cv *cluster.ClusterView, membersState cluster.
 	for id, m := range membersState {
 		log.Debugf(spew.Sprintf("id: %s, m: %#v", id, m))
 		if id == master {
-			log.Debugf("ignoring node %s as it's the current master", id)
+			log.Debugf("ignoring node %q since it's the current master", id)
 			continue
 		}
 		if !s.isMemberHealthy(m) {
-			log.Debugf("ignoring node %s as it's not healthy", id)
+			log.Debugf("ignoring node %q since it's not healthy", id)
 			continue
 		}
 		if m.ClusterViewVersion != cv.Version {
-			log.Debugf("ignoring node as its clusterView version (%d) is different that the actual one (%d)", m.ClusterViewVersion, cv.Version)
+			log.Debugf("ignoring node since its clusterView version (%d) is different that the actual one (%d)", m.ClusterViewVersion, cv.Version)
 			continue
 		}
 		if m.PGState == nil {
-			log.Debugf("ignoring node as its pg state is unknown")
+			log.Debugf("ignoring node since its pg state is unknown")
 			continue
 		}
 		if masterState.PGState.TimelineID != m.PGState.TimelineID {
-			log.Debugf("ignoring node as its pg timeline (%s) is different than master timeline (%d)", membersState[id].PGState.TimelineID, masterState.PGState.TimelineID)
+			log.Debugf("ignoring node since its pg timeline (%s) is different than master timeline (%d)", membersState[id].PGState.TimelineID, masterState.PGState.TimelineID)
 			continue
 		}
 		if bestID == "" {
@@ -287,8 +287,6 @@ func (s *Sentinel) getKubernetesPodsIPs(ctx context.Context) ([]string, error) {
 	q := u.Query()
 	q.Set("labelSelector", cfg.keeperKubeLabelSelector)
 	u.RawQuery = q.Encode()
-
-	log.Debugf("u: %s", u.String())
 
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
@@ -476,7 +474,7 @@ func (s *Sentinel) updateClusterView(cv *cluster.ClusterView, membersState clust
 	var wantedMasterID string
 	// Cluster first initialization
 	if cv.Version == 0 {
-		log.Debugf("finding initial master")
+		log.Debugf("trying to find initial master")
 		// Check for an initial master
 		if len(membersState) < 1 {
 			return nil, fmt.Errorf("cannot init cluster, no members registered")
@@ -500,7 +498,7 @@ func (s *Sentinel) updateClusterView(cv *cluster.ClusterView, membersState clust
 		if !ok {
 			return nil, fmt.Errorf("member state for master %q not available. This shouldn't happen!", masterID)
 		}
-		log.Debugf(spew.Sprintf("master: %#v", master))
+		log.Debugf(spew.Sprintf("masterState: %#v", master))
 
 		if !s.isMemberHealthy(master) {
 			log.Infof("master is failed")
@@ -521,7 +519,7 @@ func (s *Sentinel) updateClusterView(cv *cluster.ClusterView, membersState clust
 				log.Errorf("error trying to find the best standby: %v", err)
 			} else {
 				if bestStandby != masterID {
-					log.Debugf("electing new master: %s", bestStandby)
+					log.Infof("electing new master: %q", bestStandby)
 					wantedMasterID = bestStandby
 				} else {
 					log.Infof("cannot find a good standby to replace failed master")
@@ -590,7 +588,7 @@ func (s *Sentinel) updateProxyView(prevCV *cluster.ClusterView, cv *cluster.Clus
 				Host: master.PGListenAddress,
 				Port: master.PGPort,
 			}
-			log.Infof("Updating proxy view to %s:%s", pv.Host, pv.Port)
+			log.Infof("updating proxy view to %s:%s", pv.Host, pv.Port)
 			_, err := s.e.SetProxyView(pv, prevPVIndex)
 			return err
 		}
@@ -638,7 +636,7 @@ func NewSentinel(id string, cfg config, stop chan bool, end chan bool) (*Sentine
 	if err != nil {
 		return nil, fmt.Errorf("cannot get cluster config: %v", err)
 	}
-	log.Debugf(spew.Sprintf("clusterConfig: %+v", clusterConfig))
+	log.Debugf(spew.Sprintf("clusterConfig: %#v", clusterConfig))
 
 	lManager := e.NewLeaseManager()
 
@@ -677,7 +675,7 @@ func (s *Sentinel) clusterSentinelSM(pctx context.Context) {
 		log.Errorf("cannot get cluster config: %v", err)
 		return
 	}
-	log.Debugf(spew.Sprintf("clusterConfig: %+v", clusterConfig))
+	log.Debugf(spew.Sprintf("clusterConfig: %#v", clusterConfig))
 	// This shouldn't need a lock
 	s.clusterConfig = clusterConfig
 
@@ -749,14 +747,14 @@ func (s *Sentinel) clusterSentinelSM(pctx context.Context) {
 		membersState = cd.MembersState
 	}
 	log.Debugf(spew.Sprintf("membersState: %#v", membersState))
-	log.Debugf(spew.Sprintf("clusterView: %v", cv))
+	log.Debugf(spew.Sprintf("clusterView: %#v", cv))
 
 	pv, res, err := e.GetProxyView()
 	if err != nil {
 		log.Errorf("err: %v", err)
 		return
 	}
-	log.Debugf(spew.Sprintf("proxyview: %v", pv))
+	log.Debugf(spew.Sprintf("proxyview: %#v", pv))
 
 	var prevPVIndex uint64
 	if res != nil {
@@ -788,7 +786,7 @@ func (s *Sentinel) clusterSentinelSM(pctx context.Context) {
 
 func sigHandler(sigs chan os.Signal, stop chan bool) {
 	s := <-sigs
-	log.Debugf("Got signal: %s", s)
+	log.Debugf("got signal: %s", s)
 	close(stop)
 }
 
