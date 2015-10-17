@@ -10,7 +10,7 @@ To do this, you should write the cluster config to the etcd path: `/stolon/clust
 
 Assuming that you cluster name is `mycluster` and etcd is listening on localhost:2379:
 ```
-curl http://127.0.0.1:2379/v2/keys/stolon/cluster/mycluster/config -XPUT -d value={ "synchronousreplication" : true }'
+curl http://127.0.0.1:2379/v2/keys/stolon/cluster/mycluster/config -XPUT -d value='{ "synchronousreplication" : true }'
 ```
 
 or with etcdctl
