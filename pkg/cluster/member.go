@@ -32,6 +32,9 @@ type MemberInfo struct {
 }
 
 func (m *MemberInfo) Copy() *MemberInfo {
+	if m == nil {
+		return nil
+	}
 	nm := *m
 	return &nm
 }
@@ -44,6 +47,15 @@ func (mi *MemberInfo) Changed(m *MemberState) bool {
 }
 
 type PostgresTimeLinesHistory []*PostgresTimeLineHistory
+
+func (tlsh PostgresTimeLinesHistory) Copy() PostgresTimeLinesHistory {
+	if tlsh == nil {
+		return nil
+	}
+	ntlsh := make(PostgresTimeLinesHistory, len(tlsh))
+	copy(ntlsh, tlsh)
+	return ntlsh
+}
 
 type PostgresTimeLineHistory struct {
 	TimelineID  uint64
@@ -67,6 +79,15 @@ type PostgresState struct {
 	TimelineID       uint64
 	XLogPos          uint64
 	TimelinesHistory PostgresTimeLinesHistory
+}
+
+func (p *PostgresState) Copy() *PostgresState {
+	if p == nil {
+		return nil
+	}
+	np := *p
+	np.TimelinesHistory = p.TimelinesHistory.Copy()
+	return &np
 }
 
 type MembersDiscoveryInfo []*MemberDiscoveryInfo
