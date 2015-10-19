@@ -88,12 +88,9 @@ var defaultServerParameters = pg.ServerParameters{
 	"archive_mode":            "on",
 	"wal_level":               "hot_standby",
 	"archive_command":         "mkdir -p ../wal_archive && cp %p ../wal_archive/%f",
-	"max_wal_senders":         "5",
 	"wal_keep_segments":       "8",
 	"archive_timeout":         "1800s",
-	// TODO(sgotti) generate this based on cluster config MaxStandbysPerSender
-	"max_replication_slots": "5",
-	"hot_standby":           "on",
+	"hot_standby":             "on",
 }
 
 func (p *PostgresKeeper) getReplConnString(memberState *cluster.MemberState) string {
@@ -106,6 +103,16 @@ func (p *PostgresKeeper) getOurConnString() string {
 
 func (p *PostgresKeeper) getOurReplConnString() string {
 	return fmt.Sprintf("postgres://%s:%s@%s:%s?sslmode=disable", p.clusterConfig.PGReplUser, p.clusterConfig.PGReplPassword, p.pgListenAddress, p.pgPort)
+}
+
+func (p *PostgresKeeper) createServerParameters() pg.ServerParameters {
+	serverParameters := defaultServerParameters.Copy()
+	serverParameters["listen_addresses"] = fmt.Sprintf("127.0.0.1,%s", cfg.pgListenAddress)
+	serverParameters["port"] = cfg.pgPort
+	serverParameters["max_replication_slots"] = strconv.FormatUint(uint64(p.clusterConfig.MaxStandbysPerSender), 10)
+	// Add some more wal senders, since also the keeper will use them
+	serverParameters["max_wal_senders"] = strconv.FormatUint(uint64(p.clusterConfig.MaxStandbysPerSender+2), 10)
+	return serverParameters
 }
 
 type PostgresKeeper struct {
@@ -155,9 +162,7 @@ func NewPostgresKeeper(id string, cfg config, stop chan bool, end chan error) (*
 		end:             end,
 	}
 
-	serverParameters := defaultServerParameters.Copy()
-	serverParameters["listen_addresses"] = fmt.Sprintf("127.0.0.1,%s", cfg.pgListenAddress)
-	serverParameters["port"] = cfg.pgPort
+	serverParameters := p.createServerParameters()
 	pgm, err := postgresql.NewManager(id, cfg.pgBinPath, cfg.dataDir, serverParameters, p.getOurConnString(), p.getOurReplConnString(), clusterConfig.PGReplUser, clusterConfig.PGReplPassword, clusterConfig.RequestTimeout)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create postgres manager: %v", err)
