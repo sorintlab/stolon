@@ -123,8 +123,11 @@ type PostgresKeeper struct {
 
 	clusterConfig *cluster.Config
 
-	cvMutex   sync.Mutex
-	cvVersion int
+	cvVersionMutex sync.Mutex
+	cvVersion      int
+
+	pgStateMutex sync.Mutex
+	lastPgState  *cluster.PostgresState
 }
 
 func NewPostgresKeeper(id string, cfg config, stop chan bool, end chan error) (*PostgresKeeper, error) {
@@ -181,15 +184,15 @@ func (p *PostgresKeeper) publish() error {
 }
 
 func (p *PostgresKeeper) saveCVVersion(version int) error {
-	p.cvMutex.Lock()
-	defer p.cvMutex.Unlock()
+	p.cvVersionMutex.Lock()
+	defer p.cvVersionMutex.Unlock()
 	p.cvVersion = version
 	return ioutil.WriteFile(filepath.Join(p.dataDir, "cvversion"), []byte(strconv.Itoa(version)), 0600)
 }
 
 func (p *PostgresKeeper) loadCVVersion() error {
-	p.cvMutex.Lock()
-	defer p.cvMutex.Unlock()
+	p.cvVersionMutex.Lock()
+	defer p.cvVersionMutex.Unlock()
 	cvVersion, err := ioutil.ReadFile(filepath.Join(p.dataDir, "cvversion"))
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -202,8 +205,8 @@ func (p *PostgresKeeper) loadCVVersion() error {
 }
 
 func (p *PostgresKeeper) infoHandler(w http.ResponseWriter, req *http.Request) {
-	p.cvMutex.Lock()
-	defer p.cvMutex.Unlock()
+	p.cvVersionMutex.Lock()
+	defer p.cvVersionMutex.Unlock()
 
 	memberInfo := cluster.MemberInfo{
 		ID:                 p.id,
@@ -220,25 +223,44 @@ func (p *PostgresKeeper) infoHandler(w http.ResponseWriter, req *http.Request) {
 }
 
 func (p *PostgresKeeper) pgStateHandler(w http.ResponseWriter, req *http.Request) {
+	p.pgStateMutex.Lock()
+	pgState := p.lastPgState.Copy()
+	p.pgStateMutex.Unlock()
+
+	if pgState == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	if err := json.NewEncoder(w).Encode(pgState); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+	}
+}
+
+func (p *PostgresKeeper) pgStateChecker(pctx context.Context) {
 	pgState := &cluster.PostgresState{}
-	p.cvMutex.Lock()
-	defer p.cvMutex.Unlock()
+
+	defer func() {
+		p.pgStateMutex.Lock()
+		p.lastPgState = pgState
+		p.pgStateMutex.Unlock()
+	}()
 
 	initialized, err := p.pgm.IsInitialized()
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		pgState = nil
 		return
 	}
 	if !initialized {
 		pgState.Initialized = false
 	} else {
 		var err error
-		ctx, cancel := context.WithTimeout(context.Background(), p.clusterConfig.RequestTimeout)
+		ctx, cancel := context.WithTimeout(pctx, p.clusterConfig.RequestTimeout)
 		pgState, err = pg.GetPGState(ctx, p.getOurReplConnString())
 		cancel()
 		if err != nil {
 			log.Errorf("error getting pg state: %v", err)
-			w.WriteHeader(http.StatusInternalServerError)
+			pgState = nil
 			return
 		}
 		pgState.Initialized = true
@@ -246,24 +268,22 @@ func (p *PostgresKeeper) pgStateHandler(w http.ResponseWriter, req *http.Request
 		// if timeline <= 1 then no timeline history file exists.
 		pgState.TimelinesHistory = cluster.PostgresTimeLinesHistory{}
 		if pgState.TimelineID > 1 {
-			ctx, cancel = context.WithTimeout(context.Background(), p.clusterConfig.RequestTimeout)
+			ctx, cancel = context.WithTimeout(pctx, p.clusterConfig.RequestTimeout)
 			tlsh, err := pg.GetTimelinesHistory(ctx, pgState.TimelineID, p.getOurReplConnString())
 			cancel()
 			if err != nil {
 				log.Errorf("error getting timeline history: %v", err)
-				w.WriteHeader(http.StatusInternalServerError)
+				pgState = nil
 				return
 			}
 			pgState.TimelinesHistory = tlsh
 		}
 	}
-	if err := json.NewEncoder(w).Encode(&pgState); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-	}
 }
 
 func (p *PostgresKeeper) Start() {
-	endCh := make(chan struct{})
+	endSMCh := make(chan struct{})
+	endPgStatecheckerCh := make(chan struct{})
 	endApiCh := make(chan error)
 
 	err := p.loadCVVersion()
@@ -281,7 +301,8 @@ func (p *PostgresKeeper) Start() {
 	}()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	timerCh := time.NewTimer(0).C
+	smTimerCh := time.NewTimer(0).C
+	pgStateCheckerTimerCh := time.NewTimer(0).C
 	for true {
 		select {
 		case <-p.stop:
@@ -290,19 +311,25 @@ func (p *PostgresKeeper) Start() {
 			p.pgm.Stop(true)
 			p.end <- nil
 			return
-		case <-timerCh:
+		case <-smTimerCh:
 			go func() {
 				p.postgresKeeperSM(ctx)
-				endCh <- struct{}{}
+				endSMCh <- struct{}{}
 			}()
-		case <-endCh:
-			timerCh = time.NewTimer(p.clusterConfig.SleepInterval).C
+		case <-endSMCh:
+			smTimerCh = time.NewTimer(p.clusterConfig.SleepInterval).C
+		case <-pgStateCheckerTimerCh:
+			go func() {
+				p.pgStateChecker(ctx)
+				endPgStatecheckerCh <- struct{}{}
+			}()
+		case <-endPgStatecheckerCh:
+			pgStateCheckerTimerCh = time.NewTimer(p.clusterConfig.SleepInterval).C
 		case err := <-endApiCh:
 			if err != nil {
 				log.Fatal("ListenAndServe: ", err)
 			}
-			endCh <- struct{}{}
-			return
+			close(p.stop)
 		}
 	}
 }

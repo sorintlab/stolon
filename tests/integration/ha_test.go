@@ -37,7 +37,11 @@ func setupServers(t *testing.T, dir string, numKeepers, numSentinels uint8, sync
 	if err != nil {
 		t.Fatalf("cannot create etcd manager: %v", err)
 	}
-	e.SetClusterConfig(&cluster.Config{SynchronousReplication: syncRepl})
+	e.SetClusterConfig(&cluster.Config{
+		SleepInterval:          5 * time.Second,
+		MemberFailInterval:     10 * time.Second,
+		SynchronousReplication: syncRepl,
+	})
 
 	tms := []*TestKeeper{}
 	tss := []*TestSentinel{}
