@@ -134,7 +134,7 @@ type PostgresKeeper struct {
 	cvVersion      int
 
 	pgStateMutex sync.Mutex
-	lastPgState  *cluster.PostgresState
+	lastPGState  *cluster.PostgresState
 }
 
 func NewPostgresKeeper(id string, cfg config, stop chan bool, end chan error) (*PostgresKeeper, error) {
@@ -228,9 +228,7 @@ func (p *PostgresKeeper) infoHandler(w http.ResponseWriter, req *http.Request) {
 }
 
 func (p *PostgresKeeper) pgStateHandler(w http.ResponseWriter, req *http.Request) {
-	p.pgStateMutex.Lock()
-	pgState := p.lastPgState.Copy()
-	p.pgStateMutex.Unlock()
+	pgState := p.getLastPGState()
 
 	if pgState == nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -242,12 +240,12 @@ func (p *PostgresKeeper) pgStateHandler(w http.ResponseWriter, req *http.Request
 	}
 }
 
-func (p *PostgresKeeper) pgStateChecker(pctx context.Context) {
+func (p *PostgresKeeper) updatePGState(pctx context.Context) {
+	p.pgStateMutex.Lock()
 	pgState := &cluster.PostgresState{}
 
 	defer func() {
-		p.pgStateMutex.Lock()
-		p.lastPgState = pgState
+		p.lastPGState = pgState
 		p.pgStateMutex.Unlock()
 	}()
 
@@ -286,6 +284,13 @@ func (p *PostgresKeeper) pgStateChecker(pctx context.Context) {
 	}
 }
 
+func (p *PostgresKeeper) getLastPGState() *cluster.PostgresState {
+	p.pgStateMutex.Lock()
+	pgState := p.lastPGState.Copy()
+	p.pgStateMutex.Unlock()
+	return pgState
+}
+
 func (p *PostgresKeeper) Start() {
 	endSMCh := make(chan struct{})
 	endPgStatecheckerCh := make(chan struct{})
@@ -307,7 +312,7 @@ func (p *PostgresKeeper) Start() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	smTimerCh := time.NewTimer(0).C
-	pgStateCheckerTimerCh := time.NewTimer(0).C
+	updatePGStateTimerCh := time.NewTimer(0).C
 	for true {
 		select {
 		case <-p.stop:
@@ -323,13 +328,13 @@ func (p *PostgresKeeper) Start() {
 			}()
 		case <-endSMCh:
 			smTimerCh = time.NewTimer(p.clusterConfig.SleepInterval).C
-		case <-pgStateCheckerTimerCh:
+		case <-updatePGStateTimerCh:
 			go func() {
-				p.pgStateChecker(ctx)
+				p.updatePGState(ctx)
 				endPgStatecheckerCh <- struct{}{}
 			}()
 		case <-endPgStatecheckerCh:
-			pgStateCheckerTimerCh = time.NewTimer(p.clusterConfig.SleepInterval).C
+			updatePGStateTimerCh = time.NewTimer(p.clusterConfig.SleepInterval).C
 		case err := <-endApiCh:
 			if err != nil {
 				log.Fatal("ListenAndServe: ", err)
@@ -590,11 +595,12 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 			// Check that we can sync with master
 
 			// Check timeline history
-			ctx, cancel := context.WithTimeout(context.Background(), p.clusterConfig.RequestTimeout)
-			pgState, err := pg.GetPGState(ctx, p.getOurReplConnString())
-			cancel()
-			if err != nil {
-				log.Errorf("cannot get our pgstate: %v", err)
+			// We need to update our pgState to avoid dealing with
+			// an old pgState not reflecting the real state
+			p.updatePGState(pctx)
+			pgState := p.getLastPGState()
+			if pgState == nil {
+				log.Errorf("our pgstate is unknown: %v", err)
 				return
 			}
 			mPGState := master.PGState
