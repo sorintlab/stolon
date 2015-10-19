@@ -20,15 +20,56 @@ ln -s ${PWD} $GOPATH/src/${REPO_PATH}
 
 mkdir -p ${BINDIR}
 
-for cmd in keeper sentinel proxy; do
-	go build -i -o ${BINDIR}/stolon-${cmd} ${REPO_PATH}/cmd/${cmd}
-done
+# for static compilation we need to compile with cgo disabled (CGO_ENABLED=0),
+# this will trigger a rebuild of all the packages and also the go std library
+# (using a different install suffix called `cgo`, will use this since it's the
+# name used by many projects but IMHO it's misleading...).
+# If the user has write access to the go distribution pkg dir we can use "go
+# install". If not possible we have to use `go build` which is slower since
+# it'll rebuild every needed package everytime.
 
+use_go_install=
+
+go_root_dir=$(go env GOROOT)
+go_host_os=$(go env GOHOSTOS)
+go_host_arch=$(go env GOHOSTARCH)
+cgodisabled_pkg_dir=${go_root_dir}/pkg/${go_host_os}_${go_host_arch}_cgo
+
+if [ -e ${cgodisabled_pkg_dir} ]; then
+	use_go_install=1
+fi
+
+if [ -w ${go_root_dir}/pkg ]; then
+	use_go_install=1
+fi
+
+if [ -z $use_go_install ]; then
+	echo "Cannot find/create a go stdlib created with cgo disabled for the go release installed at ${go_root_dir} since ${go_root_dir}/pkg is not writable by `whoami`"
+	echo "The build will use \"go build\" instead of \"go install\". This is slower since every run will need to rebuild all the needed packages."
+	echo "To speed up the build you should make ${go_root_dir}/pkg writable for `whoami` for at least the first build"
+	echo "or manually rebuild stdlib executing the command 'CGO_ENABLED=0 go install -a -installsuffix cgo std' from a user with write access to ${go_root_dir}/pkg"
+
+	for cmd in sentinel proxy; do
+		CGO_ENABLED=0 go build -a -installsuffix cgo -ldflags '-s' -o ${BINDIR}/stolon-${cmd} ${REPO_PATH}/cmd/${cmd}
+	done
+else
+	for cmd in sentinel proxy; do
+		CGO_ENABLED=0 go install -installsuffix cgo -ldflags '-s' ${REPO_PATH}/cmd/${cmd}
+		rm -f ${BINDIR}/stolon-${cmd}
+		cp ${GOPATH}/bin/${cmd} ${BINDIR}/stolon-${cmd}
+	done
+fi
+
+# stolon-keeper cannot be statically built since it needs to get its current
+# running user and this is not available with cgo disabled
+go install ${REPO_PATH}/cmd/keeper
+cp ${GOPATH}/bin/keeper ${BINDIR}/stolon-keeper
 
 # Copy binaries to Dockerfile image directories
 DOCKERIMAGE=${BASEDIR}/examples/kubernetes/image/docker
 
 mkdir -p ${DOCKERIMAGE}/bin/
+rm -f ${DOCKERIMAGE}/bin/*
 for cmd in keeper sentinel proxy; do
 	cp ${BINDIR}/stolon-${cmd} ${DOCKERIMAGE}/bin/stolon-${cmd}
 done
