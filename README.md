@@ -42,6 +42,11 @@ Stolon is under active development and used in different environments. But its o
 * [simple cluster example](doc/simplecluster.md)
 * [kubernetes example](examples/kubernetes/README.md)
 
+## Documentation
+
+* [stolon client (stolonctl)](doc/stolonctl.md)
+* [cluster configuration](doc/cluster_config.md)
+
 ## High availability
 
 Stolon tries to be resilent to any partitioning problem. The cluster view is computed by the leader sentinel and is useful to avoid data loss (one example over all avoid that old dead masters coming back are elected as the new master).

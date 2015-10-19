@@ -52,17 +52,22 @@ if [ -z $use_go_install ]; then
 	for cmd in sentinel proxy; do
 		CGO_ENABLED=0 go build -a -installsuffix cgo -ldflags '-s' -o ${BINDIR}/stolon-${cmd} ${REPO_PATH}/cmd/${cmd}
 	done
+	CGO_ENABLED=0 go build -a -installsuffix cgo -ldflags '-s' -o ${BINDIR}/stolonctl ${REPO_PATH}/cmd/stolonctl
 else
 	for cmd in sentinel proxy; do
 		CGO_ENABLED=0 go install -installsuffix cgo -ldflags '-s' ${REPO_PATH}/cmd/${cmd}
 		rm -f ${BINDIR}/stolon-${cmd}
 		cp ${GOPATH}/bin/${cmd} ${BINDIR}/stolon-${cmd}
 	done
+	CGO_ENABLED=0 go install -installsuffix cgo -ldflags '-s' ${REPO_PATH}/cmd/stolonctl
+	rm -f ${BINDIR}/stolonctl
+	cp ${GOPATH}/bin/stolonctl ${BINDIR}/
 fi
 
 # stolon-keeper cannot be statically built since it needs to get its current
 # running user and this is not available with cgo disabled
 go install ${REPO_PATH}/cmd/keeper
+rm -f ${BINDIR}/stolon-keeper
 cp ${GOPATH}/bin/keeper ${BINDIR}/stolon-keeper
 
 # Copy binaries to Dockerfile image directories
@@ -70,7 +75,7 @@ DOCKERIMAGE=${BASEDIR}/examples/kubernetes/image/docker
 
 mkdir -p ${DOCKERIMAGE}/bin/
 rm -f ${DOCKERIMAGE}/bin/*
-for cmd in keeper sentinel proxy; do
-	cp ${BINDIR}/stolon-${cmd} ${DOCKERIMAGE}/bin/stolon-${cmd}
+for cmd in stolon-keeper stolon-sentinel stolon-proxy; do
+	cp ${BINDIR}/${cmd} ${DOCKERIMAGE}/bin/
 done
 
