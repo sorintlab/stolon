@@ -16,13 +16,13 @@ package cluster
 
 import "github.com/sorintlab/stolon/common"
 
-type Member struct {
+type Keeper struct {
 	ClusterViewVersion int
 }
 
-type MembersInfo map[string]*MemberInfo
+type KeepersInfo map[string]*KeeperInfo
 
-type MemberInfo struct {
+type KeeperInfo struct {
 	ID                 string
 	ClusterViewVersion int
 	Host               string
@@ -31,16 +31,16 @@ type MemberInfo struct {
 	PGPort             string
 }
 
-func (m *MemberInfo) Copy() *MemberInfo {
-	if m == nil {
+func (k *KeeperInfo) Copy() *KeeperInfo {
+	if k == nil {
 		return nil
 	}
-	nm := *m
-	return &nm
+	nk := *k
+	return &nk
 }
 
-func (mi *MemberInfo) Changed(m *MemberState) bool {
-	if m.ClusterViewVersion != mi.ClusterViewVersion || m.Host != mi.Host || m.Port != mi.Port || m.PGListenAddress != mi.PGListenAddress || m.PGPort != mi.PGPort {
+func (ki *KeeperInfo) Changed(k *KeeperState) bool {
+	if k.ClusterViewVersion != ki.ClusterViewVersion || k.Host != ki.Host || k.Port != ki.Port || k.PGListenAddress != ki.PGListenAddress || k.PGPort != ki.PGPort {
 		return true
 	}
 	return false
@@ -90,9 +90,9 @@ func (p *PostgresState) Copy() *PostgresState {
 	return &np
 }
 
-type MembersDiscoveryInfo []*MemberDiscoveryInfo
+type KeepersDiscoveryInfo []*KeeperDiscoveryInfo
 
-type MemberDiscoveryInfo struct {
+type KeeperDiscoveryInfo struct {
 	Host string
 	Port string
 }

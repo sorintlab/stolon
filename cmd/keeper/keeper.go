@@ -93,8 +93,8 @@ var defaultServerParameters = pg.ServerParameters{
 	"hot_standby":             "on",
 }
 
-func (p *PostgresKeeper) getReplConnString(memberState *cluster.MemberState) string {
-	return fmt.Sprintf("postgres://%s:%s@%s:%s?sslmode=disable&application_name=%s", p.clusterConfig.PGReplUser, p.clusterConfig.PGReplPassword, memberState.PGListenAddress, memberState.PGPort, p.id)
+func (p *PostgresKeeper) getReplConnString(keeperState *cluster.KeeperState) string {
+	return fmt.Sprintf("postgres://%s:%s@%s:%s?sslmode=disable&application_name=%s", p.clusterConfig.PGReplUser, p.clusterConfig.PGReplPassword, keeperState.PGListenAddress, keeperState.PGPort, p.id)
 }
 
 func (p *PostgresKeeper) getOurConnString() string {
@@ -176,13 +176,13 @@ func (p *PostgresKeeper) publish() error {
 		log.Infof("running under kubernetes. Not publishing ourself to etcd")
 		return nil
 	}
-	discoveryInfo := &cluster.MemberDiscoveryInfo{
+	discoveryInfo := &cluster.KeeperDiscoveryInfo{
 		Host: p.listenAddress,
 		Port: p.port,
 	}
 	log.Debugf(spew.Sprintf("discoveryInfo: %#v", discoveryInfo))
 
-	if _, err := p.e.SetMemberDiscoveryInfo(p.id, discoveryInfo); err != nil {
+	if _, err := p.e.SetKeeperDiscoveryInfo(p.id, discoveryInfo); err != nil {
 		return err
 	}
 	return nil
@@ -213,7 +213,7 @@ func (p *PostgresKeeper) infoHandler(w http.ResponseWriter, req *http.Request) {
 	p.cvVersionMutex.Lock()
 	defer p.cvVersionMutex.Unlock()
 
-	memberInfo := cluster.MemberInfo{
+	keeperInfo := cluster.KeeperInfo{
 		ID:                 p.id,
 		ClusterViewVersion: p.cvVersion,
 		Host:               p.listenAddress,
@@ -222,7 +222,7 @@ func (p *PostgresKeeper) infoHandler(w http.ResponseWriter, req *http.Request) {
 		PGPort:             p.pgPort,
 	}
 
-	if err := json.NewEncoder(w).Encode(&memberInfo); err != nil {
+	if err := json.NewEncoder(w).Encode(&keeperInfo); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
 }
@@ -344,7 +344,7 @@ func (p *PostgresKeeper) Start() {
 	}
 }
 
-func (p *PostgresKeeper) fullResync(master *cluster.MemberState, initialized, started bool) error {
+func (p *PostgresKeeper) fullResync(master *cluster.KeeperState, initialized, started bool) error {
 	pgm := p.pgm
 	if initialized && started {
 		err := pgm.Stop(true)
@@ -416,18 +416,18 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 	}
 	log.Debugf(spew.Sprintf("clusterView: %#v", cv))
 
-	membersState, _, err := e.GetMembersState()
+	keepersState, _, err := e.GetKeepersState()
 	if err != nil {
 		log.Errorf("err: %v", err)
 		return
 	}
-	if membersState == nil {
-		membersState = cluster.MembersState{}
+	if keepersState == nil {
+		keepersState = cluster.KeepersState{}
 	}
-	log.Debugf(spew.Sprintf("membersState: %#v", membersState))
+	log.Debugf(spew.Sprintf("keepersState: %#v", keepersState))
 
-	member := membersState[p.id]
-	log.Debugf(spew.Sprintf("memberState: %#v", member))
+	keeper := keepersState[p.id]
+	log.Debugf(spew.Sprintf("keeperState: %#v", keeper))
 
 	initialized, err := pgm.IsInitialized()
 	if err != nil {
@@ -500,17 +500,17 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 	masterID := cv.Master
 	log.Debugf("masterID: %q", masterID)
 
-	master := membersState[masterID]
+	master := keepersState[masterID]
 	log.Debugf(spew.Sprintf("masterState: %#v", master))
 
 	followersIDs := cv.GetFollowersIDs(p.id)
 
-	memberRole, ok := cv.MembersRole[p.id]
+	keeperRole, ok := cv.KeepersRole[p.id]
 	if !ok {
-		log.Infof("our member state is not available")
+		log.Infof("our keeper state is not available")
 		return
 	}
-	if memberRole.Follow == "" {
+	if keeperRole.Follow == "" {
 		log.Infof("our cluster requested state is master")
 		if role != common.MasterRole {
 			log.Infof("promoting to master")
@@ -531,7 +531,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 			// Create replication slots
 			for _, slotName := range replSlots {
 				if !util.StringInSlice(followersIDs, slotName) {
-					log.Infof("dropping replication slot for member %q not marked as follower", slotName)
+					log.Infof("dropping replication slot for keeper %q not marked as follower", slotName)
 					err := pgm.DropReplicationSlot(slotName)
 					if err != nil {
 						log.Errorf("err: %v", err)
@@ -569,7 +569,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 			}
 		}
 	} else {
-		log.Infof("our cluster requested state is standby following %q", memberRole.Follow)
+		log.Infof("our cluster requested state is standby following %q", keeperRole.Follow)
 		if isMaster {
 			if err := p.fullResync(master, initialized, started); err != nil {
 				log.Errorf("failed to full resync from master: %v", err)
@@ -616,7 +616,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 			// Update our primary_conninfo if replConnString changed
 			if !curConnParams.Equals(newConnParams) {
 				log.Infof("master connection parameters changed. Reconfiguring...")
-				log.Infof("following %s with connection url %s", memberRole.Follow, replConnString)
+				log.Infof("following %s with connection url %s", keeperRole.Follow, replConnString)
 				err = pgm.BecomeStandby(replConnString)
 				if err != nil {
 					log.Errorf("err: %v", err)

@@ -39,7 +39,7 @@ func setupServers(t *testing.T, dir string, numKeepers, numSentinels uint8, sync
 	}
 	e.SetClusterConfig(&cluster.Config{
 		SleepInterval:          5 * time.Second,
-		MemberFailInterval:     10 * time.Second,
+		KeeperFailInterval:     10 * time.Second,
 		SynchronousReplication: syncRepl,
 	})
 
