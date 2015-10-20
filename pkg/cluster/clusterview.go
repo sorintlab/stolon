@@ -33,6 +33,7 @@ func (kss KeepersState) Copy() KeepersState {
 type KeeperState struct {
 	ID                 string
 	ErrorStartTime     time.Time
+	Healthy            bool
 	ClusterViewVersion int
 	Host               string
 	Port               string
@@ -56,13 +57,13 @@ func (ks *KeeperState) Changed(ki *KeeperInfo) bool {
 	return false
 }
 
-func (ks *KeeperState) MarkError() {
+func (ks *KeeperState) SetError() {
 	if ks.ErrorStartTime.IsZero() {
 		ks.ErrorStartTime = time.Now()
 	}
 }
 
-func (ks *KeeperState) MarkOk() {
+func (ks *KeeperState) CleanError() {
 	ks.ErrorStartTime = time.Time{}
 }
 

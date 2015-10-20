@@ -216,7 +216,7 @@ func (s *Sentinel) GetBestStandby(cv *cluster.ClusterView, keepersState cluster.
 			log.Debugf("ignoring node %q since it's the current master", id)
 			continue
 		}
-		if !s.isKeeperHealthy(k) {
+		if !k.Healthy {
 			log.Debugf("ignoring node %q since it's not healthy", id)
 			continue
 		}
@@ -452,19 +452,25 @@ func (s *Sentinel) updateKeepersState(keepersState cluster.KeepersState, keepers
 	// Mark not found keepersInfo as in error
 	for id, _ := range newKeepersState {
 		if _, ok := keepersInfo[id]; !ok {
-			newKeepersState[id].MarkError()
+			newKeepersState[id].SetError()
 		} else {
-			newKeepersState[id].MarkOk()
+			newKeepersState[id].CleanError()
 		}
 	}
 
 	// Update PGstate
 	for id, k := range newKeepersState {
-		if kpg, ok := keepersPGState[id]; ok {
-			k.PGState = kpg
+		if kpg, ok := keepersPGState[id]; !ok {
+			newKeepersState[id].SetError()
 		} else {
-			newKeepersState[id].MarkError()
+			newKeepersState[id].CleanError()
+			k.PGState = kpg
 		}
+	}
+
+	// Update Healthy state
+	for _, k := range newKeepersState {
+		k.Healthy = s.isKeeperHealthy(k)
 	}
 
 	return newKeepersState
@@ -500,7 +506,7 @@ func (s *Sentinel) updateClusterView(cv *cluster.ClusterView, keepersState clust
 		}
 		log.Debugf(spew.Sprintf("masterState: %#v", master))
 
-		if !s.isKeeperHealthy(master) {
+		if !master.Healthy {
 			log.Infof("master is failed")
 			masterOK = false
 		}
@@ -549,7 +555,7 @@ func (s *Sentinel) updateClusterView(cv *cluster.ClusterView, keepersState clust
 	if cv.Master == wantedMasterID {
 		// wanted master is the previous one
 		masterState := keepersState[wantedMasterID]
-		if s.isKeeperHealthy(masterState) && s.isKeeperConverged(masterState, cv) {
+		if masterState.Healthy && s.isKeeperConverged(masterState, cv) {
 			for id, _ := range newKeepersRole {
 				if id == wantedMasterID {
 					continue
