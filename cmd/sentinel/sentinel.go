@@ -542,7 +542,7 @@ func (s *Sentinel) updateClusterView(cv *cluster.ClusterView, keepersState clust
 	// Setup master role
 	if cv.Master != wantedMasterID {
 		newCV.Master = wantedMasterID
-		newKeepersRole[wantedMasterID] = &cluster.KeeperRole{Follow: ""}
+		newKeepersRole[wantedMasterID] = &cluster.KeeperRole{ID: wantedMasterID, Follow: ""}
 	}
 
 	// Setup standbys
@@ -554,7 +554,7 @@ func (s *Sentinel) updateClusterView(cv *cluster.ClusterView, keepersState clust
 				if id == wantedMasterID {
 					continue
 				}
-				newKeepersRole[id] = &cluster.KeeperRole{Follow: wantedMasterID}
+				newKeepersRole[id] = &cluster.KeeperRole{ID: id, Follow: wantedMasterID}
 			}
 		}
 	}
