@@ -21,6 +21,10 @@ Stolon is composed of 3 main components
 
 ![Stolon architecture](doc/architecture_small.png)
 
+## Project Status
+
+Stolon is under active development and used in different environments. But its on disk format (etcd hierarchy and key contents) is not stable and will change for introducing new features. We hope that at the end of the year (2015) the most breaking changes will be merged and we can commit to a stable on disk format.
+
 ## Requirements
 
 * PostgreSQL >= 9.4
@@ -43,3 +47,7 @@ Stolon is composed of 3 main components
 Stolon tries to be resilent to any partitioning problem. The cluster view is computed by the leader sentinel and is useful to avoid data loss (one example over all avoid that old dead masters coming back are elected as the new master).
 
 There can be tons of different partitioning cases. The primary ones are covered (and in future more will be added) by various [integration tests](tests/integration)
+
+## Contributing to stolon
+
+stolon is an open source project under the Apache 2.0 license, and contributions are gladly welcomed!
