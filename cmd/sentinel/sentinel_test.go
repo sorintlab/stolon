@@ -46,7 +46,7 @@ func TestUpdateClusterView(t *testing.T) {
 				Version: 1,
 				Master:  "01",
 				KeepersRole: cluster.KeepersRole{
-					"01": &cluster.KeeperRole{Follow: ""},
+					"01": &cluster.KeeperRole{ID: "01", Follow: ""},
 				},
 			},
 		},
@@ -66,8 +66,8 @@ func TestUpdateClusterView(t *testing.T) {
 				Version: 1,
 				Master:  "01",
 				KeepersRole: cluster.KeepersRole{
-					"01": &cluster.KeeperRole{Follow: ""},
-					"02": &cluster.KeeperRole{Follow: "01"},
+					"01": &cluster.KeeperRole{ID: "01", Follow: ""},
+					"02": &cluster.KeeperRole{ID: "02", Follow: "01"},
 				},
 			},
 			keepersState: cluster.KeepersState{
@@ -90,8 +90,8 @@ func TestUpdateClusterView(t *testing.T) {
 				Version: 1,
 				Master:  "01",
 				KeepersRole: cluster.KeepersRole{
-					"01": &cluster.KeeperRole{Follow: ""},
-					"02": &cluster.KeeperRole{Follow: "01"},
+					"01": &cluster.KeeperRole{ID: "01", Follow: ""},
+					"02": &cluster.KeeperRole{ID: "02", Follow: "01"},
 				},
 			},
 		},
@@ -101,8 +101,8 @@ func TestUpdateClusterView(t *testing.T) {
 				Version: 1,
 				Master:  "01",
 				KeepersRole: cluster.KeepersRole{
-					"01": &cluster.KeeperRole{Follow: ""},
-					"02": &cluster.KeeperRole{Follow: "01"},
+					"01": &cluster.KeeperRole{ID: "01", Follow: ""},
+					"02": &cluster.KeeperRole{ID: "02", Follow: "01"},
 				},
 			},
 			keepersState: cluster.KeepersState{
@@ -125,8 +125,8 @@ func TestUpdateClusterView(t *testing.T) {
 				Version: 2,
 				Master:  "02",
 				KeepersRole: cluster.KeepersRole{
-					"01": &cluster.KeeperRole{Follow: ""},
-					"02": &cluster.KeeperRole{Follow: ""},
+					"01": &cluster.KeeperRole{ID: "01", Follow: ""},
+					"02": &cluster.KeeperRole{ID: "02", Follow: ""},
 				},
 			},
 		},
@@ -136,8 +136,8 @@ func TestUpdateClusterView(t *testing.T) {
 				Version: 2,
 				Master:  "02",
 				KeepersRole: cluster.KeepersRole{
-					"01": &cluster.KeeperRole{Follow: ""},
-					"02": &cluster.KeeperRole{Follow: ""},
+					"01": &cluster.KeeperRole{ID: "01", Follow: ""},
+					"02": &cluster.KeeperRole{ID: "02", Follow: ""},
 				},
 			},
 			keepersState: cluster.KeepersState{
@@ -160,8 +160,8 @@ func TestUpdateClusterView(t *testing.T) {
 				Version: 3,
 				Master:  "02",
 				KeepersRole: cluster.KeepersRole{
-					"01": &cluster.KeeperRole{Follow: "02"},
-					"02": &cluster.KeeperRole{Follow: ""},
+					"01": &cluster.KeeperRole{ID: "01", Follow: "02"},
+					"02": &cluster.KeeperRole{ID: "02", Follow: ""},
 				},
 			},
 		},
@@ -173,8 +173,8 @@ func TestUpdateClusterView(t *testing.T) {
 				Version: 2,
 				Master:  "01",
 				KeepersRole: cluster.KeepersRole{
-					"01": &cluster.KeeperRole{Follow: ""},
-					"02": &cluster.KeeperRole{Follow: "01"},
+					"01": &cluster.KeeperRole{ID: "01", Follow: ""},
+					"02": &cluster.KeeperRole{ID: "02", Follow: "01"},
 				},
 			},
 			keepersState: cluster.KeepersState{
@@ -197,8 +197,8 @@ func TestUpdateClusterView(t *testing.T) {
 				Version: 2,
 				Master:  "01",
 				KeepersRole: cluster.KeepersRole{
-					"01": &cluster.KeeperRole{Follow: ""},
-					"02": &cluster.KeeperRole{Follow: "01"},
+					"01": &cluster.KeeperRole{ID: "01", Follow: ""},
+					"02": &cluster.KeeperRole{ID: "02", Follow: "01"},
 				},
 			},
 		},
@@ -209,8 +209,8 @@ func TestUpdateClusterView(t *testing.T) {
 				Version: 2,
 				Master:  "01",
 				KeepersRole: cluster.KeepersRole{
-					"01": &cluster.KeeperRole{Follow: ""},
-					"02": &cluster.KeeperRole{Follow: "01"},
+					"01": &cluster.KeeperRole{ID: "01", Follow: ""},
+					"02": &cluster.KeeperRole{ID: "02", Follow: "01"},
 				},
 			},
 			keepersState: cluster.KeepersState{
@@ -233,8 +233,8 @@ func TestUpdateClusterView(t *testing.T) {
 				Version: 3,
 				Master:  "02",
 				KeepersRole: cluster.KeepersRole{
-					"01": &cluster.KeeperRole{Follow: ""},
-					"02": &cluster.KeeperRole{Follow: ""},
+					"01": &cluster.KeeperRole{ID: "01", Follow: ""},
+					"02": &cluster.KeeperRole{ID: "02", Follow: ""},
 				},
 			},
 		},
