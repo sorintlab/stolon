@@ -96,10 +96,10 @@ func (e *EtcdManager) GetClusterConfig() (*cluster.Config, *etcd.Response, error
 	return cluster.NewDefaultConfig(), res, nil
 }
 
-func (e *EtcdManager) SetClusterData(mss cluster.MembersState, cv *cluster.ClusterView, prevIndex uint64) (*etcd.Response, error) {
+func (e *EtcdManager) SetClusterData(mss cluster.KeepersState, cv *cluster.ClusterView, prevIndex uint64) (*etcd.Response, error) {
 	// write cluster view
 	cd := &cluster.ClusterData{
-		MembersState: mss,
+		KeepersState: mss,
 		ClusterView:  cv,
 	}
 	cdj, err := json.Marshal(cd)
@@ -134,12 +134,12 @@ func (e *EtcdManager) GetClusterData() (*cluster.ClusterData, *etcd.Response, er
 	return nil, nil, nil
 }
 
-func (e *EtcdManager) GetMembersState() (cluster.MembersState, *etcd.Response, error) {
+func (e *EtcdManager) GetKeepersState() (cluster.KeepersState, *etcd.Response, error) {
 	cd, res, err := e.GetClusterData()
 	if err != nil || cd == nil {
 		return nil, res, err
 	}
-	return cd.MembersState, res, nil
+	return cd.KeepersState, res, nil
 }
 
 func (e *EtcdManager) GetClusterView() (*cluster.ClusterView, *etcd.Response, error) {
@@ -150,7 +150,7 @@ func (e *EtcdManager) GetClusterView() (*cluster.ClusterView, *etcd.Response, er
 	return cd.ClusterView, res, nil
 }
 
-func (e *EtcdManager) SetMemberDiscoveryInfo(id string, ms *cluster.MemberDiscoveryInfo) (*etcd.Response, error) {
+func (e *EtcdManager) SetKeeperDiscoveryInfo(id string, ms *cluster.KeeperDiscoveryInfo) (*etcd.Response, error) {
 	msj, err := json.Marshal(ms)
 	if err != nil {
 		return nil, err
@@ -158,41 +158,41 @@ func (e *EtcdManager) SetMemberDiscoveryInfo(id string, ms *cluster.MemberDiscov
 	return e.kAPI.Set(context.Background(), filepath.Join(e.etcdPath, discoveryInfoDir, id), string(msj), nil)
 }
 
-func (e *EtcdManager) GetMemberDiscoveryInfo(id string) (*cluster.MemberDiscoveryInfo, bool, error) {
+func (e *EtcdManager) GetKeeperDiscoveryInfo(id string) (*cluster.KeeperDiscoveryInfo, bool, error) {
 	if id == "" {
-		return nil, false, fmt.Errorf("empty member id")
+		return nil, false, fmt.Errorf("empty keeper id")
 	}
-	var member cluster.MemberDiscoveryInfo
+	var keeper cluster.KeeperDiscoveryInfo
 	res, err := e.kAPI.Get(context.Background(), filepath.Join(e.etcdPath, discoveryInfoDir, id), &etcd.GetOptions{Quorum: true})
 	if err != nil && !IsEtcdNotFound(err) {
 		log.Errorf("err: %v", err)
 		return nil, false, err
 	} else if !IsEtcdNotFound(err) {
-		err = json.Unmarshal([]byte(res.Node.Value), &member)
+		err = json.Unmarshal([]byte(res.Node.Value), &keeper)
 		if err != nil {
 			return nil, false, err
 		}
-		return &member, true, nil
+		return &keeper, true, nil
 	}
 	return nil, false, nil
 }
 
-func (e *EtcdManager) GetMembersDiscoveryInfo() (cluster.MembersDiscoveryInfo, error) {
-	members := cluster.MembersDiscoveryInfo{}
+func (e *EtcdManager) GetKeepersDiscoveryInfo() (cluster.KeepersDiscoveryInfo, error) {
+	keepers := cluster.KeepersDiscoveryInfo{}
 	res, err := e.kAPI.Get(context.Background(), filepath.Join(e.etcdPath, discoveryInfoDir), &etcd.GetOptions{Recursive: true, Quorum: true})
 	if err != nil && !IsEtcdNotFound(err) {
 		return nil, err
 	} else if !IsEtcdNotFound(err) {
 		for _, node := range res.Node.Nodes {
-			var member cluster.MemberDiscoveryInfo
-			err = json.Unmarshal([]byte(node.Value), &member)
+			var keeper cluster.KeeperDiscoveryInfo
+			err = json.Unmarshal([]byte(node.Value), &keeper)
 			if err != nil {
 				return nil, err
 			}
-			members = append(members, &member)
+			keepers = append(keepers, &keeper)
 		}
 	}
-	return members, nil
+	return keepers, nil
 }
 
 func (e *EtcdManager) SetProxyView(pv *cluster.ProxyView, prevIndex uint64) (*etcd.Response, error) {

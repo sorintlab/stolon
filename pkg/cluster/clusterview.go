@@ -20,17 +20,17 @@ import (
 	"time"
 )
 
-type MembersState map[string]*MemberState
+type KeepersState map[string]*KeeperState
 
-func (mss MembersState) Copy() MembersState {
-	nmss := MembersState{}
-	for k, v := range mss {
-		nmss[k] = v.Copy()
+func (kss KeepersState) Copy() KeepersState {
+	nkss := KeepersState{}
+	for k, v := range kss {
+		nkss[k] = v.Copy()
 	}
-	return nmss
+	return nkss
 }
 
-type MemberState struct {
+type KeeperState struct {
 	ID                 string
 	ErrorStartTime     time.Time
 	ClusterViewVersion int
@@ -41,70 +41,70 @@ type MemberState struct {
 	PGState            *PostgresState
 }
 
-func (m *MemberState) Copy() *MemberState {
-	if m == nil {
+func (ks *KeeperState) Copy() *KeeperState {
+	if ks == nil {
 		return nil
 	}
-	nm := *m
-	return &nm
+	nks := *ks
+	return &nks
 }
 
-func (m *MemberState) Changed(mi *MemberInfo) bool {
-	if m.ClusterViewVersion != mi.ClusterViewVersion || m.Host != mi.Host || m.Port != mi.Port || m.PGListenAddress != mi.PGListenAddress || m.PGPort != mi.PGPort {
+func (ks *KeeperState) Changed(ki *KeeperInfo) bool {
+	if ks.ClusterViewVersion != ki.ClusterViewVersion || ks.Host != ki.Host || ks.Port != ki.Port || ks.PGListenAddress != ki.PGListenAddress || ks.PGPort != ki.PGPort {
 		return true
 	}
 	return false
 }
 
-func (m *MemberState) MarkError() {
-	if m.ErrorStartTime.IsZero() {
-		m.ErrorStartTime = time.Now()
+func (ks *KeeperState) MarkError() {
+	if ks.ErrorStartTime.IsZero() {
+		ks.ErrorStartTime = time.Now()
 	}
 }
 
-func (m *MemberState) MarkOK() {
-	m.ErrorStartTime = time.Time{}
+func (ks *KeeperState) MarkOk() {
+	ks.ErrorStartTime = time.Time{}
 }
 
-type MembersRole map[string]*MemberRole
+type KeepersRole map[string]*KeeperRole
 
-func NewMembersRole() MembersRole {
-	return make(MembersRole)
+func NewKeepersRole() KeepersRole {
+	return make(KeepersRole)
 }
 
-func (msr MembersRole) Copy() MembersRole {
-	nmsr := MembersRole{}
-	for k, v := range msr {
-		nmsr[k] = v.Copy()
+func (ksr KeepersRole) Copy() KeepersRole {
+	nksr := KeepersRole{}
+	for k, v := range ksr {
+		nksr[k] = v.Copy()
 	}
-	return nmsr
+	return nksr
 }
 
-type MemberRole struct {
+type KeeperRole struct {
 	ID     string
 	Follow string
 }
 
-func (mr *MemberRole) Copy() *MemberRole {
-	if mr == nil {
+func (kr *KeeperRole) Copy() *KeeperRole {
+	if kr == nil {
 		return nil
 	}
-	nmr := *mr
-	return &nmr
+	nkr := *kr
+	return &nkr
 }
 
 type ClusterView struct {
 	Version     int
 	Master      string
-	MembersRole MembersRole
+	KeepersRole KeepersRole
 	ChangeTime  time.Time
 }
 
 // NewClusterView return an initialized clusterView with Version: 0, zero
-// ChangeTime, no Master and empty MembersRole.
+// ChangeTime, no Master and empty KeepersRole.
 func NewClusterView() *ClusterView {
 	return &ClusterView{
-		MembersRole: NewMembersRole(),
+		KeepersRole: NewKeepersRole(),
 	}
 }
 
@@ -118,7 +118,7 @@ func (cv *ClusterView) Equals(ncv *ClusterView) bool {
 	}
 	return cv.Version == ncv.Version &&
 		cv.Master == cv.Master &&
-		reflect.DeepEqual(cv.MembersRole, ncv.MembersRole)
+		reflect.DeepEqual(cv.KeepersRole, ncv.KeepersRole)
 }
 
 func (cv *ClusterView) Copy() *ClusterView {
@@ -126,25 +126,25 @@ func (cv *ClusterView) Copy() *ClusterView {
 		return nil
 	}
 	ncv := *cv
-	ncv.MembersRole = cv.MembersRole.Copy()
+	ncv.KeepersRole = cv.KeepersRole.Copy()
 	return &ncv
 }
 
 // Returns a sorted list of followersIDs
 func (cv *ClusterView) GetFollowersIDs(id string) []string {
 	followersIDs := []string{}
-	for memberID, mr := range cv.MembersRole {
-		if mr.Follow == id {
-			followersIDs = append(followersIDs, memberID)
+	for keeperID, kr := range cv.KeepersRole {
+		if kr.Follow == id {
+			followersIDs = append(followersIDs, keeperID)
 		}
 	}
 	sort.Strings(followersIDs)
 	return followersIDs
 }
 
-// A struct contain the MembersState and the ClusterView, needed to commit them togheter as etcd 2 doesn't supports multi key transactions
+// A struct contain the KeepersState and the ClusterView, needed to commit them togheter as etcd 2 doesn't supports multi key transactions
 // TODO(sgotti) rework it when using etcd supports transactions.
 type ClusterData struct {
-	MembersState MembersState
+	KeepersState KeepersState
 	ClusterView  *ClusterView
 }

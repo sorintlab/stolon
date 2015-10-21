@@ -61,9 +61,9 @@ func TestParseConfig(t *testing.T) {
 			err: fmt.Errorf("config validation failed: SleepInterval must be positive"),
 		},
 		{
-			in:  `{ "memberfailinterval": "-3s" }`,
+			in:  `{ "keeperfailinterval": "-3s" }`,
 			cfg: nil,
-			err: fmt.Errorf("config validation failed: MemberFailInterval must be positive"),
+			err: fmt.Errorf("config validation failed: KeeperFailInterval must be positive"),
 		},
 		{
 			in:  `{ "pgrepluser": "" }`,
@@ -82,11 +82,11 @@ func TestParseConfig(t *testing.T) {
 		},
 		// All options defined
 		{
-			in: `{ "requestTimeout": "10s", "sleepInterval": "10s", "memberFailInterval": "100s", "pgrepluser": "username", "pgreplpassword": "password", "maxstandbyspersender": 5, "synchronousreplication": true}`,
+			in: `{ "requestTimeout": "10s", "sleepInterval": "10s", "keeperFailInterval": "100s", "pgrepluser": "username", "pgreplpassword": "password", "maxstandbyspersender": 5, "synchronousreplication": true}`,
 			cfg: mergeDefaultConfig(&Config{
 				RequestTimeout:         10 * time.Second,
 				SleepInterval:          10 * time.Second,
-				MemberFailInterval:     100 * time.Second,
+				KeeperFailInterval:     100 * time.Second,
 				PGReplUser:             "username",
 				PGReplPassword:         "password",
 				MaxStandbysPerSender:   5,
@@ -124,8 +124,8 @@ func mergeDefaultConfig(ic *Config) *Config {
 	if ic.SleepInterval != 0 {
 		c.SleepInterval = ic.SleepInterval
 	}
-	if ic.MemberFailInterval != 0 {
-		c.MemberFailInterval = ic.MemberFailInterval
+	if ic.KeeperFailInterval != 0 {
+		c.KeeperFailInterval = ic.KeeperFailInterval
 	}
 	if ic.PGReplUser != "" {
 		c.PGReplUser = ic.PGReplUser

@@ -26,59 +26,59 @@ import (
 func TestUpdateClusterView(t *testing.T) {
 	tests := []struct {
 		cv           *cluster.ClusterView
-		membersState cluster.MembersState
+		keepersState cluster.KeepersState
 		outCV        *cluster.ClusterView
 		err          error
 	}{
 		{
 			cv:           cluster.NewClusterView(),
-			membersState: nil,
+			keepersState: nil,
 			outCV:        cluster.NewClusterView(),
-			err:          fmt.Errorf("cannot init cluster, no members registered"),
+			err:          fmt.Errorf("cannot init cluster, no keepers registered"),
 		},
-		// cluster initialization, one member
+		// cluster initialization, one keeper
 		{
 			cv: cluster.NewClusterView(),
-			membersState: cluster.MembersState{
-				"01": &cluster.MemberState{PGState: &cluster.PostgresState{Initialized: true}},
+			keepersState: cluster.KeepersState{
+				"01": &cluster.KeeperState{PGState: &cluster.PostgresState{Initialized: true}},
 			},
 			outCV: &cluster.ClusterView{
 				Version: 1,
 				Master:  "01",
-				MembersRole: cluster.MembersRole{
-					"01": &cluster.MemberRole{Follow: ""},
+				KeepersRole: cluster.KeepersRole{
+					"01": &cluster.KeeperRole{Follow: ""},
 				},
 			},
 		},
-		// cluster initialization, too many members
+		// cluster initialization, too many keepers
 		{
 			cv: cluster.NewClusterView(),
-			membersState: cluster.MembersState{
-				"01": &cluster.MemberState{},
-				"02": &cluster.MemberState{},
+			keepersState: cluster.KeepersState{
+				"01": &cluster.KeeperState{},
+				"02": &cluster.KeeperState{},
 			},
 			outCV: cluster.NewClusterView(),
-			err:   fmt.Errorf("cannot init cluster, more than 1 member registered"),
+			err:   fmt.Errorf("cannot init cluster, more than 1 keeper registered"),
 		},
 		// One master and one standby, both healthy: no change from previous cv
 		{
 			cv: &cluster.ClusterView{
 				Version: 1,
 				Master:  "01",
-				MembersRole: cluster.MembersRole{
-					"01": &cluster.MemberRole{Follow: ""},
-					"02": &cluster.MemberRole{Follow: "01"},
+				KeepersRole: cluster.KeepersRole{
+					"01": &cluster.KeeperRole{Follow: ""},
+					"02": &cluster.KeeperRole{Follow: "01"},
 				},
 			},
-			membersState: cluster.MembersState{
-				"01": &cluster.MemberState{
+			keepersState: cluster.KeepersState{
+				"01": &cluster.KeeperState{
 					ClusterViewVersion: 1,
 					ErrorStartTime:     time.Time{},
 					PGState: &cluster.PostgresState{
 						TimelineID: 0,
 					},
 				},
-				"02": &cluster.MemberState{
+				"02": &cluster.KeeperState{
 					ClusterViewVersion: 1,
 					ErrorStartTime:     time.Time{},
 					PGState: &cluster.PostgresState{
@@ -89,9 +89,9 @@ func TestUpdateClusterView(t *testing.T) {
 			outCV: &cluster.ClusterView{
 				Version: 1,
 				Master:  "01",
-				MembersRole: cluster.MembersRole{
-					"01": &cluster.MemberRole{Follow: ""},
-					"02": &cluster.MemberRole{Follow: "01"},
+				KeepersRole: cluster.KeepersRole{
+					"01": &cluster.KeeperRole{Follow: ""},
+					"02": &cluster.KeeperRole{Follow: "01"},
 				},
 			},
 		},
@@ -100,20 +100,20 @@ func TestUpdateClusterView(t *testing.T) {
 			cv: &cluster.ClusterView{
 				Version: 1,
 				Master:  "01",
-				MembersRole: cluster.MembersRole{
-					"01": &cluster.MemberRole{Follow: ""},
-					"02": &cluster.MemberRole{Follow: "01"},
+				KeepersRole: cluster.KeepersRole{
+					"01": &cluster.KeeperRole{Follow: ""},
+					"02": &cluster.KeeperRole{Follow: "01"},
 				},
 			},
-			membersState: cluster.MembersState{
-				"01": &cluster.MemberState{
+			keepersState: cluster.KeepersState{
+				"01": &cluster.KeeperState{
 					ClusterViewVersion: 1,
 					ErrorStartTime:     time.Unix(0, 0),
 					PGState: &cluster.PostgresState{
 						TimelineID: 0,
 					},
 				},
-				"02": &cluster.MemberState{
+				"02": &cluster.KeeperState{
 					ClusterViewVersion: 1,
 					ErrorStartTime:     time.Time{},
 					PGState: &cluster.PostgresState{
@@ -124,9 +124,9 @@ func TestUpdateClusterView(t *testing.T) {
 			outCV: &cluster.ClusterView{
 				Version: 2,
 				Master:  "02",
-				MembersRole: cluster.MembersRole{
-					"01": &cluster.MemberRole{Follow: ""},
-					"02": &cluster.MemberRole{Follow: ""},
+				KeepersRole: cluster.KeepersRole{
+					"01": &cluster.KeeperRole{Follow: ""},
+					"02": &cluster.KeeperRole{Follow: ""},
 				},
 			},
 		},
@@ -135,20 +135,20 @@ func TestUpdateClusterView(t *testing.T) {
 			cv: &cluster.ClusterView{
 				Version: 2,
 				Master:  "02",
-				MembersRole: cluster.MembersRole{
-					"01": &cluster.MemberRole{Follow: ""},
-					"02": &cluster.MemberRole{Follow: ""},
+				KeepersRole: cluster.KeepersRole{
+					"01": &cluster.KeeperRole{Follow: ""},
+					"02": &cluster.KeeperRole{Follow: ""},
 				},
 			},
-			membersState: cluster.MembersState{
-				"01": &cluster.MemberState{
+			keepersState: cluster.KeepersState{
+				"01": &cluster.KeeperState{
 					ClusterViewVersion: 1,
 					ErrorStartTime:     time.Unix(0, 0),
 					PGState: &cluster.PostgresState{
 						TimelineID: 0,
 					},
 				},
-				"02": &cluster.MemberState{
+				"02": &cluster.KeeperState{
 					ClusterViewVersion: 2,
 					ErrorStartTime:     time.Time{},
 					PGState: &cluster.PostgresState{
@@ -159,9 +159,9 @@ func TestUpdateClusterView(t *testing.T) {
 			outCV: &cluster.ClusterView{
 				Version: 3,
 				Master:  "02",
-				MembersRole: cluster.MembersRole{
-					"01": &cluster.MemberRole{Follow: "02"},
-					"02": &cluster.MemberRole{Follow: ""},
+				KeepersRole: cluster.KeepersRole{
+					"01": &cluster.KeeperRole{Follow: "02"},
+					"02": &cluster.KeeperRole{Follow: ""},
 				},
 			},
 		},
@@ -172,20 +172,20 @@ func TestUpdateClusterView(t *testing.T) {
 			cv: &cluster.ClusterView{
 				Version: 2,
 				Master:  "01",
-				MembersRole: cluster.MembersRole{
-					"01": &cluster.MemberRole{Follow: ""},
-					"02": &cluster.MemberRole{Follow: "01"},
+				KeepersRole: cluster.KeepersRole{
+					"01": &cluster.KeeperRole{Follow: ""},
+					"02": &cluster.KeeperRole{Follow: "01"},
 				},
 			},
-			membersState: cluster.MembersState{
-				"01": &cluster.MemberState{
+			keepersState: cluster.KeepersState{
+				"01": &cluster.KeeperState{
 					ClusterViewVersion: 2,
 					ErrorStartTime:     time.Unix(0, 0),
 					PGState: &cluster.PostgresState{
 						TimelineID: 0,
 					},
 				},
-				"02": &cluster.MemberState{
+				"02": &cluster.KeeperState{
 					ClusterViewVersion: 1,
 					ErrorStartTime:     time.Time{},
 					PGState: &cluster.PostgresState{
@@ -196,9 +196,9 @@ func TestUpdateClusterView(t *testing.T) {
 			outCV: &cluster.ClusterView{
 				Version: 2,
 				Master:  "01",
-				MembersRole: cluster.MembersRole{
-					"01": &cluster.MemberRole{Follow: ""},
-					"02": &cluster.MemberRole{Follow: "01"},
+				KeepersRole: cluster.KeepersRole{
+					"01": &cluster.KeeperRole{Follow: ""},
+					"02": &cluster.KeeperRole{Follow: "01"},
 				},
 			},
 		},
@@ -208,20 +208,20 @@ func TestUpdateClusterView(t *testing.T) {
 			cv: &cluster.ClusterView{
 				Version: 2,
 				Master:  "01",
-				MembersRole: cluster.MembersRole{
-					"01": &cluster.MemberRole{Follow: ""},
-					"02": &cluster.MemberRole{Follow: "01"},
+				KeepersRole: cluster.KeepersRole{
+					"01": &cluster.KeeperRole{Follow: ""},
+					"02": &cluster.KeeperRole{Follow: "01"},
 				},
 			},
-			membersState: cluster.MembersState{
-				"01": &cluster.MemberState{
+			keepersState: cluster.KeepersState{
+				"01": &cluster.KeeperState{
 					ClusterViewVersion: 1,
 					ErrorStartTime:     time.Time{},
 					PGState: &cluster.PostgresState{
 						TimelineID: 0,
 					},
 				},
-				"02": &cluster.MemberState{
+				"02": &cluster.KeeperState{
 					ClusterViewVersion: 2,
 					ErrorStartTime:     time.Time{},
 					PGState: &cluster.PostgresState{
@@ -232,9 +232,9 @@ func TestUpdateClusterView(t *testing.T) {
 			outCV: &cluster.ClusterView{
 				Version: 3,
 				Master:  "02",
-				MembersRole: cluster.MembersRole{
-					"01": &cluster.MemberRole{Follow: ""},
-					"02": &cluster.MemberRole{Follow: ""},
+				KeepersRole: cluster.KeepersRole{
+					"01": &cluster.KeeperRole{Follow: ""},
+					"02": &cluster.KeeperRole{Follow: ""},
 				},
 			},
 		},
@@ -242,7 +242,7 @@ func TestUpdateClusterView(t *testing.T) {
 
 	s := &Sentinel{id: "id", clusterConfig: cluster.NewDefaultConfig()}
 	for i, tt := range tests {
-		outCV, err := s.updateClusterView(tt.cv, tt.membersState)
+		outCV, err := s.updateClusterView(tt.cv, tt.keepersState)
 		t.Logf("test #%d", i)
 		t.Logf(spew.Sprintf("outCV: %#v", outCV))
 		if tt.err != nil {

@@ -139,12 +139,12 @@ func isLeader(l lease.Lease, machID string) bool {
 	return true
 }
 
-func getMemberInfo(ctx context.Context, di *cluster.MemberDiscoveryInfo) (*cluster.MemberInfo, error) {
-	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s:%s/info", di.Host, di.Port), nil)
+func getKeeperInfo(ctx context.Context, kdi *cluster.KeeperDiscoveryInfo) (*cluster.KeeperInfo, error) {
+	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s:%s/info", kdi.Host, kdi.Port), nil)
 	if err != nil {
 		return nil, err
 	}
-	var data cluster.MemberInfo
+	var data cluster.KeeperInfo
 	err = httpDo(ctx, req, nil, func(resp *http.Response, err error) error {
 		if err != nil {
 			return err
@@ -165,8 +165,8 @@ func getMemberInfo(ctx context.Context, di *cluster.MemberDiscoveryInfo) (*clust
 	return &data, nil
 }
 
-func GetPGState(ctx context.Context, memberInfo *cluster.MemberInfo) (*cluster.PostgresState, error) {
-	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s:%s/pgstate", memberInfo.Host, memberInfo.Port), nil)
+func GetPGState(ctx context.Context, keeperInfo *cluster.KeeperInfo) (*cluster.PostgresState, error) {
+	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s:%s/pgstate", keeperInfo.Host, keeperInfo.Port), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -207,36 +207,36 @@ func httpDo(ctx context.Context, req *http.Request, tlsConfig *tls.Config, f fun
 	}
 }
 
-func (s *Sentinel) GetBestStandby(cv *cluster.ClusterView, membersState cluster.MembersState, master string) (string, error) {
+func (s *Sentinel) GetBestStandby(cv *cluster.ClusterView, keepersState cluster.KeepersState, master string) (string, error) {
 	var bestID string
-	masterState := membersState[master]
-	for id, m := range membersState {
-		log.Debugf(spew.Sprintf("id: %s, m: %#v", id, m))
+	masterState := keepersState[master]
+	for id, k := range keepersState {
+		log.Debugf(spew.Sprintf("id: %s, k: %#v", id, k))
 		if id == master {
 			log.Debugf("ignoring node %q since it's the current master", id)
 			continue
 		}
-		if !s.isMemberHealthy(m) {
+		if !s.isKeeperHealthy(k) {
 			log.Debugf("ignoring node %q since it's not healthy", id)
 			continue
 		}
-		if m.ClusterViewVersion != cv.Version {
-			log.Debugf("ignoring node since its clusterView version (%d) is different that the actual one (%d)", m.ClusterViewVersion, cv.Version)
+		if k.ClusterViewVersion != cv.Version {
+			log.Debugf("ignoring node since its clusterView version (%d) is different that the actual one (%d)", k.ClusterViewVersion, cv.Version)
 			continue
 		}
-		if m.PGState == nil {
+		if k.PGState == nil {
 			log.Debugf("ignoring node since its pg state is unknown")
 			continue
 		}
-		if masterState.PGState.TimelineID != m.PGState.TimelineID {
-			log.Debugf("ignoring node since its pg timeline (%s) is different than master timeline (%d)", membersState[id].PGState.TimelineID, masterState.PGState.TimelineID)
+		if masterState.PGState.TimelineID != k.PGState.TimelineID {
+			log.Debugf("ignoring node since its pg timeline (%s) is different than master timeline (%d)", keepersState[id].PGState.TimelineID, masterState.PGState.TimelineID)
 			continue
 		}
 		if bestID == "" {
 			bestID = id
 			continue
 		}
-		if m.PGState.XLogPos > membersState[bestID].PGState.XLogPos {
+		if k.PGState.XLogPos > keepersState[bestID].PGState.XLogPos {
 			bestID = id
 		}
 	}
@@ -246,25 +246,25 @@ func (s *Sentinel) GetBestStandby(cv *cluster.ClusterView, membersState cluster.
 	return bestID, nil
 }
 
-func (s *Sentinel) discover(ctx context.Context) (cluster.MembersDiscoveryInfo, error) {
+func (s *Sentinel) discover(ctx context.Context) (cluster.KeepersDiscoveryInfo, error) {
 	if kubernetes.OnKubernetes() {
-		msdi := cluster.MembersDiscoveryInfo{}
+		ksdi := cluster.KeepersDiscoveryInfo{}
 		log.Debugf("running inside kubernetes")
 		podsIPs, err := s.getKubernetesPodsIPs(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get running pods ips: %v", err)
 		}
 		for _, podIP := range podsIPs {
-			msdi = append(msdi, &cluster.MemberDiscoveryInfo{Host: podIP, Port: cfg.keeperPort})
+			ksdi = append(ksdi, &cluster.KeeperDiscoveryInfo{Host: podIP, Port: cfg.keeperPort})
 		}
-		return msdi, nil
+		return ksdi, nil
 	}
 
 	return s.discoverEtcd(ctx)
 }
 
-func (s *Sentinel) discoverEtcd(ctx context.Context) (cluster.MembersDiscoveryInfo, error) {
-	return s.e.GetMembersDiscoveryInfo()
+func (s *Sentinel) discoverEtcd(ctx context.Context) (cluster.KeepersDiscoveryInfo, error) {
+	return s.e.GetKeepersDiscoveryInfo()
 }
 
 func (s *Sentinel) getKubernetesPodsIPs(ctx context.Context) ([]string, error) {
@@ -351,140 +351,140 @@ func (s *Sentinel) getKubernetesPodsIPs(ctx context.Context) ([]string, error) {
 	return podsIPs, nil
 }
 
-func getMembersInfo(ctx context.Context, mdi cluster.MembersDiscoveryInfo) (cluster.MembersInfo, error) {
-	membersInfo := make(cluster.MembersInfo)
+func getKeepersInfo(ctx context.Context, ksdi cluster.KeepersDiscoveryInfo) (cluster.KeepersInfo, error) {
+	keepersInfo := make(cluster.KeepersInfo)
 	type Response struct {
 		idx int
-		mi  *cluster.MemberInfo
+		ki  *cluster.KeeperInfo
 		err error
 	}
 	ch := make(chan Response)
-	for idx, m := range mdi {
-		go func(idx int, m *cluster.MemberDiscoveryInfo) {
-			mi, err := getMemberInfo(ctx, m)
-			ch <- Response{idx, mi, err}
-		}(idx, m)
+	for idx, kdi := range ksdi {
+		go func(idx int, kdi *cluster.KeeperDiscoveryInfo) {
+			ki, err := getKeeperInfo(ctx, kdi)
+			ch <- Response{idx, ki, err}
+		}(idx, kdi)
 	}
 	count := 0
 	for {
-		if count == len(mdi) {
+		if count == len(ksdi) {
 			break
 		}
 		select {
 		case res := <-ch:
 			count++
 			if res.err != nil {
-				log.Errorf("error getting member info for %s:%s, err: %v", mdi[res.idx].Host, mdi[res.idx].Port, res.err)
+				log.Errorf("error getting keeper info for %s:%s, err: %v", ksdi[res.idx].Host, ksdi[res.idx].Port, res.err)
 				break
 			}
-			membersInfo[res.mi.ID] = res.mi
+			keepersInfo[res.ki.ID] = res.ki
 		}
 	}
-	return membersInfo, nil
+	return keepersInfo, nil
 
 }
 
-func getMembersPGState(ctx context.Context, mi cluster.MembersInfo) map[string]*cluster.PostgresState {
-	membersPGState := map[string]*cluster.PostgresState{}
+func getKeepersPGState(ctx context.Context, ki cluster.KeepersInfo) map[string]*cluster.PostgresState {
+	keepersPGState := map[string]*cluster.PostgresState{}
 	type Response struct {
 		id      string
 		pgState *cluster.PostgresState
 		err     error
 	}
 	ch := make(chan Response)
-	for id, m := range mi {
-		go func(id string, m *cluster.MemberInfo) {
-			pgState, err := GetPGState(ctx, m)
+	for id, k := range ki {
+		go func(id string, k *cluster.KeeperInfo) {
+			pgState, err := GetPGState(ctx, k)
 			ch <- Response{id, pgState, err}
-		}(id, m)
+		}(id, k)
 	}
 	count := 0
 	for {
-		if count == len(mi) {
+		if count == len(ki) {
 			break
 		}
 		select {
 		case res := <-ch:
 			count++
 			if res.err != nil {
-				log.Errorf("error getting member pg state for member: %s, err: %v", res.id, res.err)
+				log.Errorf("error getting keeper pg state for keeper: %s, err: %v", res.id, res.err)
 				break
 			}
-			membersPGState[res.id] = res.pgState
+			keepersPGState[res.id] = res.pgState
 		}
 	}
-	return membersPGState
+	return keepersPGState
 }
 
-func (s *Sentinel) updateMembersState(membersState cluster.MembersState, membersInfo cluster.MembersInfo, membersPGState map[string]*cluster.PostgresState) cluster.MembersState {
-	// Create newMembersState as a copy of the current membersState
-	newMembersState := membersState.Copy()
+func (s *Sentinel) updateKeepersState(keepersState cluster.KeepersState, keepersInfo cluster.KeepersInfo, keepersPGState map[string]*cluster.PostgresState) cluster.KeepersState {
+	// Create newKeepersState as a copy of the current keepersState
+	newKeepersState := keepersState.Copy()
 
-	// Add new membersInfo to newMembersState
-	for id, mi := range membersInfo {
-		if _, ok := newMembersState[id]; !ok {
-			newMembersState[id] = &cluster.MemberState{
+	// Add new keepersInfo to newKeepersState
+	for id, ki := range keepersInfo {
+		if _, ok := newKeepersState[id]; !ok {
+			newKeepersState[id] = &cluster.KeeperState{
 				ErrorStartTime:     time.Time{},
-				ID:                 mi.ID,
-				ClusterViewVersion: mi.ClusterViewVersion,
-				Host:               mi.Host,
-				Port:               mi.Port,
-				PGListenAddress:    mi.PGListenAddress,
-				PGPort:             mi.PGPort,
+				ID:                 ki.ID,
+				ClusterViewVersion: ki.ClusterViewVersion,
+				Host:               ki.Host,
+				Port:               ki.Port,
+				PGListenAddress:    ki.PGListenAddress,
+				PGPort:             ki.PGPort,
 			}
 		}
 	}
 
-	// Update memberState with membersInfo
-	for id, mi := range membersInfo {
-		if mi.Changed(newMembersState[id]) {
-			newMembersState[id] = &cluster.MemberState{
-				ID:                 mi.ID,
-				ClusterViewVersion: mi.ClusterViewVersion,
-				Host:               mi.Host,
-				Port:               mi.Port,
-				PGListenAddress:    mi.PGListenAddress,
-				PGPort:             mi.PGPort,
+	// Update keeperState with keepersInfo
+	for id, ki := range keepersInfo {
+		if ki.Changed(newKeepersState[id]) {
+			newKeepersState[id] = &cluster.KeeperState{
+				ID:                 ki.ID,
+				ClusterViewVersion: ki.ClusterViewVersion,
+				Host:               ki.Host,
+				Port:               ki.Port,
+				PGListenAddress:    ki.PGListenAddress,
+				PGPort:             ki.PGPort,
 			}
 		}
 	}
 
-	// Mark not found membersInfo as in error
-	for id, _ := range newMembersState {
-		if _, ok := membersInfo[id]; !ok {
-			newMembersState[id].MarkError()
+	// Mark not found keepersInfo as in error
+	for id, _ := range newKeepersState {
+		if _, ok := keepersInfo[id]; !ok {
+			newKeepersState[id].MarkError()
 		} else {
-			newMembersState[id].MarkOK()
+			newKeepersState[id].MarkOk()
 		}
 	}
 
 	// Update PGstate
-	for id, m := range newMembersState {
-		if mpg, ok := membersPGState[id]; ok {
-			m.PGState = mpg
+	for id, k := range newKeepersState {
+		if kpg, ok := keepersPGState[id]; ok {
+			k.PGState = kpg
 		} else {
-			newMembersState[id].MarkError()
+			newKeepersState[id].MarkError()
 		}
 	}
 
-	return newMembersState
+	return newKeepersState
 }
 
-func (s *Sentinel) updateClusterView(cv *cluster.ClusterView, membersState cluster.MembersState) (*cluster.ClusterView, error) {
+func (s *Sentinel) updateClusterView(cv *cluster.ClusterView, keepersState cluster.KeepersState) (*cluster.ClusterView, error) {
 	var wantedMasterID string
 	// Cluster first initialization
 	if cv.Version == 0 {
 		log.Debugf("trying to find initial master")
 		// Check for an initial master
-		if len(membersState) < 1 {
-			return nil, fmt.Errorf("cannot init cluster, no members registered")
+		if len(keepersState) < 1 {
+			return nil, fmt.Errorf("cannot init cluster, no keepers registered")
 		}
-		if len(membersState) > 1 {
-			return nil, fmt.Errorf("cannot init cluster, more than 1 member registered")
+		if len(keepersState) > 1 {
+			return nil, fmt.Errorf("cannot init cluster, more than 1 keeper registered")
 		}
-		for id, m := range membersState {
-			if m.PGState == nil {
-				return nil, fmt.Errorf("cannot init cluster using member %q since its pg state is unknown", id)
+		for id, k := range keepersState {
+			if k.PGState == nil {
+				return nil, fmt.Errorf("cannot init cluster using keeper %q since its pg state is unknown", id)
 			}
 			log.Infof("Initializing cluster with master: %q", id)
 			wantedMasterID = id
@@ -494,27 +494,27 @@ func (s *Sentinel) updateClusterView(cv *cluster.ClusterView, membersState clust
 		masterID := cv.Master
 
 		masterOK := true
-		master, ok := membersState[masterID]
+		master, ok := keepersState[masterID]
 		if !ok {
-			return nil, fmt.Errorf("member state for master %q not available. This shouldn't happen!", masterID)
+			return nil, fmt.Errorf("keeper state for master %q not available. This shouldn't happen!", masterID)
 		}
 		log.Debugf(spew.Sprintf("masterState: %#v", master))
 
-		if !s.isMemberHealthy(master) {
+		if !s.isKeeperHealthy(master) {
 			log.Infof("master is failed")
 			masterOK = false
 		}
 
 		// Check that the wanted master is in master state (i.e. check that promotion from standby to master happened)
-		if !s.isMemberConverged(master, cv) {
-			log.Infof("member %s not yet master", masterID)
+		if !s.isKeeperConverged(master, cv) {
+			log.Infof("keeper %s not yet master", masterID)
 			masterOK = false
 		}
 
 		wantedMasterID = masterID
 		if !masterOK {
 			log.Infof("trying to find a standby to replace failed master")
-			bestStandby, err := s.GetBestStandby(cv, membersState, masterID)
+			bestStandby, err := s.GetBestStandby(cv, keepersState, masterID)
 			if err != nil {
 				log.Errorf("error trying to find the best standby: %v", err)
 			} else {
@@ -529,12 +529,12 @@ func (s *Sentinel) updateClusterView(cv *cluster.ClusterView, membersState clust
 	}
 
 	newCV := cv.Copy()
-	newMembersRole := newCV.MembersRole
+	newKeepersRole := newCV.KeepersRole
 
-	// Add new members from membersState
-	for id, _ := range membersState {
-		if _, ok := newMembersRole[id]; !ok {
-			newMembersRole[id] = &cluster.MemberRole{}
+	// Add new keepers from keepersState
+	for id, _ := range keepersState {
+		if _, ok := newKeepersRole[id]; !ok {
+			newKeepersRole[id] = &cluster.KeeperRole{}
 		}
 
 	}
@@ -542,19 +542,19 @@ func (s *Sentinel) updateClusterView(cv *cluster.ClusterView, membersState clust
 	// Setup master role
 	if cv.Master != wantedMasterID {
 		newCV.Master = wantedMasterID
-		newMembersRole[wantedMasterID] = &cluster.MemberRole{Follow: ""}
+		newKeepersRole[wantedMasterID] = &cluster.KeeperRole{Follow: ""}
 	}
 
 	// Setup standbys
 	if cv.Master == wantedMasterID {
 		// wanted master is the previous one
-		masterState := membersState[wantedMasterID]
-		if s.isMemberHealthy(masterState) && s.isMemberConverged(masterState, cv) {
-			for id, _ := range newMembersRole {
+		masterState := keepersState[wantedMasterID]
+		if s.isKeeperHealthy(masterState) && s.isKeeperConverged(masterState, cv) {
+			for id, _ := range newKeepersRole {
 				if id == wantedMasterID {
 					continue
 				}
-				newMembersRole[id] = &cluster.MemberRole{Follow: wantedMasterID}
+				newKeepersRole[id] = &cluster.KeeperRole{Follow: wantedMasterID}
 			}
 		}
 	}
@@ -566,7 +566,7 @@ func (s *Sentinel) updateClusterView(cv *cluster.ClusterView, membersState clust
 	return newCV, nil
 }
 
-func (s *Sentinel) updateProxyView(prevCV *cluster.ClusterView, cv *cluster.ClusterView, membersState cluster.MembersState, prevPVIndex uint64) error {
+func (s *Sentinel) updateProxyView(prevCV *cluster.ClusterView, cv *cluster.ClusterView, keepersState cluster.KeepersState, prevPVIndex uint64) error {
 	if prevCV != nil && cv != nil {
 		if prevCV.Master != cv.Master {
 			if prevPVIndex != 0 {
@@ -579,11 +579,11 @@ func (s *Sentinel) updateProxyView(prevCV *cluster.ClusterView, cv *cluster.Clus
 	}
 	if prevCV != nil {
 		masterID := cv.Master
-		master, ok := membersState[masterID]
+		master, ok := keepersState[masterID]
 		if !ok {
-			return fmt.Errorf("member info for master %q not available. This shouldn't happen!", masterID)
+			return fmt.Errorf("keeper info for master %q not available. This shouldn't happen!", masterID)
 		}
-		if s.isMemberConverged(master, prevCV) {
+		if s.isKeeperConverged(master, prevCV) {
 			pv := &cluster.ProxyView{
 				Host: master.PGListenAddress,
 				Port: master.PGPort,
@@ -596,19 +596,19 @@ func (s *Sentinel) updateProxyView(prevCV *cluster.ClusterView, cv *cluster.Clus
 	return nil
 }
 
-func (s *Sentinel) isMemberHealthy(memberState *cluster.MemberState) bool {
-	if memberState.ErrorStartTime.IsZero() {
+func (s *Sentinel) isKeeperHealthy(keeperState *cluster.KeeperState) bool {
+	if keeperState.ErrorStartTime.IsZero() {
 		return true
 	}
-	if time.Now().After(memberState.ErrorStartTime.Add(s.clusterConfig.MemberFailInterval)) {
+	if time.Now().After(keeperState.ErrorStartTime.Add(s.clusterConfig.KeeperFailInterval)) {
 		return false
 	}
 	return true
 }
 
-func (s *Sentinel) isMemberConverged(memberState *cluster.MemberState, cv *cluster.ClusterView) bool {
-	if memberState.ClusterViewVersion != cv.Version {
-		if time.Now().After(cv.ChangeTime.Add(s.clusterConfig.MemberFailInterval)) {
+func (s *Sentinel) isKeeperConverged(keeperState *cluster.KeeperState, cv *cluster.ClusterView) bool {
+	if keeperState.ClusterViewVersion != cv.Version {
+		if time.Now().After(cv.ChangeTime.Add(s.clusterConfig.KeeperFailInterval)) {
 			return false
 		}
 	}
@@ -683,27 +683,27 @@ func (s *Sentinel) clusterSentinelSM(pctx context.Context) {
 	leaseTTL := clusterConfig.SleepInterval + clusterConfig.RequestTimeout*4
 
 	ctx, cancel := context.WithTimeout(pctx, s.clusterConfig.RequestTimeout)
-	membersDiscoveryInfo, err := s.discover(ctx)
+	keepersDiscoveryInfo, err := s.discover(ctx)
 	cancel()
 	if err != nil {
 		log.Errorf("err: %v", err)
 		return
 	}
-	log.Debugf(spew.Sprintf("membersDiscoveryInfo: %#v", membersDiscoveryInfo))
+	log.Debugf(spew.Sprintf("keepersDiscoveryInfo: %#v", keepersDiscoveryInfo))
 
 	ctx, cancel = context.WithTimeout(pctx, s.clusterConfig.RequestTimeout)
-	membersInfo, err := getMembersInfo(ctx, membersDiscoveryInfo)
+	keepersInfo, err := getKeepersInfo(ctx, keepersDiscoveryInfo)
 	cancel()
 	if err != nil {
 		log.Errorf("err: %v", err)
 		return
 	}
-	log.Debugf(spew.Sprintf("membersInfo: %#v", membersInfo))
+	log.Debugf(spew.Sprintf("keepersInfo: %#v", keepersInfo))
 
 	ctx, cancel = context.WithTimeout(pctx, s.clusterConfig.RequestTimeout)
-	membersPGState := getMembersPGState(ctx, membersInfo)
+	keepersPGState := getKeepersPGState(ctx, keepersInfo)
 	cancel()
-	log.Debugf(spew.Sprintf("membersPGState: %#v", membersPGState))
+	log.Debugf(spew.Sprintf("keepersPGState: %#v", keepersPGState))
 
 	var l lease.Lease
 	if isLeader(s.l, s.id) {
@@ -738,15 +738,15 @@ func (s *Sentinel) clusterSentinelSM(pctx context.Context) {
 	}
 
 	var cv *cluster.ClusterView
-	var membersState cluster.MembersState
+	var keepersState cluster.KeepersState
 	if cd == nil {
 		cv = cluster.NewClusterView()
-		membersState = nil
+		keepersState = nil
 	} else {
 		cv = cd.ClusterView
-		membersState = cd.MembersState
+		keepersState = cd.KeepersState
 	}
-	log.Debugf(spew.Sprintf("membersState: %#v", membersState))
+	log.Debugf(spew.Sprintf("keepersState: %#v", keepersState))
 	log.Debugf(spew.Sprintf("clusterView: %#v", cv))
 
 	pv, res, err := e.GetProxyView()
@@ -761,10 +761,10 @@ func (s *Sentinel) clusterSentinelSM(pctx context.Context) {
 		prevPVIndex = res.Node.ModifiedIndex
 	}
 
-	newMembersState := s.updateMembersState(membersState, membersInfo, membersPGState)
-	log.Debugf(spew.Sprintf("newMembersState: %#v", newMembersState))
+	newKeepersState := s.updateKeepersState(keepersState, keepersInfo, keepersPGState)
+	log.Debugf(spew.Sprintf("newKeepersState: %#v", newKeepersState))
 
-	newcv, err := s.updateClusterView(cv, newMembersState)
+	newcv, err := s.updateClusterView(cv, newKeepersState)
 	if err != nil {
 		log.Errorf("failed to update clusterView: %v", err)
 		return
@@ -772,13 +772,13 @@ func (s *Sentinel) clusterSentinelSM(pctx context.Context) {
 	log.Debugf(spew.Sprintf("newcv: %#v", newcv))
 	if cv.Version < newcv.Version {
 		log.Debugf("newcv changed from previous cv")
-		if err := s.updateProxyView(cv, newcv, newMembersState, prevPVIndex); err != nil {
+		if err := s.updateProxyView(cv, newcv, newKeepersState, prevPVIndex); err != nil {
 			log.Errorf("error updating proxyView: %v", err)
 			return
 		}
 	}
 
-	_, err = e.SetClusterData(newMembersState, newcv, prevCDIndex)
+	_, err = e.SetClusterData(newKeepersState, newcv, prevCDIndex)
 	if err != nil {
 		log.Errorf("error saving clusterdata: %v", err)
 	}

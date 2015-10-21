@@ -29,7 +29,7 @@ var (
 	DefaultConfig = Config{
 		RequestTimeout:         10 * time.Second,
 		SleepInterval:          5 * time.Second,
-		MemberFailInterval:     20 * time.Second,
+		KeeperFailInterval:     20 * time.Second,
 		PGReplUser:             "repluser",
 		PGReplPassword:         "replpassword",
 		MaxStandbysPerSender:   3,
@@ -41,7 +41,7 @@ var (
 type jsonConfig struct {
 	RequestTimeout         duration `json:",omitempty"`
 	SleepInterval          duration `json:",omitempty"`
-	MemberFailInterval     duration `json:",omitempty"`
+	KeeperFailInterval     duration `json:",omitempty"`
 	PGReplUser             string   `json:",omitempty"`
 	PGReplPassword         string   `json:",omitempty"`
 	MaxStandbysPerSender   uint     `json:",omitempty"`
@@ -53,8 +53,8 @@ type Config struct {
 	RequestTimeout time.Duration
 	// Interval to wait before next check (for every component: keeper, sentinel, proxy).
 	SleepInterval time.Duration
-	// Interval after the first fail to declare a member as not healthy.
-	MemberFailInterval time.Duration
+	// Interval after the first fail to declare a keeper as not healthy.
+	KeeperFailInterval time.Duration
 	// PostgreSQL replication username
 	PGReplUser string
 	// PostgreSQL replication password
@@ -74,7 +74,7 @@ func configToJsonConfig(c *Config) *jsonConfig {
 	return &jsonConfig{
 		RequestTimeout:         duration(c.RequestTimeout),
 		SleepInterval:          duration(c.SleepInterval),
-		MemberFailInterval:     duration(c.MemberFailInterval),
+		KeeperFailInterval:     duration(c.KeeperFailInterval),
 		PGReplUser:             c.PGReplUser,
 		PGReplPassword:         c.PGReplPassword,
 		MaxStandbysPerSender:   c.MaxStandbysPerSender,
@@ -86,7 +86,7 @@ func jsonConfigToConfig(c *jsonConfig) *Config {
 	return &Config{
 		RequestTimeout:         time.Duration(c.RequestTimeout),
 		SleepInterval:          time.Duration(c.SleepInterval),
-		MemberFailInterval:     time.Duration(c.MemberFailInterval),
+		KeeperFailInterval:     time.Duration(c.KeeperFailInterval),
 		PGReplUser:             c.PGReplUser,
 		PGReplPassword:         c.PGReplPassword,
 		MaxStandbysPerSender:   c.MaxStandbysPerSender,
@@ -137,8 +137,8 @@ func ValidateConfig(c *Config) error {
 	if c.SleepInterval < 0 {
 		return fmt.Errorf("SleepInterval must be positive")
 	}
-	if c.MemberFailInterval < 0 {
-		return fmt.Errorf("MemberFailInterval must be positive")
+	if c.KeeperFailInterval < 0 {
+		return fmt.Errorf("KeeperFailInterval must be positive")
 	}
 	if c.PGReplUser == "" {
 		return fmt.Errorf("PGReplUser cannot be empty")
