@@ -74,6 +74,7 @@ func TestUpdateClusterView(t *testing.T) {
 				"01": &cluster.KeeperState{
 					ClusterViewVersion: 1,
 					ErrorStartTime:     time.Time{},
+					Healthy:            true,
 					PGState: &cluster.PostgresState{
 						TimelineID: 0,
 					},
@@ -81,6 +82,7 @@ func TestUpdateClusterView(t *testing.T) {
 				"02": &cluster.KeeperState{
 					ClusterViewVersion: 1,
 					ErrorStartTime:     time.Time{},
+					Healthy:            true,
 					PGState: &cluster.PostgresState{
 						TimelineID: 0,
 					},
@@ -109,6 +111,7 @@ func TestUpdateClusterView(t *testing.T) {
 				"01": &cluster.KeeperState{
 					ClusterViewVersion: 1,
 					ErrorStartTime:     time.Unix(0, 0),
+					Healthy:            false,
 					PGState: &cluster.PostgresState{
 						TimelineID: 0,
 					},
@@ -116,6 +119,7 @@ func TestUpdateClusterView(t *testing.T) {
 				"02": &cluster.KeeperState{
 					ClusterViewVersion: 1,
 					ErrorStartTime:     time.Time{},
+					Healthy:            true,
 					PGState: &cluster.PostgresState{
 						TimelineID: 0,
 					},
@@ -144,6 +148,7 @@ func TestUpdateClusterView(t *testing.T) {
 				"01": &cluster.KeeperState{
 					ClusterViewVersion: 1,
 					ErrorStartTime:     time.Unix(0, 0),
+					Healthy:            false,
 					PGState: &cluster.PostgresState{
 						TimelineID: 0,
 					},
@@ -151,6 +156,7 @@ func TestUpdateClusterView(t *testing.T) {
 				"02": &cluster.KeeperState{
 					ClusterViewVersion: 2,
 					ErrorStartTime:     time.Time{},
+					Healthy:            true,
 					PGState: &cluster.PostgresState{
 						TimelineID: 0,
 					},
@@ -181,6 +187,7 @@ func TestUpdateClusterView(t *testing.T) {
 				"01": &cluster.KeeperState{
 					ClusterViewVersion: 2,
 					ErrorStartTime:     time.Unix(0, 0),
+					Healthy:            true,
 					PGState: &cluster.PostgresState{
 						TimelineID: 0,
 					},
@@ -188,6 +195,7 @@ func TestUpdateClusterView(t *testing.T) {
 				"02": &cluster.KeeperState{
 					ClusterViewVersion: 1,
 					ErrorStartTime:     time.Time{},
+					Healthy:            true,
 					PGState: &cluster.PostgresState{
 						TimelineID: 0,
 					},
@@ -217,6 +225,7 @@ func TestUpdateClusterView(t *testing.T) {
 				"01": &cluster.KeeperState{
 					ClusterViewVersion: 1,
 					ErrorStartTime:     time.Time{},
+					Healthy:            true,
 					PGState: &cluster.PostgresState{
 						TimelineID: 0,
 					},
@@ -224,6 +233,7 @@ func TestUpdateClusterView(t *testing.T) {
 				"02": &cluster.KeeperState{
 					ClusterViewVersion: 2,
 					ErrorStartTime:     time.Time{},
+					Healthy:            true,
 					PGState: &cluster.PostgresState{
 						TimelineID: 0,
 					},
