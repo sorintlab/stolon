@@ -70,6 +70,27 @@ func (c *Config) MarshalJSON() ([]byte, error) {
 	return json.Marshal(configToJsonConfig(c))
 }
 
+func (c *Config) UnmarshalJSON(in []byte) error {
+	jc := configToJsonConfig(NewDefaultConfig())
+	err := json.Unmarshal(in, &jc)
+	if err != nil {
+		return err
+	}
+	*c = *jsonConfigToConfig(jc)
+	if err := c.Validate(); err != nil {
+		return fmt.Errorf("config validation failed: %v", err)
+	}
+	return nil
+}
+
+func (c *Config) Copy() *Config {
+	if c == nil {
+		return c
+	}
+	nc := *c
+	return &nc
+}
+
 func configToJsonConfig(c *Config) *jsonConfig {
 	return &jsonConfig{
 		RequestTimeout:         duration(c.RequestTimeout),
@@ -99,7 +120,7 @@ func jsonConfigToConfig(c *jsonConfig) *Config {
 type duration time.Duration
 
 func (d duration) MarshalJSON() ([]byte, error) {
-	return []byte(time.Duration(d).String()), nil
+	return json.Marshal(time.Duration(d).String())
 }
 
 func (d *duration) UnmarshalJSON(b []byte) error {
@@ -117,20 +138,7 @@ func NewDefaultConfig() *Config {
 	return &c
 }
 
-func ParseConfig(jcfg []byte) (*Config, error) {
-	jc := configToJsonConfig(NewDefaultConfig())
-	err := json.Unmarshal(jcfg, &jc)
-	if err != nil {
-		return nil, err
-	}
-	c := jsonConfigToConfig(jc)
-	if err := ValidateConfig(c); err != nil {
-		return nil, fmt.Errorf("config validation failed: %v", err)
-	}
-	return c, nil
-}
-
-func ValidateConfig(c *Config) error {
+func (c *Config) Validate() error {
 	if c.RequestTimeout < 0 {
 		return fmt.Errorf("RequestTimeout must be positive")
 	}

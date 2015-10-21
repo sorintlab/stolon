@@ -37,11 +37,16 @@ func setupServers(t *testing.T, dir string, numKeepers, numSentinels uint8, sync
 	if err != nil {
 		t.Fatalf("cannot create etcd manager: %v", err)
 	}
-	e.SetClusterConfig(&cluster.Config{
-		SleepInterval:          5 * time.Second,
-		KeeperFailInterval:     10 * time.Second,
-		SynchronousReplication: syncRepl,
-	})
+	// TODO(sgotti) change this to a call to the sentinel to change the
+	// cluster config (when the sentinel's code is done)
+	e.SetClusterData(cluster.KeepersState{},
+		&cluster.ClusterView{
+			Config: &cluster.Config{
+				SleepInterval:          5 * time.Second,
+				KeeperFailInterval:     10 * time.Second,
+				SynchronousReplication: syncRepl,
+			},
+		}, 0)
 
 	tms := []*TestKeeper{}
 	tss := []*TestSentinel{}

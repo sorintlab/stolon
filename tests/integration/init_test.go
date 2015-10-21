@@ -29,23 +29,30 @@ func TestInit(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	defer os.RemoveAll(dir)
-	cluster := uuid.NewV4().String()
-	tm, err := NewTestKeeper(dir, cluster)
+	clusterName := uuid.NewV4().String()
+
+	ts, err := NewTestSentinel(dir, clusterName)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := ts.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer ts.Stop()
+	tm, err := NewTestKeeper(dir, clusterName)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	t.Logf("tm: %v", tm)
 
-	err = tm.Start()
-	if err != nil {
+	if err := tm.Start(); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
+	defer tm.Stop()
 
-	err = tm.WaitDBUp(60 * time.Second)
-	if err != nil {
+	if err := tm.WaitDBUp(60 * time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	t.Logf("database is up")
 
-	tm.Stop()
 }
