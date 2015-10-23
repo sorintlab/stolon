@@ -41,6 +41,7 @@ func setupServers(t *testing.T, dir string, numKeepers, numSentinels uint8, sync
 	// cluster config (when the sentinel's code is done)
 	e.SetClusterData(cluster.KeepersState{},
 		&cluster.ClusterView{
+			Version: 1,
 			Config: &cluster.NilConfig{
 				SleepInterval:          cluster.DurationP(5 * time.Second),
 				KeeperFailInterval:     cluster.DurationP(10 * time.Second),
