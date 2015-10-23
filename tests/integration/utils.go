@@ -302,9 +302,20 @@ func NewTestSentinel(dir string, clusterName string) (*TestSentinel, error) {
 	u := uuid.NewV4()
 	id := fmt.Sprintf("%x", u[:4])
 
+	// Hack to find a free tcp port
+	ln, err := net.Listen("tcp", ":0")
+	if err != nil {
+		return nil, err
+	}
+	defer ln.Close()
+
+	port := ln.Addr().(*net.TCPAddr).Port
+
 	args := []string{}
 	args = append(args, fmt.Sprintf("--cluster-name=%s", clusterName))
+	args = append(args, fmt.Sprintf("--port=%d", port))
 	args = append(args, "--debug")
+
 	sentinelBin := os.Getenv("STSENTINEL_BIN")
 	if sentinelBin == "" {
 		return nil, fmt.Errorf("missing STSENTINEL_BIN env")

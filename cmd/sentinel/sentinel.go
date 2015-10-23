@@ -52,6 +52,8 @@ var cmdSentinel = &cobra.Command{
 type config struct {
 	etcdEndpoints           string
 	clusterName             string
+	listenAddress           string
+	port                    string
 	keeperPort              string
 	keeperKubeLabelSelector string
 	debug                   bool
@@ -62,6 +64,8 @@ var cfg config
 func init() {
 	cmdSentinel.PersistentFlags().StringVar(&cfg.etcdEndpoints, "etcd-endpoints", common.DefaultEtcdEndpoints, "a comma-delimited list of etcd endpoints")
 	cmdSentinel.PersistentFlags().StringVar(&cfg.clusterName, "cluster-name", "", "cluster name")
+	cmdSentinel.PersistentFlags().StringVar(&cfg.listenAddress, "listen-address", "localhost", "sentinel listening address")
+	cmdSentinel.PersistentFlags().StringVar(&cfg.port, "port", "6431", "sentinel listening port")
 	cmdSentinel.PersistentFlags().StringVar(&cfg.keeperKubeLabelSelector, "keeper-kube-label-selector", "", "label selector for discoverying stolon-keeper(s) under kubernetes")
 	cmdSentinel.PersistentFlags().StringVar(&cfg.keeperPort, "keeper-port", "5431", "stolon-keeper(s) listening port (used by kubernetes discovery)")
 	cmdSentinel.PersistentFlags().BoolVar(&cfg.debug, "debug", false, "enable debug logging")
@@ -205,6 +209,34 @@ func httpDo(ctx context.Context, req *http.Request, tlsConfig *tls.Config, f fun
 	case err := <-c:
 		return err
 	}
+}
+
+func (s *Sentinel) setSentinelInfo(ttl time.Duration) error {
+	sentinelInfo := &cluster.SentinelInfo{
+		ID:            s.id,
+		ListenAddress: s.listenAddress,
+		Port:          s.port,
+	}
+	log.Debugf(spew.Sprintf("sentinelInfo: %#v", sentinelInfo))
+
+	if _, err := s.e.SetSentinelInfo(sentinelInfo, ttl); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *Sentinel) setLeaderSentinelInfo(ttl time.Duration) error {
+	sentinelInfo := &cluster.SentinelInfo{
+		ID:            s.id,
+		ListenAddress: s.listenAddress,
+		Port:          s.port,
+	}
+	log.Debugf(spew.Sprintf("sentinelInfo: %#v", sentinelInfo))
+
+	if _, err := s.e.SetLeaderSentinelInfo(sentinelInfo, ttl); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (s *Sentinel) GetBestStandby(cv *cluster.ClusterView, keepersState cluster.KeepersState, master string) (string, error) {
@@ -623,12 +655,16 @@ func (s *Sentinel) isKeeperConverged(keeperState *cluster.KeeperState, cv *clust
 }
 
 type Sentinel struct {
-	id            string
-	e             *etcdm.EtcdManager
-	lManager      lease.Manager
-	l             lease.Lease
-	stop          chan bool
-	end           chan bool
+	id       string
+	e        *etcdm.EtcdManager
+	lManager lease.Manager
+	l        lease.Lease
+	stop     chan bool
+	end      chan bool
+
+	listenAddress string
+	port          string
+
 	clusterConfig *cluster.Config
 }
 
@@ -660,11 +696,20 @@ func NewSentinel(id string, cfg config, stop chan bool, end chan bool) (*Sentine
 
 	lManager := e.NewLeaseManager()
 
-	return &Sentinel{id: id, e: e, lManager: lManager, clusterConfig: clusterConfig, stop: stop, end: end}, nil
+	return &Sentinel{
+		id:            id,
+		e:             e,
+		listenAddress: cfg.listenAddress,
+		port:          cfg.port,
+		lManager:      lManager,
+		clusterConfig: clusterConfig,
+		stop:          stop,
+		end:           end}, nil
 }
 
 func (s *Sentinel) Start() {
 	endCh := make(chan struct{})
+
 	ctx, cancel := context.WithCancel(context.Background())
 	timerCh := time.NewTimer(0).C
 
@@ -715,6 +760,11 @@ func (s *Sentinel) clusterSentinelSM(pctx context.Context) {
 	// This shouldn't need a lock
 	s.clusterConfig = cv.Config.ToConfig()
 
+	if err := s.setSentinelInfo(2 * s.clusterConfig.SleepInterval); err != nil {
+		log.Errorf("cannot update leader sentinel info: %v", err)
+		return
+	}
+
 	// TODO(sgotti) better ways to calculate leaseTTL?
 	leaseTTL := s.clusterConfig.SleepInterval + s.clusterConfig.RequestTimeout*4
 
@@ -760,6 +810,10 @@ func (s *Sentinel) clusterSentinelSM(pctx context.Context) {
 	s.l = l
 
 	if !isLeader(s.l, s.id) {
+		return
+	}
+	if err := s.setLeaderSentinelInfo(leaseTTL); err != nil {
+		log.Errorf("cannot update leader sentinel info: %v", err)
 		return
 	}
 

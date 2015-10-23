@@ -28,3 +28,5 @@ spec:
             # Enable debugging
           - name: STSENTINEL_DEBUG
             value: "true"
+        ports:
+          - containerPort: 6431
