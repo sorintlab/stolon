@@ -25,6 +25,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/sorintlab/stolon/common"
@@ -666,6 +667,7 @@ type Sentinel struct {
 	port          string
 
 	clusterConfig *cluster.Config
+	updateMutex   sync.Mutex
 }
 
 func NewSentinel(id string, cfg config, stop chan bool, end chan bool) (*Sentinel, error) {
@@ -709,6 +711,12 @@ func NewSentinel(id string, cfg config, stop chan bool, end chan bool) (*Sentine
 
 func (s *Sentinel) Start() {
 	endCh := make(chan struct{})
+	endApiCh := make(chan error)
+
+	router := s.NewRouter()
+	go func() {
+		endApiCh <- http.ListenAndServe(fmt.Sprintf("%s:%s", s.listenAddress, s.port), router)
+	}()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	timerCh := time.NewTimer(0).C
@@ -722,16 +730,23 @@ func (s *Sentinel) Start() {
 			return
 		case <-timerCh:
 			go func() {
-				s.clusterSentinelSM(ctx)
+				s.clusterSentinelCheck(ctx)
 				endCh <- struct{}{}
 			}()
 		case <-endCh:
 			timerCh = time.NewTimer(s.clusterConfig.SleepInterval).C
+		case err := <-endApiCh:
+			if err != nil {
+				log.Fatal("ListenAndServe: ", err)
+			}
+			close(s.stop)
 		}
 	}
 }
 
-func (s *Sentinel) clusterSentinelSM(pctx context.Context) {
+func (s *Sentinel) clusterSentinelCheck(pctx context.Context) {
+	s.updateMutex.Lock()
+	defer s.updateMutex.Unlock()
 	e := s.e
 
 	cd, res, err := e.GetClusterData()
