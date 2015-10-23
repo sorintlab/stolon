@@ -1,3 +1,5 @@
+# Temporary not available due to architecture changes #
+
 # Synchronous replication
 
 **Note:** this is temporary. In future you can update the cluster config using a stolon client (`stolonctl`) instead of manually writing the full cluster config inside etcd since this is quite error prone.

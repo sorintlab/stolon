@@ -6,6 +6,20 @@ This example assumes a running etcd server on localhost
 
 Note: under ubuntu the `initdb` command is not provided in the path. You should updated the exported `PATH` env variable or provide the `--pg-bin-path` command line option to the `stolon-keeper` command.
 
+### Start a sentinel
+
+The sentinel will become the sentinels leader for `stolon-cluster` and initialize the first clusterview.
+
+```
+./bin/stolon-sentinel --cluster-name stolon-cluster
+```
+
+```
+sentinel: id: 336d6e14
+sentinel: trying to acquire sentinels leadership
+sentinel: sentinel leadership acquired
+```
+
 ### Launch first keeper
 
 ```
@@ -26,18 +40,9 @@ postgresql: Stopping database
 postgresql: Starting database
 ```
 
-### Start a sentinel
-
-Now that the first keeper is active we can start a sentinel
+The sentinel will elect it as the master instance:
 
 ```
-./bin/stolon-sentinel --cluster-name stolon-cluster
-```
-
-```
-sentinel: id: 336d6e14
-sentinel: trying to acquire sentinels leadership
-sentinel: sentinel leadership acquired
 sentinel: Initializing cluster with master: "postgres0"
 sentinel: Updating proxy view to localhost:5432
 sentinel: I'm the sentinels leader

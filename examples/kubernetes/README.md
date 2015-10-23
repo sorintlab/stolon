@@ -13,6 +13,14 @@ in the [image](examples/kubernetes/image/docker) directory you'll find the Docke
 
 These example points to a single node etcd cluster on `http://10.245.1.1:4001`. You can change the ST${COMPONENT}_ETCD_ENDPOINTS environment variables in the definitions to point to the right etcd cluster.
 
+### Create the sentinel(s)
+
+```
+kubectl create -f stolon-sentinel.yaml
+```
+
+This will create a replication controller with one pod executing the stolon sentinel. You can also increase the number of replicas for stolon sentinels in the rc definition or do it later.
+
 ### Create the first stolon keeper
 Note: In this example the stolon keeper is a replication controller that, for every pod replica, uses a volume for stolon and postgreSQL data of `emptyDir` type. So it'll go away when the related pod is destroyed. This is just for easy testing. In production you should use a persistent volume. Actually (kubernetes 1.0), for working with persistent volumes you should define a different replication controller with `replicas=1` for every keeper instance.
 
@@ -22,7 +30,9 @@ kubectl create -f stolon-keeper.yaml
 ```
 
 This will create a replication controller that will create one pod executing the stolon keeper.
+The first keeper will initialize an empty postgreSQL instance and the sentinel will elect it as the master.
 
+Once the leader sentinel has elected the first master and created the initial cluster view you can add additional stolon keepers. Will do this later.
 
 ### Setup superuser password
 
@@ -63,15 +73,6 @@ ALTER ROLE
 ```
 you can now exit the shell.
 
-### Create the sentinel(s)
-
-```
-kubectl create -f stolon-sentinel.yaml
-```
-
-This will create a replication controller with one pod executing the stolon sentinel. You can also increase the number of replicas for stolon sentinels in the rc definition or do it later.
-
-Once the leader sentinel has elected the first master and created the initial cluster view you can add additional stolon keepers. Will do this later.
 
 ### Create the proxies
 

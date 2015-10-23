@@ -144,10 +144,20 @@ func NewPostgresKeeper(id string, cfg config, stop chan bool, end chan error) (*
 		return nil, fmt.Errorf("cannot create etcd manager: %v", err)
 	}
 
-	clusterConfig, _, err := e.GetClusterConfig()
+	cd, _, err := e.GetClusterData()
 	if err != nil {
-		return nil, fmt.Errorf("cannot get cluster config: %v", err)
+		return nil, fmt.Errorf("error retrieving cluster data: %v", err)
 	}
+
+	var cv *cluster.ClusterView
+	if cd == nil {
+		cv = cluster.NewClusterView()
+	} else {
+		cv = cd.ClusterView
+	}
+	log.Debugf(spew.Sprintf("clusterView: %#v", cv))
+
+	clusterConfig := cv.Config
 	log.Debugf(spew.Sprintf("clusterConfig: %#v", clusterConfig))
 
 	p := &PostgresKeeper{id: id,
@@ -399,22 +409,26 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 	e := p.e
 	pgm := p.pgm
 
-	// Update cluster config
-	clusterConfig, _, err := e.GetClusterConfig()
-	if err != nil {
-		log.Errorf("cannot get cluster config: %v", err)
-		return
-	}
-	log.Debugf(spew.Sprintf("clusterConfig: %#v", clusterConfig))
-	// This shouldn't need a lock
-	p.clusterConfig = clusterConfig
-
 	cv, _, err := e.GetClusterView()
 	if err != nil {
 		log.Errorf("err: %v", err)
 		return
 	}
 	log.Debugf(spew.Sprintf("clusterView: %#v", cv))
+
+	if cv == nil {
+		log.Infof("no clusterview available, waiting for it to appear")
+		return
+	}
+
+	// Update cluster config
+	clusterConfig := cv.Config
+	if clusterConfig == nil {
+		clusterConfig = cluster.NewDefaultConfig()
+	}
+	log.Debugf(spew.Sprintf("clusterConfig: %#v", clusterConfig))
+	// This shouldn't need a lock
+	p.clusterConfig = clusterConfig
 
 	keepersState, _, err := e.GetKeepersState()
 	if err != nil {
@@ -435,7 +449,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 		return
 	}
 
-	if cv == nil {
+	if len(cv.KeepersRole) == 0 {
 		if !initialized {
 			log.Infof("Initializing database")
 			err = pgm.Init()
@@ -507,7 +521,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 
 	keeperRole, ok := cv.KeepersRole[p.id]
 	if !ok {
-		log.Infof("our keeper state is not available")
+		log.Infof("our keeper requested role is not available")
 		return
 	}
 	if keeperRole.Follow == "" {

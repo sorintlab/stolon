@@ -98,6 +98,7 @@ type ClusterView struct {
 	Version     int
 	Master      string
 	KeepersRole KeepersRole
+	Config      *Config
 	ChangeTime  time.Time
 }
 
@@ -106,6 +107,7 @@ type ClusterView struct {
 func NewClusterView() *ClusterView {
 	return &ClusterView{
 		KeepersRole: NewKeepersRole(),
+		Config:      NewDefaultConfig(),
 	}
 }
 
@@ -128,6 +130,7 @@ func (cv *ClusterView) Copy() *ClusterView {
 	}
 	ncv := *cv
 	ncv.KeepersRole = cv.KeepersRole.Copy()
+	ncv.Config = cv.Config.Copy()
 	return &ncv
 }
 

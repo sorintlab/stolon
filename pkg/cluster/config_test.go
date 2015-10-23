@@ -15,6 +15,7 @@
 package cluster
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"testing"
@@ -97,7 +98,8 @@ func TestParseConfig(t *testing.T) {
 	}
 
 	for i, tt := range tests {
-		cfg, err := ParseConfig([]byte(tt.in))
+		var cfg *Config
+		err := json.Unmarshal([]byte(tt.in), &cfg)
 		if tt.err != nil {
 			if err == nil {
 				t.Errorf("got no error, wanted error: %v", tt.err)

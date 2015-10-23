@@ -478,8 +478,7 @@ func (s *Sentinel) updateKeepersState(keepersState cluster.KeepersState, keepers
 
 func (s *Sentinel) updateClusterView(cv *cluster.ClusterView, keepersState cluster.KeepersState) (*cluster.ClusterView, error) {
 	var wantedMasterID string
-	// Cluster first initialization
-	if cv.Version == 0 {
+	if cv.Master == "" {
 		log.Debugf("trying to find initial master")
 		// Check for an initial master
 		if len(keepersState) < 1 {
@@ -492,7 +491,7 @@ func (s *Sentinel) updateClusterView(cv *cluster.ClusterView, keepersState clust
 			if k.PGState == nil {
 				return nil, fmt.Errorf("cannot init cluster using keeper %q since its pg state is unknown", id)
 			}
-			log.Infof("Initializing cluster with master: %q", id)
+			log.Infof("initializing cluster with master: %q", id)
 			wantedMasterID = id
 			break
 		}
@@ -638,7 +637,20 @@ func NewSentinel(id string, cfg config, stop chan bool, end chan bool) (*Sentine
 		return nil, fmt.Errorf("cannot create etcd manager: %v", err)
 	}
 
-	clusterConfig, _, err := e.GetClusterConfig()
+	cd, _, err := e.GetClusterData()
+	if err != nil {
+		return nil, fmt.Errorf("error retrieving cluster data: %v", err)
+	}
+
+	var cv *cluster.ClusterView
+	if cd == nil {
+		cv = cluster.NewClusterView()
+	} else {
+		cv = cd.ClusterView
+	}
+	log.Debugf(spew.Sprintf("clusterView: %#v", cv))
+
+	clusterConfig := cv.Config
 	if err != nil {
 		return nil, fmt.Errorf("cannot get cluster config: %v", err)
 	}
@@ -675,18 +687,34 @@ func (s *Sentinel) Start() {
 func (s *Sentinel) clusterSentinelSM(pctx context.Context) {
 	e := s.e
 
-	// Update cluster config
-	clusterConfig, _, err := e.GetClusterConfig()
+	cd, res, err := e.GetClusterData()
 	if err != nil {
-		log.Errorf("cannot get cluster config: %v", err)
+		log.Errorf("error retrieving cluster data: %v", err)
 		return
 	}
-	log.Debugf(spew.Sprintf("clusterConfig: %#v", clusterConfig))
+	var prevCDIndex uint64
+	if res != nil {
+		prevCDIndex = res.Node.ModifiedIndex
+	}
+
+	var cv *cluster.ClusterView
+	var keepersState cluster.KeepersState
+	if cd == nil {
+		cv = cluster.NewClusterView()
+		keepersState = nil
+	} else {
+		cv = cd.ClusterView
+		keepersState = cd.KeepersState
+	}
+	log.Debugf(spew.Sprintf("keepersState: %#v", keepersState))
+	log.Debugf(spew.Sprintf("clusterView: %#v", cv))
+
+	// Update cluster config
 	// This shouldn't need a lock
-	s.clusterConfig = clusterConfig
+	s.clusterConfig = cv.Config
 
 	// TODO(sgotti) better ways to calculate leaseTTL?
-	leaseTTL := clusterConfig.SleepInterval + clusterConfig.RequestTimeout*4
+	leaseTTL := s.clusterConfig.SleepInterval + s.clusterConfig.RequestTimeout*4
 
 	ctx, cancel := context.WithTimeout(pctx, s.clusterConfig.RequestTimeout)
 	keepersDiscoveryInfo, err := s.discover(ctx)
@@ -733,27 +761,15 @@ func (s *Sentinel) clusterSentinelSM(pctx context.Context) {
 		return
 	}
 
-	cd, res, err := e.GetClusterData()
-	if err != nil {
-		log.Errorf("error retrieving cluster data: %v", err)
-		return
+	if cv.Version == 0 {
+		// Cluster first initialization
+		newcv := cluster.NewClusterView()
+		newcv.Version = 1
+		_, err = e.SetClusterData(nil, newcv, 0)
+		if err != nil {
+			log.Errorf("error saving clusterdata: %v", err)
+		}
 	}
-	var prevCDIndex uint64
-	if res != nil {
-		prevCDIndex = res.Node.ModifiedIndex
-	}
-
-	var cv *cluster.ClusterView
-	var keepersState cluster.KeepersState
-	if cd == nil {
-		cv = cluster.NewClusterView()
-		keepersState = nil
-	} else {
-		cv = cd.ClusterView
-		keepersState = cd.KeepersState
-	}
-	log.Debugf(spew.Sprintf("keepersState: %#v", keepersState))
-	log.Debugf(spew.Sprintf("clusterView: %#v", cv))
 
 	pv, res, err := e.GetProxyView()
 	if err != nil {
