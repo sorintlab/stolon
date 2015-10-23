@@ -35,7 +35,6 @@ var log = capnslog.NewPackageLogger("github.com/sorintlab/stolon/pkg", "etcd")
 const (
 	keepersDiscoveryInfoDir = "/keepers/discovery/"
 	clusterDataFile         = "clusterdata"
-	proxyViewFile           = "proxyview"
 	leaderSentinelInfoFile  = "/sentinels/leaderinfo"
 	sentinelsInfoDir        = "/sentinels/info/"
 	proxiesInfoDir          = "/proxies/info/"
@@ -234,46 +233,6 @@ func (e *EtcdManager) GetLeaderSentinelInfo() (*cluster.SentinelInfo, *etcd.Resp
 			return nil, nil, err
 		}
 		return si, res, nil
-	}
-	return nil, nil, nil
-}
-
-func (e *EtcdManager) SetProxyView(pv *cluster.ProxyView, prevIndex uint64) (*etcd.Response, error) {
-	log.Debugf("prevIndex: %d", prevIndex)
-	// write cluster view
-	pvj, err := json.Marshal(pv)
-	if err != nil {
-		return nil, err
-	}
-	path := filepath.Join(e.etcdPath, proxyViewFile)
-	opts := &etcd.SetOptions{}
-	if prevIndex == 0 {
-		opts.PrevExist = etcd.PrevNoExist
-	} else {
-		opts.PrevExist = etcd.PrevExist
-		opts.PrevIndex = prevIndex
-	}
-	return e.kAPI.Set(context.Background(), path, string(pvj), opts)
-}
-
-func (e *EtcdManager) DeleteProxyView(prevIndex uint64) (*etcd.Response, error) {
-	path := filepath.Join(e.etcdPath, proxyViewFile)
-	opts := &etcd.DeleteOptions{PrevIndex: prevIndex}
-	return e.kAPI.Delete(context.Background(), path, opts)
-}
-
-func (e *EtcdManager) GetProxyView() (*cluster.ProxyView, *etcd.Response, error) {
-	var pv *cluster.ProxyView
-	path := filepath.Join(e.etcdPath, proxyViewFile)
-	res, err := e.kAPI.Get(context.Background(), path, &etcd.GetOptions{Quorum: true})
-	if err != nil && !IsEtcdNotFound(err) {
-		return nil, nil, err
-	} else if !IsEtcdNotFound(err) {
-		err = json.Unmarshal([]byte(res.Node.Value), &pv)
-		if err != nil {
-			return nil, nil, err
-		}
-		return pv, res, nil
 	}
 	return nil, nil, nil
 }

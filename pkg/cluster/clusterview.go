@@ -94,10 +94,24 @@ func (kr *KeeperRole) Copy() *KeeperRole {
 	return &nkr
 }
 
+type ProxyConf struct {
+	Host string
+	Port string
+}
+
+func (pc *ProxyConf) Copy() *ProxyConf {
+	if pc == nil {
+		return nil
+	}
+	npc := *pc
+	return &npc
+}
+
 type ClusterView struct {
 	Version     int
 	Master      string
 	KeepersRole KeepersRole
+	ProxyConf   *ProxyConf
 	Config      *NilConfig
 	ChangeTime  time.Time
 }
@@ -121,7 +135,9 @@ func (cv *ClusterView) Equals(ncv *ClusterView) bool {
 	}
 	return cv.Version == ncv.Version &&
 		cv.Master == cv.Master &&
-		reflect.DeepEqual(cv.KeepersRole, ncv.KeepersRole)
+		reflect.DeepEqual(cv.KeepersRole, ncv.KeepersRole) &&
+		reflect.DeepEqual(cv.ProxyConf, ncv.ProxyConf) &&
+		reflect.DeepEqual(cv.Config, ncv.Config)
 }
 
 func (cv *ClusterView) Copy() *ClusterView {
@@ -130,7 +146,9 @@ func (cv *ClusterView) Copy() *ClusterView {
 	}
 	ncv := *cv
 	ncv.KeepersRole = cv.KeepersRole.Copy()
+	ncv.ProxyConf = cv.ProxyConf.Copy()
 	ncv.Config = cv.Config.Copy()
+	ncv.ChangeTime = cv.ChangeTime
 	return &ncv
 }
 

@@ -27,6 +27,7 @@ import (
 	"github.com/sorintlab/stolon/pkg/flagutil"
 
 	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/coreos/pkg/capnslog"
+	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/davecgh/go-spew/spew"
 	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/satori/go.uuid"
 	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/sorintlab/pollon"
 	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/spf13/cobra"
@@ -78,19 +79,25 @@ func NewClusterChecker(cfg config, C chan pollon.ConfData) *ClusterChecker {
 }
 
 func (c *ClusterChecker) Check() {
-	pv, _, err := c.e.GetProxyView()
+	cv, _, err := c.e.GetClusterView()
 	if err != nil {
 		log.Errorf("err: %v", err)
 		c.C <- pollon.ConfData{DestAddr: nil}
 		return
 	}
-	log.Debugf("proxyview: %#v", pv)
-	if pv == nil {
-		log.Infof("no proxyview available, closing connections to previous master")
+	log.Debugf(spew.Sprintf("clusterview: %#v", cv))
+	if cv == nil {
+		log.Infof("no clusterview available, closing connections to previous master")
 		c.C <- pollon.ConfData{DestAddr: nil}
 		return
 	}
-	addr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%s", pv.Host, pv.Port))
+	pc := cv.ProxyConf
+	if pc == nil {
+		log.Infof("no proxyconf available, closing connections to previous master")
+		c.C <- pollon.ConfData{DestAddr: nil}
+		return
+	}
+	addr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%s", pc.Host, pc.Port))
 	if err != nil {
 		log.Errorf("err: %v", err)
 		c.C <- pollon.ConfData{DestAddr: nil}

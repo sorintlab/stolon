@@ -497,6 +497,7 @@ func (s *Sentinel) updateClusterView(cv *cluster.ClusterView, keepersState clust
 		}
 	} else {
 		masterID := cv.Master
+		wantedMasterID = masterID
 
 		masterOK := true
 		master, ok := keepersState[masterID]
@@ -516,7 +517,6 @@ func (s *Sentinel) updateClusterView(cv *cluster.ClusterView, keepersState clust
 			masterOK = false
 		}
 
-		wantedMasterID = masterID
 		if !masterOK {
 			log.Infof("trying to find a standby to replace failed master")
 			bestStandby, err := s.GetBestStandby(cv, keepersState, masterID)
@@ -564,6 +564,8 @@ func (s *Sentinel) updateClusterView(cv *cluster.ClusterView, keepersState clust
 		}
 	}
 
+	s.updateProxyConf(cv, newCV, keepersState)
+
 	if !newCV.Equals(cv) {
 		newCV.Version = cv.Version + 1
 		newCV.ChangeTime = time.Now()
@@ -571,34 +573,34 @@ func (s *Sentinel) updateClusterView(cv *cluster.ClusterView, keepersState clust
 	return newCV, nil
 }
 
-func (s *Sentinel) updateProxyView(prevCV *cluster.ClusterView, cv *cluster.ClusterView, keepersState cluster.KeepersState, prevPVIndex uint64) error {
-	if prevCV != nil && cv != nil {
-		if prevCV.Master != cv.Master {
-			if prevPVIndex != 0 {
-				log.Infof("deleting proxy view")
-				// Tell proxy to close connection to old master
-				_, err := s.e.DeleteProxyView(prevPVIndex)
-				return err
+func (s *Sentinel) updateProxyConf(prevCV *cluster.ClusterView, cv *cluster.ClusterView, keepersState cluster.KeepersState) {
+	masterID := cv.Master
+	if prevCV.Master != masterID {
+		log.Infof("deleting proxyconf")
+		// Tell proxy to close connection to old master
+		cv.ProxyConf = nil
+		return
+	}
+
+	master, _ := keepersState[masterID]
+	if s.isKeeperConverged(master, prevCV) {
+		pc := &cluster.ProxyConf{
+			Host: master.PGListenAddress,
+			Port: master.PGPort,
+		}
+		prevPC := prevCV.ProxyConf
+		update := true
+		if prevPC != nil {
+			if prevPC.Host == pc.Host && prevPC.Port == pc.Port {
+				update = false
 			}
 		}
-	}
-	if prevCV != nil {
-		masterID := cv.Master
-		master, ok := keepersState[masterID]
-		if !ok {
-			return fmt.Errorf("keeper info for master %q not available. This shouldn't happen!", masterID)
-		}
-		if s.isKeeperConverged(master, prevCV) {
-			pv := &cluster.ProxyView{
-				Host: master.PGListenAddress,
-				Port: master.PGPort,
-			}
-			log.Infof("updating proxy view to %s:%s", pv.Host, pv.Port)
-			_, err := s.e.SetProxyView(pv, prevPVIndex)
-			return err
+		if update {
+			log.Infof("updating proxyconf to %s:%s", pc.Host, pc.Port)
+			cv.ProxyConf = pc
 		}
 	}
-	return nil
+	return
 }
 
 func (s *Sentinel) isKeeperHealthy(keeperState *cluster.KeeperState) bool {
@@ -772,18 +774,6 @@ func (s *Sentinel) clusterSentinelSM(pctx context.Context) {
 		return
 	}
 
-	pv, res, err := e.GetProxyView()
-	if err != nil {
-		log.Errorf("err: %v", err)
-		return
-	}
-	log.Debugf(spew.Sprintf("proxyview: %#v", pv))
-
-	var prevPVIndex uint64
-	if res != nil {
-		prevPVIndex = res.Node.ModifiedIndex
-	}
-
 	newKeepersState := s.updateKeepersState(keepersState, keepersInfo, keepersPGState)
 	log.Debugf(spew.Sprintf("newKeepersState: %#v", newKeepersState))
 
@@ -795,10 +785,6 @@ func (s *Sentinel) clusterSentinelSM(pctx context.Context) {
 	log.Debugf(spew.Sprintf("newcv: %#v", newcv))
 	if cv.Version < newcv.Version {
 		log.Debugf("newcv changed from previous cv")
-		if err := s.updateProxyView(cv, newcv, newKeepersState, prevPVIndex); err != nil {
-			log.Errorf("error updating proxyView: %v", err)
-			return
-		}
 	}
 
 	_, err = e.SetClusterData(newKeepersState, newcv, prevCDIndex)
