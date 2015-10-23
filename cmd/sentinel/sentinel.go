@@ -769,6 +769,7 @@ func (s *Sentinel) clusterSentinelSM(pctx context.Context) {
 		if err != nil {
 			log.Errorf("error saving clusterdata: %v", err)
 		}
+		return
 	}
 
 	pv, res, err := e.GetProxyView()
