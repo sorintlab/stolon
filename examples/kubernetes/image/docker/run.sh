@@ -21,6 +21,7 @@ function launchkeeper() {
 }
 
 function launchsentinel() {
+  export STSENTINEL_LISTEN_ADDRESS=$POD_IP
   stolon-sentinel
 }
 

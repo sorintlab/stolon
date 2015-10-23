@@ -64,24 +64,48 @@ func init() {
 }
 
 type ClusterChecker struct {
-	C chan pollon.ConfData
-	e *etcdm.EtcdManager
+	id            string
+	listenAddress string
+	port          string
+	C             chan pollon.ConfData
+	e             *etcdm.EtcdManager
 }
 
-func NewClusterChecker(cfg config, C chan pollon.ConfData) *ClusterChecker {
+func NewClusterChecker(id string, cfg config, C chan pollon.ConfData) (*ClusterChecker, error) {
 	etcdPath := filepath.Join(common.EtcdBasePath, cfg.clusterName)
 	e, err := etcdm.NewEtcdManager(cfg.etcdEndpoints, etcdPath, common.DefaultEtcdRequestTimeout)
 	if err != nil {
-		log.Fatalf("error: %v", err)
+		return nil, err
 	}
 
-	return &ClusterChecker{e: e, C: C}
+	return &ClusterChecker{
+		id:            id,
+		listenAddress: cfg.listenAddress,
+		port:          cfg.port,
+		e:             e,
+		C:             C,
+	}, nil
+}
+
+func (c *ClusterChecker) SetProxyInfo(e *etcdm.EtcdManager, cvVersion int, ttl time.Duration) error {
+	proxyInfo := &cluster.ProxyInfo{
+		ID:                 c.id,
+		ListenAddress:      c.listenAddress,
+		Port:               c.port,
+		ClusterViewVersion: cvVersion,
+	}
+	log.Debugf(spew.Sprintf("proxyInfo: %#v", proxyInfo))
+
+	if _, err := c.e.SetProxyInfo(proxyInfo, ttl); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (c *ClusterChecker) Check() {
 	cv, _, err := c.e.GetClusterView()
 	if err != nil {
-		log.Errorf("err: %v", err)
+		log.Errorf("cannot get clusterview: %v", err)
 		c.C <- pollon.ConfData{DestAddr: nil}
 		return
 	}
@@ -95,6 +119,9 @@ func (c *ClusterChecker) Check() {
 	if pc == nil {
 		log.Infof("no proxyconf available, closing connections to previous master")
 		c.C <- pollon.ConfData{DestAddr: nil}
+		if err := c.SetProxyInfo(c.e, cv.Version, 2*cluster.DefaultProxyCheckInterval); err != nil {
+			log.Errorf("failed to update proxyInfo: %v", err)
+		}
 		return
 	}
 	addr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%s", pc.Host, pc.Port))
@@ -104,6 +131,9 @@ func (c *ClusterChecker) Check() {
 		return
 	}
 	log.Infof("master address: %v", addr)
+	if err = c.SetProxyInfo(c.e, cv.Version, 2*cluster.DefaultProxyCheckInterval); err != nil {
+		log.Errorf("failed to update proxyInfo: %v", err)
+	}
 	c.C <- pollon.ConfData{DestAddr: addr}
 }
 
@@ -158,7 +188,10 @@ func proxy(cmd *cobra.Command, args []string) {
 		log.Fatalf("error: %v", err)
 	}
 
-	clusterChecker := NewClusterChecker(cfg, proxy.C)
+	clusterChecker, err := NewClusterChecker(id, cfg, proxy.C)
+	if err != nil {
+		log.Fatalf("cannot create cluster checker: %v", err)
+	}
 	go clusterChecker.Start()
 
 	err = proxy.Start()
