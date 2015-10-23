@@ -140,7 +140,7 @@ func isLeader(l lease.Lease, machID string) bool {
 }
 
 func getKeeperInfo(ctx context.Context, kdi *cluster.KeeperDiscoveryInfo) (*cluster.KeeperInfo, error) {
-	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s:%s/info", kdi.Host, kdi.Port), nil)
+	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s:%s/info", kdi.ListenAddress, kdi.Port), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +166,7 @@ func getKeeperInfo(ctx context.Context, kdi *cluster.KeeperDiscoveryInfo) (*clus
 }
 
 func GetPGState(ctx context.Context, keeperInfo *cluster.KeeperInfo) (*cluster.PostgresState, error) {
-	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s:%s/pgstate", keeperInfo.Host, keeperInfo.Port), nil)
+	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s:%s/pgstate", keeperInfo.ListenAddress, keeperInfo.Port), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -255,7 +255,7 @@ func (s *Sentinel) discover(ctx context.Context) (cluster.KeepersDiscoveryInfo, 
 			return nil, fmt.Errorf("failed to get running pods ips: %v", err)
 		}
 		for _, podIP := range podsIPs {
-			ksdi = append(ksdi, &cluster.KeeperDiscoveryInfo{Host: podIP, Port: cfg.keeperPort})
+			ksdi = append(ksdi, &cluster.KeeperDiscoveryInfo{ListenAddress: podIP, Port: cfg.keeperPort})
 		}
 		return ksdi, nil
 	}
@@ -374,7 +374,7 @@ func getKeepersInfo(ctx context.Context, ksdi cluster.KeepersDiscoveryInfo) (clu
 		case res := <-ch:
 			count++
 			if res.err != nil {
-				log.Errorf("error getting keeper info for %s:%s, err: %v", ksdi[res.idx].Host, ksdi[res.idx].Port, res.err)
+				log.Errorf("error getting keeper info for %s:%s, err: %v", ksdi[res.idx].ListenAddress, ksdi[res.idx].Port, res.err)
 				break
 			}
 			keepersInfo[res.ki.ID] = res.ki
@@ -427,7 +427,7 @@ func (s *Sentinel) updateKeepersState(keepersState cluster.KeepersState, keepers
 				ErrorStartTime:     time.Time{},
 				ID:                 ki.ID,
 				ClusterViewVersion: ki.ClusterViewVersion,
-				Host:               ki.Host,
+				ListenAddress:      ki.ListenAddress,
 				Port:               ki.Port,
 				PGListenAddress:    ki.PGListenAddress,
 				PGPort:             ki.PGPort,
@@ -441,7 +441,7 @@ func (s *Sentinel) updateKeepersState(keepersState cluster.KeepersState, keepers
 			newKeepersState[id] = &cluster.KeeperState{
 				ID:                 ki.ID,
 				ClusterViewVersion: ki.ClusterViewVersion,
-				Host:               ki.Host,
+				ListenAddress:      ki.ListenAddress,
 				Port:               ki.Port,
 				PGListenAddress:    ki.PGListenAddress,
 				PGPort:             ki.PGPort,

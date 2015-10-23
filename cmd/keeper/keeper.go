@@ -187,8 +187,8 @@ func (p *PostgresKeeper) publish() error {
 		return nil
 	}
 	discoveryInfo := &cluster.KeeperDiscoveryInfo{
-		Host: p.listenAddress,
-		Port: p.port,
+		ListenAddress: p.listenAddress,
+		Port:          p.port,
 	}
 	log.Debugf(spew.Sprintf("discoveryInfo: %#v", discoveryInfo))
 
@@ -226,7 +226,7 @@ func (p *PostgresKeeper) infoHandler(w http.ResponseWriter, req *http.Request) {
 	keeperInfo := cluster.KeeperInfo{
 		ID:                 p.id,
 		ClusterViewVersion: p.cvVersion,
-		Host:               p.listenAddress,
+		ListenAddress:      p.listenAddress,
 		Port:               p.port,
 		PGListenAddress:    p.pgListenAddress,
 		PGPort:             p.pgPort,
