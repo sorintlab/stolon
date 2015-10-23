@@ -206,6 +206,30 @@ func (c *NilConfig) Validate() error {
 	return nil
 }
 
+func (c *NilConfig) Patch(nc *NilConfig) {
+	if nc.RequestTimeout != nil {
+		c.RequestTimeout = DurationP(*nc.RequestTimeout)
+	}
+	if nc.SleepInterval != nil {
+		c.SleepInterval = DurationP(*nc.SleepInterval)
+	}
+	if nc.KeeperFailInterval != nil {
+		c.KeeperFailInterval = DurationP(*nc.KeeperFailInterval)
+	}
+	if nc.PGReplUser != nil {
+		c.PGReplUser = StringP(*nc.PGReplUser)
+	}
+	if nc.PGReplPassword != nil {
+		c.PGReplPassword = StringP(*nc.PGReplPassword)
+	}
+	if nc.MaxStandbysPerSender != nil {
+		c.MaxStandbysPerSender = UintP(*nc.MaxStandbysPerSender)
+	}
+	if nc.SynchronousReplication != nil {
+		c.SynchronousReplication = BoolP(*nc.SynchronousReplication)
+	}
+}
+
 func (c *NilConfig) MergeDefaults() {
 	if c.RequestTimeout == nil {
 		c.RequestTimeout = DurationP(DefaultRequestTimeout)

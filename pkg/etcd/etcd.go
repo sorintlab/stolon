@@ -281,24 +281,3 @@ func (e *EtcdManager) GetProxiesInfo() (cluster.ProxiesInfo, error) {
 	}
 	return psi, nil
 }
-
-// IsEtcdNotFound returns true if err is an etcd not found error.
-func IsEtcdNotFound(err error) bool {
-	return isEtcdErrorNum(err, etcd.ErrorCodeKeyNotFound)
-}
-
-// IsEtcdNodeExist returns true if err is an etcd node aleady exist error.
-func IsEtcdNodeExist(err error) bool {
-	return isEtcdErrorNum(err, etcd.ErrorCodeNodeExist)
-}
-
-// IsEtcdTestFailed returns true if err is an etcd write conflict.
-func IsEtcdTestFailed(err error) bool {
-	return isEtcdErrorNum(err, etcd.ErrorCodeTestFailed)
-}
-
-// isEtcdErrorNum returns true if err is an etcd error, whose errorCode matches errorCode
-func isEtcdErrorNum(err error, errorCode int) bool {
-	etcdError, ok := err.(etcd.Error)
-	return ok && etcdError.Code == errorCode
-}
