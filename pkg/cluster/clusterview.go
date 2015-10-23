@@ -35,7 +35,7 @@ type KeeperState struct {
 	ErrorStartTime     time.Time
 	Healthy            bool
 	ClusterViewVersion int
-	Host               string
+	ListenAddress      string
 	Port               string
 	PGListenAddress    string
 	PGPort             string
@@ -51,7 +51,7 @@ func (ks *KeeperState) Copy() *KeeperState {
 }
 
 func (ks *KeeperState) Changed(ki *KeeperInfo) bool {
-	if ks.ClusterViewVersion != ki.ClusterViewVersion || ks.Host != ki.Host || ks.Port != ki.Port || ks.PGListenAddress != ki.PGListenAddress || ks.PGPort != ki.PGPort {
+	if ks.ClusterViewVersion != ki.ClusterViewVersion || ks.ListenAddress != ki.ListenAddress || ks.Port != ki.Port || ks.PGListenAddress != ki.PGListenAddress || ks.PGPort != ki.PGPort {
 		return true
 	}
 	return false

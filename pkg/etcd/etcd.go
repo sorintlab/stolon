@@ -22,22 +22,23 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/golang.org/x/net/context"
-
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/coreos/pkg/capnslog"
 	"github.com/sorintlab/stolon/pkg/cluster"
 
 	etcd "github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/coreos/etcd/client"
 	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/coreos/fleet/pkg/lease"
+	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/coreos/pkg/capnslog"
+	"github.com/sorintlab/stolon/Godeps/_workspace/src/golang.org/x/net/context"
 )
 
 var log = capnslog.NewPackageLogger("github.com/sorintlab/stolon/pkg", "etcd")
 
 const (
-	configFile       = "config"
-	discoveryInfoDir = "discovery"
-	clusterDataFile  = "clusterdata"
-	proxyViewFile    = "proxyview"
+	keepersDiscoveryInfoDir = "/keepers/discovery/"
+	clusterDataFile         = "clusterdata"
+	proxyViewFile           = "proxyview"
+	leaderSentinelInfoFile  = "/sentinels/leaderinfo"
+	sentinelsInfoDir        = "/sentinels/info/"
+	proxiesInfoDir          = "/proxies/info/"
 )
 
 type EtcdManager struct {
@@ -96,7 +97,6 @@ func (e *EtcdManager) GetClusterData() (*cluster.ClusterData, *etcd.Response, er
 	path := filepath.Join(e.etcdPath, clusterDataFile)
 	res, err := e.kAPI.Get(context.Background(), path, &etcd.GetOptions{Quorum: true})
 	if err != nil && !IsEtcdNotFound(err) {
-		log.Errorf("err: %v", err)
 		return nil, nil, err
 	} else if !IsEtcdNotFound(err) {
 		err = json.Unmarshal([]byte(res.Node.Value), &cd)
@@ -129,7 +129,7 @@ func (e *EtcdManager) SetKeeperDiscoveryInfo(id string, ms *cluster.KeeperDiscov
 	if err != nil {
 		return nil, err
 	}
-	return e.kAPI.Set(context.Background(), filepath.Join(e.etcdPath, discoveryInfoDir, id), string(msj), nil)
+	return e.kAPI.Set(context.Background(), filepath.Join(e.etcdPath, keepersDiscoveryInfoDir, id), string(msj), nil)
 }
 
 func (e *EtcdManager) GetKeeperDiscoveryInfo(id string) (*cluster.KeeperDiscoveryInfo, bool, error) {
@@ -137,9 +137,8 @@ func (e *EtcdManager) GetKeeperDiscoveryInfo(id string) (*cluster.KeeperDiscover
 		return nil, false, fmt.Errorf("empty keeper id")
 	}
 	var keeper cluster.KeeperDiscoveryInfo
-	res, err := e.kAPI.Get(context.Background(), filepath.Join(e.etcdPath, discoveryInfoDir, id), &etcd.GetOptions{Quorum: true})
+	res, err := e.kAPI.Get(context.Background(), filepath.Join(e.etcdPath, keepersDiscoveryInfoDir, id), &etcd.GetOptions{Quorum: true})
 	if err != nil && !IsEtcdNotFound(err) {
-		log.Errorf("err: %v", err)
 		return nil, false, err
 	} else if !IsEtcdNotFound(err) {
 		err = json.Unmarshal([]byte(res.Node.Value), &keeper)
@@ -153,7 +152,7 @@ func (e *EtcdManager) GetKeeperDiscoveryInfo(id string) (*cluster.KeeperDiscover
 
 func (e *EtcdManager) GetKeepersDiscoveryInfo() (cluster.KeepersDiscoveryInfo, error) {
 	keepers := cluster.KeepersDiscoveryInfo{}
-	res, err := e.kAPI.Get(context.Background(), filepath.Join(e.etcdPath, discoveryInfoDir), &etcd.GetOptions{Recursive: true, Quorum: true})
+	res, err := e.kAPI.Get(context.Background(), filepath.Join(e.etcdPath, keepersDiscoveryInfoDir), &etcd.GetOptions{Recursive: true, Quorum: true})
 	if err != nil && !IsEtcdNotFound(err) {
 		return nil, err
 	} else if !IsEtcdNotFound(err) {
@@ -167,6 +166,76 @@ func (e *EtcdManager) GetKeepersDiscoveryInfo() (cluster.KeepersDiscoveryInfo, e
 		}
 	}
 	return keepers, nil
+}
+
+func (e *EtcdManager) SetSentinelInfo(si *cluster.SentinelInfo, ttl time.Duration) (*etcd.Response, error) {
+	sij, err := json.Marshal(si)
+	if err != nil {
+		return nil, err
+	}
+	opts := &etcd.SetOptions{TTL: ttl}
+	return e.kAPI.Set(context.Background(), filepath.Join(e.etcdPath, sentinelsInfoDir, si.ID), string(sij), opts)
+}
+
+func (e *EtcdManager) GetSentinelInfo(id string) (*cluster.SentinelInfo, bool, error) {
+	if id == "" {
+		return nil, false, fmt.Errorf("empty sentinel id")
+	}
+	var si cluster.SentinelInfo
+	res, err := e.kAPI.Get(context.Background(), filepath.Join(e.etcdPath, sentinelsInfoDir, id), &etcd.GetOptions{Quorum: true})
+	if err != nil && !IsEtcdNotFound(err) {
+		return nil, false, err
+	} else if !IsEtcdNotFound(err) {
+		err = json.Unmarshal([]byte(res.Node.Value), &si)
+		if err != nil {
+			return nil, false, err
+		}
+		return &si, true, nil
+	}
+	return nil, false, nil
+}
+
+func (e *EtcdManager) GetSentinelsInfo() (cluster.SentinelsInfo, error) {
+	ssi := cluster.SentinelsInfo{}
+	res, err := e.kAPI.Get(context.Background(), filepath.Join(e.etcdPath, sentinelsInfoDir), &etcd.GetOptions{Recursive: true, Quorum: true})
+	if err != nil && !IsEtcdNotFound(err) {
+		return nil, err
+	} else if !IsEtcdNotFound(err) {
+		for _, node := range res.Node.Nodes {
+			var si cluster.SentinelInfo
+			err = json.Unmarshal([]byte(node.Value), &si)
+			if err != nil {
+				return nil, err
+			}
+			ssi = append(ssi, &si)
+		}
+	}
+	return ssi, nil
+}
+
+func (e *EtcdManager) SetLeaderSentinelInfo(si *cluster.SentinelInfo, ttl time.Duration) (*etcd.Response, error) {
+	sij, err := json.Marshal(si)
+	if err != nil {
+		return nil, err
+	}
+	opts := &etcd.SetOptions{TTL: ttl}
+	return e.kAPI.Set(context.Background(), filepath.Join(e.etcdPath, leaderSentinelInfoFile), string(sij), opts)
+}
+
+func (e *EtcdManager) GetLeaderSentinelInfo() (*cluster.SentinelInfo, *etcd.Response, error) {
+	var si *cluster.SentinelInfo
+	path := filepath.Join(e.etcdPath, leaderSentinelInfoFile)
+	res, err := e.kAPI.Get(context.Background(), path, &etcd.GetOptions{Quorum: true})
+	if err != nil && !IsEtcdNotFound(err) {
+		return nil, nil, err
+	} else if !IsEtcdNotFound(err) {
+		err = json.Unmarshal([]byte(res.Node.Value), &si)
+		if err != nil {
+			return nil, nil, err
+		}
+		return si, res, nil
+	}
+	return nil, nil, nil
 }
 
 func (e *EtcdManager) SetProxyView(pv *cluster.ProxyView, prevIndex uint64) (*etcd.Response, error) {
@@ -198,7 +267,6 @@ func (e *EtcdManager) GetProxyView() (*cluster.ProxyView, *etcd.Response, error)
 	path := filepath.Join(e.etcdPath, proxyViewFile)
 	res, err := e.kAPI.Get(context.Background(), path, &etcd.GetOptions{Quorum: true})
 	if err != nil && !IsEtcdNotFound(err) {
-		log.Errorf("err: %v", err)
 		return nil, nil, err
 	} else if !IsEtcdNotFound(err) {
 		err = json.Unmarshal([]byte(res.Node.Value), &pv)
@@ -208,6 +276,51 @@ func (e *EtcdManager) GetProxyView() (*cluster.ProxyView, *etcd.Response, error)
 		return pv, res, nil
 	}
 	return nil, nil, nil
+}
+
+func (e *EtcdManager) SetProxyInfo(pi *cluster.ProxyInfo, ttl time.Duration) (*etcd.Response, error) {
+	pij, err := json.Marshal(pi)
+	if err != nil {
+		return nil, err
+	}
+	opts := &etcd.SetOptions{TTL: ttl}
+	return e.kAPI.Set(context.Background(), filepath.Join(e.etcdPath, proxiesInfoDir, pi.ID), string(pij), opts)
+}
+
+func (e *EtcdManager) GetProxyInfo(id string) (*cluster.ProxyInfo, bool, error) {
+	if id == "" {
+		return nil, false, fmt.Errorf("empty proxy id")
+	}
+	var pi cluster.ProxyInfo
+	res, err := e.kAPI.Get(context.Background(), filepath.Join(e.etcdPath, proxiesInfoDir, id), &etcd.GetOptions{Quorum: true})
+	if err != nil && !IsEtcdNotFound(err) {
+		return nil, false, err
+	} else if !IsEtcdNotFound(err) {
+		err = json.Unmarshal([]byte(res.Node.Value), &pi)
+		if err != nil {
+			return nil, false, err
+		}
+		return &pi, true, nil
+	}
+	return nil, false, nil
+}
+
+func (e *EtcdManager) GetProxiesInfo() (cluster.ProxiesInfo, error) {
+	psi := cluster.ProxiesInfo{}
+	res, err := e.kAPI.Get(context.Background(), filepath.Join(e.etcdPath, proxiesInfoDir), &etcd.GetOptions{Recursive: true, Quorum: true})
+	if err != nil && !IsEtcdNotFound(err) {
+		return nil, err
+	} else if !IsEtcdNotFound(err) {
+		for _, node := range res.Node.Nodes {
+			var pi cluster.ProxyInfo
+			err = json.Unmarshal([]byte(node.Value), &pi)
+			if err != nil {
+				return nil, err
+			}
+			psi = append(psi, &pi)
+		}
+	}
+	return psi, nil
 }
 
 // IsEtcdNotFound returns true if err is an etcd not found error.

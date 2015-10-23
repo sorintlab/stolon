@@ -25,7 +25,7 @@ type KeepersInfo map[string]*KeeperInfo
 type KeeperInfo struct {
 	ID                 string
 	ClusterViewVersion int
-	Host               string
+	ListenAddress      string
 	Port               string
 	PGListenAddress    string
 	PGPort             string
@@ -40,7 +40,7 @@ func (k *KeeperInfo) Copy() *KeeperInfo {
 }
 
 func (ki *KeeperInfo) Changed(k *KeeperState) bool {
-	if k.ClusterViewVersion != ki.ClusterViewVersion || k.Host != ki.Host || k.Port != ki.Port || k.PGListenAddress != ki.PGListenAddress || k.PGPort != ki.PGPort {
+	if k.ClusterViewVersion != ki.ClusterViewVersion || k.ListenAddress != ki.ListenAddress || k.Port != ki.Port || k.PGListenAddress != ki.PGListenAddress || k.PGPort != ki.PGPort {
 		return true
 	}
 	return false
@@ -93,6 +93,23 @@ func (p *PostgresState) Copy() *PostgresState {
 type KeepersDiscoveryInfo []*KeeperDiscoveryInfo
 
 type KeeperDiscoveryInfo struct {
-	Host string
-	Port string
+	ListenAddress string
+	Port          string
+}
+
+type SentinelsInfo []*SentinelInfo
+
+type SentinelInfo struct {
+	ID            string
+	ListenAddress string
+	Port          string
+}
+
+type ProxiesInfo []*ProxyInfo
+
+type ProxyInfo struct {
+	ID                 string
+	ListenAddress      string
+	Port               string
+	ClusterViewVersion int
 }
