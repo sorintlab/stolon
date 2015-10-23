@@ -157,7 +157,7 @@ func NewPostgresKeeper(id string, cfg config, stop chan bool, end chan error) (*
 	}
 	log.Debugf(spew.Sprintf("clusterView: %#v", cv))
 
-	clusterConfig := cv.Config
+	clusterConfig := cv.Config.ToConfig()
 	log.Debugf(spew.Sprintf("clusterConfig: %#v", clusterConfig))
 
 	p := &PostgresKeeper{id: id,
@@ -422,10 +422,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 	}
 
 	// Update cluster config
-	clusterConfig := cv.Config
-	if clusterConfig == nil {
-		clusterConfig = cluster.NewDefaultConfig()
-	}
+	clusterConfig := cv.Config.ToConfig()
 	log.Debugf(spew.Sprintf("clusterConfig: %#v", clusterConfig))
 	// This shouldn't need a lock
 	p.clusterConfig = clusterConfig

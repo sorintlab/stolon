@@ -650,7 +650,7 @@ func NewSentinel(id string, cfg config, stop chan bool, end chan bool) (*Sentine
 	}
 	log.Debugf(spew.Sprintf("clusterView: %#v", cv))
 
-	clusterConfig := cv.Config
+	clusterConfig := cv.Config.ToConfig()
 	if err != nil {
 		return nil, fmt.Errorf("cannot get cluster config: %v", err)
 	}
@@ -711,7 +711,7 @@ func (s *Sentinel) clusterSentinelSM(pctx context.Context) {
 
 	// Update cluster config
 	// This shouldn't need a lock
-	s.clusterConfig = cv.Config
+	s.clusterConfig = cv.Config.ToConfig()
 
 	// TODO(sgotti) better ways to calculate leaseTTL?
 	leaseTTL := s.clusterConfig.SleepInterval + s.clusterConfig.RequestTimeout*4

@@ -32,18 +32,18 @@ func TestParseConfig(t *testing.T) {
 	}{
 		{
 			in:  "{}",
-			cfg: &DefaultConfig,
+			cfg: mergeDefaults(&NilConfig{}).ToConfig(),
 			err: nil,
 		},
 		// Test duration parsing
 		{
 			in:  `{ "requesttimeout": "3s" }`,
-			cfg: mergeDefaultConfig(&Config{RequestTimeout: 3 * time.Second}),
+			cfg: mergeDefaults(&NilConfig{RequestTimeout: DurationP(3 * time.Second)}).ToConfig(),
 			err: nil,
 		},
 		{
 			in:  `{ "requesttimeout": "3000ms" }`,
-			cfg: mergeDefaultConfig(&Config{RequestTimeout: 3 * time.Second}),
+			cfg: mergeDefaults(&NilConfig{RequestTimeout: DurationP(3 * time.Second)}).ToConfig(),
 			err: nil,
 		},
 		{
@@ -84,31 +84,33 @@ func TestParseConfig(t *testing.T) {
 		// All options defined
 		{
 			in: `{ "requestTimeout": "10s", "sleepInterval": "10s", "keeperFailInterval": "100s", "pgrepluser": "username", "pgreplpassword": "password", "maxstandbyspersender": 5, "synchronousreplication": true}`,
-			cfg: mergeDefaultConfig(&Config{
-				RequestTimeout:         10 * time.Second,
-				SleepInterval:          10 * time.Second,
-				KeeperFailInterval:     100 * time.Second,
-				PGReplUser:             "username",
-				PGReplPassword:         "password",
-				MaxStandbysPerSender:   5,
-				SynchronousReplication: true,
-			}),
+			cfg: mergeDefaults(&NilConfig{
+				RequestTimeout:         DurationP(10 * time.Second),
+				SleepInterval:          DurationP(10 * time.Second),
+				KeeperFailInterval:     DurationP(100 * time.Second),
+				PGReplUser:             StringP("username"),
+				PGReplPassword:         StringP("password"),
+				MaxStandbysPerSender:   UintP(5),
+				SynchronousReplication: BoolP(true),
+			}).ToConfig(),
 			err: nil,
 		},
 	}
 
 	for i, tt := range tests {
-		var cfg *Config
-		err := json.Unmarshal([]byte(tt.in), &cfg)
+		var nilCfg *NilConfig
+		err := json.Unmarshal([]byte(tt.in), &nilCfg)
+		nilCfg.MergeDefaults()
+		cfg := nilCfg.ToConfig()
 		if tt.err != nil {
 			if err == nil {
-				t.Errorf("got no error, wanted error: %v", tt.err)
+				t.Errorf("#%d: got no error, wanted error: %v", i, tt.err)
 			} else if tt.err.Error() != err.Error() {
-				t.Errorf("got error: %v, wanted error: %v", err, tt.err)
+				t.Errorf("#%d: got error: %v, wanted error: %v", i, err, tt.err)
 			}
 		} else {
 			if err != nil {
-				t.Errorf("unexpected error: %v", err)
+				t.Errorf("#%d: unexpected error: %v", i, err)
 			}
 			if !reflect.DeepEqual(cfg, tt.cfg) {
 				t.Errorf(spew.Sprintf("#%d: wrong config: got: %#v, want: %#v", i, cfg, tt.cfg))
@@ -118,28 +120,7 @@ func TestParseConfig(t *testing.T) {
 	}
 }
 
-func mergeDefaultConfig(ic *Config) *Config {
-	c := DefaultConfig
-	if ic.RequestTimeout != 0 {
-		c.RequestTimeout = ic.RequestTimeout
-	}
-	if ic.SleepInterval != 0 {
-		c.SleepInterval = ic.SleepInterval
-	}
-	if ic.KeeperFailInterval != 0 {
-		c.KeeperFailInterval = ic.KeeperFailInterval
-	}
-	if ic.PGReplUser != "" {
-		c.PGReplUser = ic.PGReplUser
-	}
-	if ic.PGReplPassword != "" {
-		c.PGReplPassword = ic.PGReplPassword
-	}
-	if ic.MaxStandbysPerSender != 0 {
-		c.MaxStandbysPerSender = ic.MaxStandbysPerSender
-	}
-	if ic.SynchronousReplication != false {
-		c.SynchronousReplication = ic.SynchronousReplication
-	}
-	return &c
+func mergeDefaults(c *NilConfig) *NilConfig {
+	c.MergeDefaults()
+	return c
 }
