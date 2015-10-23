@@ -6,7 +6,7 @@ RUN dnf clean all
 
 RUN useradd -ms /bin/bash stolon
 
-EXPOSE 5431 5432
+EXPOSE 5431 5432 6431
 
 ENTRYPOINT ["/usr/local/bin/run.sh"]
 

@@ -23,29 +23,35 @@ import (
 
 const (
 	DefaultProxyCheckInterval = 5 * time.Second
-)
 
-var (
-	DefaultConfig = Config{
-		RequestTimeout:         10 * time.Second,
-		SleepInterval:          5 * time.Second,
-		KeeperFailInterval:     20 * time.Second,
-		PGReplUser:             "repluser",
-		PGReplPassword:         "replpassword",
-		MaxStandbysPerSender:   3,
-		SynchronousReplication: false,
-	}
+	DefaultRequestTimeout         = 10 * time.Second
+	DefaultSleepInterval          = 5 * time.Second
+	DefaultKeeperFailInterval     = 20 * time.Second
+	DefaultPGReplUser             = "repluser"
+	DefaultPGReplPassword         = "replpassword"
+	DefaultMaxStandbysPerSender   = 3
+	DefaultSynchronousReplication = false
 )
 
 // jsonConfig is a copy of Config with all the time.Duration types converted to duration.
 type jsonConfig struct {
-	RequestTimeout         duration `json:",omitempty"`
-	SleepInterval          duration `json:",omitempty"`
-	KeeperFailInterval     duration `json:",omitempty"`
-	PGReplUser             string   `json:",omitempty"`
-	PGReplPassword         string   `json:",omitempty"`
-	MaxStandbysPerSender   uint     `json:",omitempty"`
-	SynchronousReplication bool     `json:",omitempty"`
+	RequestTimeout         *duration `json:",omitempty"`
+	SleepInterval          *duration `json:",omitempty"`
+	KeeperFailInterval     *duration `json:",omitempty"`
+	PGReplUser             *string   `json:",omitempty"`
+	PGReplPassword         *string   `json:",omitempty"`
+	MaxStandbysPerSender   *uint     `json:",omitempty"`
+	SynchronousReplication *bool     `json:",omitempty"`
+}
+
+type NilConfig struct {
+	RequestTimeout         *time.Duration `json:",omitempty"`
+	SleepInterval          *time.Duration `json:",omitempty"`
+	KeeperFailInterval     *time.Duration `json:",omitempty"`
+	PGReplUser             *string        `json:",omitempty"`
+	PGReplPassword         *string        `json:",omitempty"`
+	MaxStandbysPerSender   *uint          `json:",omitempty"`
+	SynchronousReplication *bool          `json:",omitempty"`
 }
 
 type Config struct {
@@ -66,21 +72,66 @@ type Config struct {
 	SynchronousReplication bool
 }
 
-func (c *Config) MarshalJSON() ([]byte, error) {
-	return json.Marshal(configToJsonConfig(c))
+func StringP(s string) *string {
+	return &s
 }
 
-func (c *Config) UnmarshalJSON(in []byte) error {
-	jc := configToJsonConfig(NewDefaultConfig())
+func UintP(u uint) *uint {
+	return &u
+}
+
+func BoolP(b bool) *bool {
+	return &b
+}
+
+func DurationP(d time.Duration) *time.Duration {
+	return &d
+}
+
+func (c *NilConfig) MarshalJSON() ([]byte, error) {
+	return json.Marshal(c.ToJsonConfig())
+}
+
+func (c *NilConfig) UnmarshalJSON(in []byte) error {
+	var jc jsonConfig
 	err := json.Unmarshal(in, &jc)
 	if err != nil {
 		return err
 	}
-	*c = *jsonConfigToConfig(jc)
+	*c = *jc.ToConfig()
 	if err := c.Validate(); err != nil {
 		return fmt.Errorf("config validation failed: %v", err)
 	}
 	return nil
+}
+
+func (c *NilConfig) Copy() *NilConfig {
+	if c == nil {
+		return c
+	}
+	var nc NilConfig
+	if c.RequestTimeout != nil {
+		nc.RequestTimeout = DurationP(*c.RequestTimeout)
+	}
+	if c.SleepInterval != nil {
+		nc.SleepInterval = DurationP(*c.SleepInterval)
+	}
+	if c.KeeperFailInterval != nil {
+		nc.KeeperFailInterval = DurationP(*c.KeeperFailInterval)
+	}
+	if c.PGReplUser != nil {
+		nc.PGReplUser = StringP(*c.PGReplUser)
+	}
+	if c.PGReplPassword != nil {
+		nc.PGReplPassword = StringP(*c.PGReplPassword)
+	}
+	if c.MaxStandbysPerSender != nil {
+		nc.MaxStandbysPerSender = UintP(*c.MaxStandbysPerSender)
+	}
+	if c.SynchronousReplication != nil {
+		nc.SynchronousReplication = BoolP(*c.SynchronousReplication)
+	}
+	return &nc
 }
 
 func (c *Config) Copy() *Config {
@@ -91,11 +142,11 @@ func (c *Config) Copy() *Config {
 	return &nc
 }
 
-func configToJsonConfig(c *Config) *jsonConfig {
+func (c *NilConfig) ToJsonConfig() *jsonConfig {
 	return &jsonConfig{
-		RequestTimeout:         duration(c.RequestTimeout),
-		SleepInterval:          duration(c.SleepInterval),
-		KeeperFailInterval:     duration(c.KeeperFailInterval),
+		RequestTimeout:         (*duration)(c.RequestTimeout),
+		SleepInterval:          (*duration)(c.SleepInterval),
+		KeeperFailInterval:     (*duration)(c.KeeperFailInterval),
 		PGReplUser:             c.PGReplUser,
 		PGReplPassword:         c.PGReplPassword,
 		MaxStandbysPerSender:   c.MaxStandbysPerSender,
@@ -103,15 +154,15 @@ func configToJsonConfig(c *Config) *jsonConfig {
 	}
 }
 
-func jsonConfigToConfig(c *jsonConfig) *Config {
-	return &Config{
-		RequestTimeout:         time.Duration(c.RequestTimeout),
-		SleepInterval:          time.Duration(c.SleepInterval),
-		KeeperFailInterval:     time.Duration(c.KeeperFailInterval),
-		PGReplUser:             c.PGReplUser,
-		PGReplPassword:         c.PGReplPassword,
-		MaxStandbysPerSender:   c.MaxStandbysPerSender,
-		SynchronousReplication: c.SynchronousReplication,
+func (jc *jsonConfig) ToConfig() *NilConfig {
+	return &NilConfig{
+		RequestTimeout:         (*time.Duration)(jc.RequestTimeout),
+		SleepInterval:          (*time.Duration)(jc.SleepInterval),
+		KeeperFailInterval:     (*time.Duration)(jc.KeeperFailInterval),
+		PGReplUser:             jc.PGReplUser,
+		PGReplPassword:         jc.PGReplPassword,
+		MaxStandbysPerSender:   jc.MaxStandbysPerSender,
+		SynchronousReplication: jc.SynchronousReplication,
 	}
 }
 
@@ -133,29 +184,68 @@ func (d *duration) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-func NewDefaultConfig() *Config {
-	c := DefaultConfig
-	return &c
-}
-
-func (c *Config) Validate() error {
-	if c.RequestTimeout < 0 {
+func (c *NilConfig) Validate() error {
+	if c.RequestTimeout != nil && *c.RequestTimeout < 0 {
 		return fmt.Errorf("RequestTimeout must be positive")
 	}
-	if c.SleepInterval < 0 {
+	if c.SleepInterval != nil && *c.SleepInterval < 0 {
 		return fmt.Errorf("SleepInterval must be positive")
 	}
-	if c.KeeperFailInterval < 0 {
+	if c.KeeperFailInterval != nil && *c.KeeperFailInterval < 0 {
 		return fmt.Errorf("KeeperFailInterval must be positive")
 	}
-	if c.PGReplUser == "" {
+	if c.PGReplUser != nil && *c.PGReplUser == "" {
 		return fmt.Errorf("PGReplUser cannot be empty")
 	}
-	if c.PGReplPassword == "" {
+	if c.PGReplPassword != nil && *c.PGReplPassword == "" {
 		return fmt.Errorf("PGReplPassword cannot be empty")
 	}
-	if c.MaxStandbysPerSender < 1 {
+	if c.MaxStandbysPerSender != nil && *c.MaxStandbysPerSender < 1 {
 		return fmt.Errorf("MaxStandbysPerSender must be at least 1")
 	}
 	return nil
+}
+
+func (c *NilConfig) MergeDefaults() {
+	if c.RequestTimeout == nil {
+		c.RequestTimeout = DurationP(DefaultRequestTimeout)
+	}
+	if c.SleepInterval == nil {
+		c.SleepInterval = DurationP(DefaultSleepInterval)
+	}
+	if c.KeeperFailInterval == nil {
+		c.KeeperFailInterval = DurationP(DefaultKeeperFailInterval)
+	}
+	if c.PGReplUser == nil {
+		c.PGReplUser = StringP(DefaultPGReplUser)
+	}
+	if c.PGReplPassword == nil {
+		c.PGReplPassword = StringP(DefaultPGReplPassword)
+	}
+	if c.MaxStandbysPerSender == nil {
+		c.MaxStandbysPerSender = UintP(DefaultMaxStandbysPerSender)
+	}
+	if c.SynchronousReplication == nil {
+		c.SynchronousReplication = BoolP(DefaultSynchronousReplication)
+	}
+}
+
+func (c *NilConfig) ToConfig() *Config {
+	nc := c.Copy()
+	nc.MergeDefaults()
+	return &Config{
+		RequestTimeout:         *nc.RequestTimeout,
+		SleepInterval:          *nc.SleepInterval,
+		KeeperFailInterval:     *nc.KeeperFailInterval,
+		PGReplUser:             *nc.PGReplUser,
+		PGReplPassword:         *nc.PGReplPassword,
+		MaxStandbysPerSender:   *nc.MaxStandbysPerSender,
+		SynchronousReplication: *nc.SynchronousReplication,
+	}
+}
+
+func NewDefaultConfig() *Config {
+	nc := &NilConfig{}
+	nc.MergeDefaults()
+	return nc.ToConfig()
 }
