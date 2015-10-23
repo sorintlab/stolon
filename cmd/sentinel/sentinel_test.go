@@ -48,6 +48,7 @@ func TestUpdateClusterView(t *testing.T) {
 				KeepersRole: cluster.KeepersRole{
 					"01": &cluster.KeeperRole{ID: "01", Follow: ""},
 				},
+				Config: &cluster.NilConfig{},
 			},
 		},
 		// cluster initialization, too many keepers
@@ -69,10 +70,13 @@ func TestUpdateClusterView(t *testing.T) {
 					"01": &cluster.KeeperRole{ID: "01", Follow: ""},
 					"02": &cluster.KeeperRole{ID: "02", Follow: "01"},
 				},
+				ProxyConf: &cluster.ProxyConf{Host: "01", Port: "01"},
 			},
 			keepersState: cluster.KeepersState{
 				"01": &cluster.KeeperState{
 					ClusterViewVersion: 1,
+					PGListenAddress:    "01",
+					PGPort:             "01",
 					ErrorStartTime:     time.Time{},
 					Healthy:            true,
 					PGState: &cluster.PostgresState{
@@ -81,6 +85,8 @@ func TestUpdateClusterView(t *testing.T) {
 				},
 				"02": &cluster.KeeperState{
 					ClusterViewVersion: 1,
+					PGListenAddress:    "02",
+					PGPort:             "02",
 					ErrorStartTime:     time.Time{},
 					Healthy:            true,
 					PGState: &cluster.PostgresState{
@@ -95,6 +101,7 @@ func TestUpdateClusterView(t *testing.T) {
 					"01": &cluster.KeeperRole{ID: "01", Follow: ""},
 					"02": &cluster.KeeperRole{ID: "02", Follow: "01"},
 				},
+				ProxyConf: &cluster.ProxyConf{Host: "01", Port: "01"},
 			},
 		},
 		// One master and one standby, master not healthy: standby elected as new master
@@ -106,10 +113,13 @@ func TestUpdateClusterView(t *testing.T) {
 					"01": &cluster.KeeperRole{ID: "01", Follow: ""},
 					"02": &cluster.KeeperRole{ID: "02", Follow: "01"},
 				},
+				ProxyConf: &cluster.ProxyConf{Host: "01", Port: "01"},
 			},
 			keepersState: cluster.KeepersState{
 				"01": &cluster.KeeperState{
 					ClusterViewVersion: 1,
+					PGListenAddress:    "01",
+					PGPort:             "01",
 					ErrorStartTime:     time.Unix(0, 0),
 					Healthy:            false,
 					PGState: &cluster.PostgresState{
@@ -118,6 +128,8 @@ func TestUpdateClusterView(t *testing.T) {
 				},
 				"02": &cluster.KeeperState{
 					ClusterViewVersion: 1,
+					PGListenAddress:    "02",
+					PGPort:             "02",
 					ErrorStartTime:     time.Time{},
 					Healthy:            true,
 					PGState: &cluster.PostgresState{
@@ -132,6 +144,7 @@ func TestUpdateClusterView(t *testing.T) {
 					"01": &cluster.KeeperRole{ID: "01", Follow: ""},
 					"02": &cluster.KeeperRole{ID: "02", Follow: ""},
 				},
+				ProxyConf: nil,
 			},
 		},
 		// From the previous test, new master (02) converged. Old master setup to follow new master (02).
@@ -143,10 +156,13 @@ func TestUpdateClusterView(t *testing.T) {
 					"01": &cluster.KeeperRole{ID: "01", Follow: ""},
 					"02": &cluster.KeeperRole{ID: "02", Follow: ""},
 				},
+				ProxyConf: nil,
 			},
 			keepersState: cluster.KeepersState{
 				"01": &cluster.KeeperState{
 					ClusterViewVersion: 1,
+					PGListenAddress:    "01",
+					PGPort:             "01",
 					ErrorStartTime:     time.Unix(0, 0),
 					Healthy:            false,
 					PGState: &cluster.PostgresState{
@@ -155,6 +171,8 @@ func TestUpdateClusterView(t *testing.T) {
 				},
 				"02": &cluster.KeeperState{
 					ClusterViewVersion: 2,
+					PGListenAddress:    "02",
+					PGPort:             "02",
 					ErrorStartTime:     time.Time{},
 					Healthy:            true,
 					PGState: &cluster.PostgresState{
@@ -169,6 +187,7 @@ func TestUpdateClusterView(t *testing.T) {
 					"01": &cluster.KeeperRole{ID: "01", Follow: "02"},
 					"02": &cluster.KeeperRole{ID: "02", Follow: ""},
 				},
+				ProxyConf: &cluster.ProxyConf{Host: "02", Port: "02"},
 			},
 		},
 
@@ -182,10 +201,13 @@ func TestUpdateClusterView(t *testing.T) {
 					"01": &cluster.KeeperRole{ID: "01", Follow: ""},
 					"02": &cluster.KeeperRole{ID: "02", Follow: "01"},
 				},
+				ProxyConf: &cluster.ProxyConf{Host: "01", Port: "01"},
 			},
 			keepersState: cluster.KeepersState{
 				"01": &cluster.KeeperState{
 					ClusterViewVersion: 2,
+					PGListenAddress:    "01",
+					PGPort:             "01",
 					ErrorStartTime:     time.Unix(0, 0),
 					Healthy:            true,
 					PGState: &cluster.PostgresState{
@@ -194,6 +216,8 @@ func TestUpdateClusterView(t *testing.T) {
 				},
 				"02": &cluster.KeeperState{
 					ClusterViewVersion: 1,
+					PGListenAddress:    "02",
+					PGPort:             "02",
 					ErrorStartTime:     time.Time{},
 					Healthy:            true,
 					PGState: &cluster.PostgresState{
@@ -208,6 +232,7 @@ func TestUpdateClusterView(t *testing.T) {
 					"01": &cluster.KeeperRole{ID: "01", Follow: ""},
 					"02": &cluster.KeeperRole{ID: "02", Follow: "01"},
 				},
+				ProxyConf: &cluster.ProxyConf{Host: "01", Port: "01"},
 			},
 		},
 		// One master and one standby, master not converged to current
@@ -220,10 +245,13 @@ func TestUpdateClusterView(t *testing.T) {
 					"01": &cluster.KeeperRole{ID: "01", Follow: ""},
 					"02": &cluster.KeeperRole{ID: "02", Follow: "01"},
 				},
+				ProxyConf: nil,
 			},
 			keepersState: cluster.KeepersState{
 				"01": &cluster.KeeperState{
 					ClusterViewVersion: 1,
+					PGListenAddress:    "01",
+					PGPort:             "01",
 					ErrorStartTime:     time.Time{},
 					Healthy:            true,
 					PGState: &cluster.PostgresState{
@@ -232,6 +260,8 @@ func TestUpdateClusterView(t *testing.T) {
 				},
 				"02": &cluster.KeeperState{
 					ClusterViewVersion: 2,
+					PGListenAddress:    "02",
+					PGPort:             "02",
 					ErrorStartTime:     time.Time{},
 					Healthy:            true,
 					PGState: &cluster.PostgresState{
@@ -246,6 +276,7 @@ func TestUpdateClusterView(t *testing.T) {
 					"01": &cluster.KeeperRole{ID: "01", Follow: ""},
 					"02": &cluster.KeeperRole{ID: "02", Follow: ""},
 				},
+				ProxyConf: nil,
 			},
 		},
 	}

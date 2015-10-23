@@ -44,7 +44,7 @@ The sentinel will elect it as the master instance:
 
 ```
 sentinel: Initializing cluster with master: "postgres0"
-sentinel: Updating proxy view to localhost:5432
+sentinel: updating proxyconf to localhost:5432
 sentinel: I'm the sentinels leader
 ```
 
@@ -105,17 +105,17 @@ You can now try killing the actual keeper managing the master postgres instance 
 
 * declare the master as not healty.
 * elect the standby as the new master.
-* Remove the proxyview. The current `psql` connection will be dropped.
+* Remove the proxyconf. The current `psql` connection will be dropped.
 * Wait for the new master to be ready.
-* Update the proxyView with the new master address.
+* Update the proxyconf with the new master address.
 
 
 ```
 sentinel: master is failed
 sentinel: trying to find a standby to replace failed master
 sentinel: electing new master: "postgres1"
-sentinel: deleting proxy view
-sentinel: updating proxy view to localhost:5435
+sentinel: deleting proxyconf
+sentinel: updating proxyconf to localhost:5435
 ```
 
 Now, inside the previous `psql` session you can redo the last select. The first time `psql` will report that the connection was closed and then it successfully reconnected:
