@@ -724,7 +724,7 @@ func (s *Sentinel) Start() {
 	for true {
 		select {
 		case <-s.stop:
-			log.Debugf("stopping postgres keeper")
+			log.Debugf("stopping stolon sentinel")
 			cancel()
 			s.end <- true
 			return
