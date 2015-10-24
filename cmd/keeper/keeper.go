@@ -326,7 +326,7 @@ func (p *PostgresKeeper) Start() {
 	for true {
 		select {
 		case <-p.stop:
-			log.Debugf("stopping postgres keeper")
+			log.Debugf("stopping stolon keeper")
 			cancel()
 			p.pgm.Stop(true)
 			p.end <- nil
