@@ -4,12 +4,21 @@
 
 It needs to communicate with the etcd cluster (`--etcd-endpoints`) on which the requested cluster name (`--cluster-name`) is running and for certain commands with an active leader sentinel.
 
+To avoid repeating for every command (or inside scripts) all the options you can export them as environment variables. Their name will be the same as the option name converted in uppercase, with `_` replacing `-` and prefixed with `STOLONCTL_`.
+
+Ex.
+```
+STOLONCTL_ETCD_ENDPOINTS
+STOLONCTL_CLUSTER_NAME
+```
+
+
 ### status ###
 
 Retrieve the current cluster status
 
 ```
-stolonctl --cluser-name mycluster status
+stolonctl --cluster-name mycluster status
 === Active sentinels ===
 
 ID              LISTENADDRESS   LEADER
