@@ -37,6 +37,7 @@ import (
 	"github.com/sorintlab/stolon/pkg/util"
 
 	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/coreos/pkg/capnslog"
+	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/coreos/rkt/pkg/lock"
 	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/davecgh/go-spew/spew"
 	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/satori/go.uuid"
 	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/spf13/cobra"
@@ -692,6 +693,12 @@ func keeper(cmd *cobra.Command, args []string) {
 
 	if err := os.MkdirAll(cfg.dataDir, 0700); err != nil {
 		log.Fatalf("error: %v", err)
+	}
+
+	// Take an exclusive lock on dataDir
+	_, err := lock.TryExclusiveLock(cfg.dataDir, lock.Dir)
+	if err != nil {
+		log.Fatalf("cannot take exclusive lock on data dir %q: %v", cfg.dataDir, err)
 	}
 
 	id, err := getIDFromFile(cfg)

@@ -18,7 +18,6 @@ import (
 	"bufio"
 	"database/sql"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"os"
 	"os/exec"
@@ -41,17 +40,9 @@ type TestKeeper struct {
 	db        *sql.DB
 }
 
-func NewTestKeeper(dir string, clusterName string) (*TestKeeper, error) {
-	configFile, err := ioutil.TempFile(dir, "conf")
-	if err != nil {
-		return nil, err
-	}
-	defer configFile.Close()
-
+func NewTestKeeperWithID(dir string, id string, clusterName string) (*TestKeeper, error) {
 	args := []string{}
 
-	u := uuid.NewV4()
-	id := fmt.Sprintf("%x", u[:4])
 	dataDir := filepath.Join(dir, fmt.Sprintf("st%s", id))
 
 	// Hack to find a free tcp port
@@ -95,6 +86,13 @@ func NewTestKeeper(dir string, clusterName string) (*TestKeeper, error) {
 		db:        db,
 	}
 	return tm, nil
+}
+
+func NewTestKeeper(dir string, clusterName string) (*TestKeeper, error) {
+	u := uuid.NewV4()
+	id := fmt.Sprintf("%x", u[:4])
+
+	return NewTestKeeperWithID(dir, id, clusterName)
 }
 
 func (tm *TestKeeper) Start() error {
@@ -267,6 +265,21 @@ func (tm *TestKeeper) WaitRole(r common.Role, timeout time.Duration) error {
 	}
 
 	return fmt.Errorf("timeout")
+}
+
+func (tm *TestKeeper) WaitProcess(timeout time.Duration) error {
+	timeoutCh := time.NewTimer(timeout).C
+	endCh := make(chan error)
+	go func() {
+		err := tm.cmd.Wait()
+		endCh <- err
+	}()
+	select {
+	case <-timeoutCh:
+		return fmt.Errorf("timeout waiting on process")
+	case <-endCh:
+		return nil
+	}
 }
 
 type CheckFunc func(time.Duration) error

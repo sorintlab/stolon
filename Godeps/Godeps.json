@@ -35,6 +35,11 @@
 			"Rev": "42a8c3b1a6f917bb8346ef738f32712a7ca0ede7"
 		},
 		{
+			"ImportPath": "github.com/coreos/rkt/pkg/lock",
+			"Comment": "v0.8.1-158-g8347cd2",
+			"Rev": "8347cd232572fae9e6fd8d2af385e22afc8effb5"
+		},
+		{
 			"ImportPath": "github.com/davecgh/go-spew/spew",
 			"Rev": "1aaf839fb07e099361e445273993ccd9adc21b07"
 		},

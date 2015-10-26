@@ -15,6 +15,7 @@
 package integration
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -54,5 +55,41 @@ func TestInit(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	t.Logf("database is up")
+
+}
+
+func TestExclusiveLock(t *testing.T) {
+	dir, err := ioutil.TempDir("", "")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer os.RemoveAll(dir)
+	clusterName := uuid.NewV4().String()
+
+	u := uuid.NewV4()
+	id := fmt.Sprintf("%x", u[:4])
+
+	tk1, err := NewTestKeeperWithID(dir, id, clusterName)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := tk1.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer tk1.Stop()
+
+	tk2, err := NewTestKeeperWithID(dir, id, clusterName)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := tk2.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer tk2.Stop()
+
+	// tk2 should exit because it cannot take an exclusive lock on dataDir
+	if err := tk2.WaitProcess(10 * time.Second); err != nil {
+		t.Fatalf("expecting tk2 exiting due to failed exclusive lock, but it's active.")
+	}
 
 }
