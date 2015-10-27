@@ -49,16 +49,16 @@ func setupServers(t *testing.T, dir string, numKeepers, numSentinels uint8, sync
 			},
 		}, 0)
 
-	tms := []*TestKeeper{}
+	tks := []*TestKeeper{}
 	tss := []*TestSentinel{}
 
-	tm, err := NewTestKeeper(dir, clusterName)
+	tk, err := NewTestKeeper(dir, clusterName)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	tms = append(tms, tm)
+	tks = append(tks, tk)
 
-	fmt.Printf("tm: %v\n", tm)
+	fmt.Printf("tk: %v\n", tk)
 
 	// Start sentinels
 	for i := uint8(0); i < numSentinels; i++ {
@@ -71,48 +71,48 @@ func setupServers(t *testing.T, dir string, numKeepers, numSentinels uint8, sync
 		}
 		tss = append(tss, ts)
 	}
-	if err := tm.Start(); err != nil {
+	if err := tk.Start(); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	if err := tm.WaitDBUp(60 * time.Second); err != nil {
+	if err := tk.WaitDBUp(60 * time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	if err := tm.WaitRole(common.MasterRole, 30*time.Second); err != nil {
+	if err := tk.WaitRole(common.MasterRole, 30*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
 	// Start standbys
 	for i := uint8(1); i < numKeepers; i++ {
-		tm, err := NewTestKeeper(dir, clusterName)
+		tk, err := NewTestKeeper(dir, clusterName)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
-		if err := tm.Start(); err != nil {
+		if err := tk.Start(); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
-		if err := tm.WaitDBUp(60 * time.Second); err != nil {
+		if err := tk.WaitDBUp(60 * time.Second); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
-		if err := tm.WaitRole(common.StandbyRole, 30*time.Second); err != nil {
+		if err := tk.WaitRole(common.StandbyRole, 30*time.Second); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
-		tms = append(tms, tm)
+		tks = append(tks, tk)
 	}
-	return tms, tss
+	return tks, tss
 }
 
-func populate(t *testing.T, tm *TestKeeper) error {
-	_, err := tm.Exec("CREATE TABLE table01(ID INT PRIMARY KEY NOT NULL, VALUE INT NOT NULL)")
+func populate(t *testing.T, tk *TestKeeper) error {
+	_, err := tk.Exec("CREATE TABLE table01(ID INT PRIMARY KEY NOT NULL, VALUE INT NOT NULL)")
 	return err
 }
 
-func write(t *testing.T, tm *TestKeeper, id, value int) error {
-	_, err := tm.Exec("INSERT INTO table01 VALUES ($1, $2)", id, value)
+func write(t *testing.T, tk *TestKeeper, id, value int) error {
+	_, err := tk.Exec("INSERT INTO table01 VALUES ($1, $2)", id, value)
 	return err
 }
 
-func getLines(t *testing.T, tm *TestKeeper) (int, error) {
-	rows, err := tm.Query("SELECT FROM table01")
+func getLines(t *testing.T, tk *TestKeeper) (int, error) {
+	rows, err := tk.Query("SELECT FROM table01")
 	if err != nil {
 		return 0, err
 	}
@@ -123,11 +123,11 @@ func getLines(t *testing.T, tm *TestKeeper) (int, error) {
 	return c, rows.Err()
 }
 
-func waitLines(t *testing.T, tm *TestKeeper, num int, timeout time.Duration) error {
+func waitLines(t *testing.T, tk *TestKeeper, num int, timeout time.Duration) error {
 	start := time.Now()
 	c := -1
 	for time.Now().Add(-timeout).Before(start) {
-		c, err := getLines(t, tm)
+		c, err := getLines(t, tk)
 		if err != nil {
 			goto end
 		}
@@ -141,29 +141,29 @@ func waitLines(t *testing.T, tm *TestKeeper, num int, timeout time.Duration) err
 
 }
 
-func shutdown(tms []*TestKeeper, tss []*TestSentinel) {
+func shutdown(tks []*TestKeeper, tss []*TestSentinel) {
 	for _, ts := range tss {
 		if ts.cmd != nil {
 			ts.Stop()
 		}
 	}
-	for _, tm := range tms {
-		if tm.cmd != nil {
-			tm.Stop()
+	for _, tk := range tks {
+		if tk.cmd != nil {
+			tk.Stop()
 		}
 	}
 }
 
-func getRoles(t *testing.T, tms []*TestKeeper) (master *TestKeeper, standbys []*TestKeeper, err error) {
-	for _, tm := range tms {
-		ok, err := tm.IsMaster()
+func getRoles(t *testing.T, tks []*TestKeeper) (master *TestKeeper, standbys []*TestKeeper, err error) {
+	for _, tk := range tks {
+		ok, err := tk.IsMaster()
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
 		if ok {
-			master = tm
+			master = tk
 		} else {
-			standbys = append(standbys, tm)
+			standbys = append(standbys, tk)
 		}
 	}
 	return
@@ -176,10 +176,10 @@ func testMasterStandby(t *testing.T, syncRepl bool) {
 	}
 	defer os.RemoveAll(dir)
 
-	tms, tss := setupServers(t, dir, 2, 1, syncRepl)
-	defer shutdown(tms, tss)
+	tks, tss := setupServers(t, dir, 2, 1, syncRepl)
+	defer shutdown(tks, tss)
 
-	master, standbys, err := getRoles(t, tms)
+	master, standbys, err := getRoles(t, tks)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -224,10 +224,10 @@ func testFailover(t *testing.T, syncRepl bool) {
 	}
 	defer os.RemoveAll(dir)
 
-	tms, tss := setupServers(t, dir, 2, 1, syncRepl)
-	defer shutdown(tms, tss)
+	tks, tss := setupServers(t, dir, 2, 1, syncRepl)
+	defer shutdown(tks, tss)
 
-	master, standbys, err := getRoles(t, tms)
+	master, standbys, err := getRoles(t, tks)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -270,10 +270,10 @@ func testOldMasterRestart(t *testing.T, syncRepl bool) {
 	}
 	defer os.RemoveAll(dir)
 
-	tms, tss := setupServers(t, dir, 2, 1, syncRepl)
-	defer shutdown(tms, tss)
+	tks, tss := setupServers(t, dir, 2, 1, syncRepl)
+	defer shutdown(tks, tss)
 
-	master, standbys, err := getRoles(t, tms)
+	master, standbys, err := getRoles(t, tks)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -337,10 +337,10 @@ func testPartition1(t *testing.T, syncRepl bool) {
 	}
 	defer os.RemoveAll(dir)
 
-	tms, tss := setupServers(t, dir, 2, 1, syncRepl)
-	defer shutdown(tms, tss)
+	tks, tss := setupServers(t, dir, 2, 1, syncRepl)
+	defer shutdown(tks, tss)
 
-	master, standbys, err := getRoles(t, tms)
+	master, standbys, err := getRoles(t, tks)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -413,10 +413,10 @@ func testTimelineFork(t *testing.T, syncRepl bool) {
 	}
 	defer os.RemoveAll(dir)
 
-	tms, tss := setupServers(t, dir, 3, 1, syncRepl)
-	defer shutdown(tms, tss)
+	tks, tss := setupServers(t, dir, 3, 1, syncRepl)
+	defer shutdown(tks, tss)
 
-	master, standbys, err := getRoles(t, tms)
+	master, standbys, err := getRoles(t, tks)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}

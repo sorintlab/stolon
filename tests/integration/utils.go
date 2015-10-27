@@ -89,7 +89,7 @@ func NewTestKeeperWithID(dir string, id string, clusterName string) (*TestKeeper
 	if keeperBin == "" {
 		return nil, fmt.Errorf("missing STKEEPER_BIN env")
 	}
-	tm := &TestKeeper{
+	tk := &TestKeeper{
 		id:              id,
 		dataDir:         dataDir,
 		keeperBin:       keeperBin,
@@ -100,7 +100,7 @@ func NewTestKeeperWithID(dir string, id string, clusterName string) (*TestKeeper
 		pgPort:          pgPort,
 		db:              db,
 	}
-	return tm, nil
+	return tk, nil
 }
 
 func NewTestKeeper(dir string, clusterName string) (*TestKeeper, error) {
@@ -110,69 +110,69 @@ func NewTestKeeper(dir string, clusterName string) (*TestKeeper, error) {
 	return NewTestKeeperWithID(dir, id, clusterName)
 }
 
-func (tm *TestKeeper) Start() error {
-	if tm.cmd != nil {
-		panic(fmt.Errorf("tm: %s, cmd not cleanly stopped", tm.id))
+func (tk *TestKeeper) Start() error {
+	if tk.cmd != nil {
+		panic(fmt.Errorf("tk: %s, cmd not cleanly stopped", tk.id))
 	}
-	tm.cmd = exec.Command(tm.keeperBin, tm.args...)
-	stdoutPipe, err := tm.cmd.StdoutPipe()
+	tk.cmd = exec.Command(tk.keeperBin, tk.args...)
+	stdoutPipe, err := tk.cmd.StdoutPipe()
 	if err != nil {
 		return err
 	}
 	go func() {
 		scanner := bufio.NewScanner(stdoutPipe)
 		for scanner.Scan() {
-			fmt.Printf("[%s]: %s\n", tm.id, scanner.Text())
+			fmt.Printf("[%s]: %s\n", tk.id, scanner.Text())
 		}
 	}()
 
-	stderrPipe, err := tm.cmd.StderrPipe()
+	stderrPipe, err := tk.cmd.StderrPipe()
 	if err != nil {
 		return err
 	}
 	go func() {
 		scanner := bufio.NewScanner(stderrPipe)
 		for scanner.Scan() {
-			fmt.Printf("[%s]: %s\n", tm.id, scanner.Text())
+			fmt.Printf("[%s]: %s\n", tk.id, scanner.Text())
 		}
 	}()
-	err = tm.cmd.Start()
+	err = tk.cmd.Start()
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (tm *TestKeeper) Signal(sig os.Signal) error {
-	fmt.Printf("signalling keeper: %s with %s\n", tm.id, sig)
-	if tm.cmd == nil {
-		panic(fmt.Errorf("tm: %s, cmd is empty", tm.id))
+func (tk *TestKeeper) Signal(sig os.Signal) error {
+	fmt.Printf("signalling keeper: %s with %s\n", tk.id, sig)
+	if tk.cmd == nil {
+		panic(fmt.Errorf("tk: %s, cmd is empty", tk.id))
 	}
-	return tm.cmd.Process.Signal(sig)
+	return tk.cmd.Process.Signal(sig)
 }
 
-func (tm *TestKeeper) Kill() {
-	fmt.Printf("killing keeper: %s\n", tm.id)
-	if tm.cmd == nil {
-		panic(fmt.Errorf("tm: %s, cmd is empty", tm.id))
+func (tk *TestKeeper) Kill() {
+	fmt.Printf("killing keeper: %s\n", tk.id)
+	if tk.cmd == nil {
+		panic(fmt.Errorf("tk: %s, cmd is empty", tk.id))
 	}
-	tm.cmd.Process.Signal(os.Kill)
-	tm.cmd.Wait()
-	tm.cmd = nil
+	tk.cmd.Process.Signal(os.Kill)
+	tk.cmd.Wait()
+	tk.cmd = nil
 }
 
-func (tm *TestKeeper) Stop() {
-	fmt.Printf("stopping keeper: %s\n", tm.id)
-	if tm.cmd == nil {
-		panic(fmt.Errorf("tm: %s, cmd is empty", tm.id))
+func (tk *TestKeeper) Stop() {
+	fmt.Printf("stopping keeper: %s\n", tk.id)
+	if tk.cmd == nil {
+		panic(fmt.Errorf("tk: %s, cmd is empty", tk.id))
 	}
-	tm.cmd.Process.Signal(os.Interrupt)
-	tm.cmd.Wait()
-	tm.cmd = nil
+	tk.cmd.Process.Signal(os.Interrupt)
+	tk.cmd.Wait()
+	tk.cmd = nil
 }
 
-func (tm *TestKeeper) Exec(query string, args ...interface{}) (sql.Result, error) {
-	res, err := tm.db.Exec(query, args...)
+func (tk *TestKeeper) Exec(query string, args ...interface{}) (sql.Result, error) {
+	res, err := tk.db.Exec(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -180,8 +180,8 @@ func (tm *TestKeeper) Exec(query string, args ...interface{}) (sql.Result, error
 	return res, nil
 }
 
-func (tm *TestKeeper) Query(query string, args ...interface{}) (*sql.Rows, error) {
-	res, err := tm.db.Query(query, args...)
+func (tk *TestKeeper) Query(query string, args ...interface{}) (*sql.Rows, error) {
+	res, err := tk.db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -189,24 +189,24 @@ func (tm *TestKeeper) Query(query string, args ...interface{}) (*sql.Rows, error
 	return res, nil
 }
 
-func (tm *TestKeeper) WaitDBUp(timeout time.Duration) error {
+func (tk *TestKeeper) WaitDBUp(timeout time.Duration) error {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
-		_, err := tm.Exec("select 1")
+		_, err := tk.Exec("select 1")
 		if err == nil {
 			return nil
 		}
-		fmt.Printf("tm: %v, error: %v\n", tm.id, err)
+		fmt.Printf("tk: %v, error: %v\n", tk.id, err)
 		time.Sleep(2 * time.Second)
 	}
 
 	return fmt.Errorf("timeout")
 }
 
-func (tm *TestKeeper) WaitDBDown(timeout time.Duration) error {
+func (tk *TestKeeper) WaitDBDown(timeout time.Duration) error {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
-		_, err := tm.Exec("select 1")
+		_, err := tk.Exec("select 1")
 		if err != nil {
 			return nil
 		}
@@ -216,24 +216,24 @@ func (tm *TestKeeper) WaitDBDown(timeout time.Duration) error {
 	return fmt.Errorf("timeout")
 }
 
-func (tm *TestKeeper) WaitUp(timeout time.Duration) error {
+func (tk *TestKeeper) WaitUp(timeout time.Duration) error {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
-		_, err := tm.GetKeeperInfo(timeout - time.Now().Sub(start))
+		_, err := tk.GetKeeperInfo(timeout - time.Now().Sub(start))
 		if err == nil {
 			return nil
 		}
-		fmt.Printf("tm: %v, error: %v\n", tm.id, err)
+		fmt.Printf("tk: %v, error: %v\n", tk.id, err)
 		time.Sleep(1 * time.Second)
 	}
 
 	return fmt.Errorf("timeout")
 }
 
-func (tm *TestKeeper) WaitDown(timeout time.Duration) error {
+func (tk *TestKeeper) WaitDown(timeout time.Duration) error {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
-		_, err := tm.GetKeeperInfo(timeout - time.Now().Sub(start))
+		_, err := tk.GetKeeperInfo(timeout - time.Now().Sub(start))
 		if err != nil {
 			return nil
 		}
@@ -243,10 +243,10 @@ func (tm *TestKeeper) WaitDown(timeout time.Duration) error {
 	return fmt.Errorf("timeout")
 }
 
-func (tm *TestKeeper) GetKeeperInfo(timeout time.Duration) (*cluster.KeeperInfo, error) {
+func (tk *TestKeeper) GetKeeperInfo(timeout time.Duration) (*cluster.KeeperInfo, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/info", net.JoinHostPort(tm.listenAddress, tm.port)), nil)
+	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/info", net.JoinHostPort(tk.listenAddress, tk.port)), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -286,8 +286,8 @@ func httpDo(ctx context.Context, req *http.Request, tlsConfig *tls.Config, f fun
 	}
 }
 
-func (tm *TestKeeper) GetPGProcess() (*os.Process, error) {
-	fh, err := os.Open(filepath.Join(tm.dataDir, "postgres/postmaster.pid"))
+func (tk *TestKeeper) GetPGProcess() (*os.Process, error) {
+	fh, err := os.Open(filepath.Join(tk.dataDir, "postgres/postmaster.pid"))
 	if err != nil {
 		return nil, err
 	}
@@ -306,16 +306,16 @@ func (tm *TestKeeper) GetPGProcess() (*os.Process, error) {
 	return os.FindProcess(pid)
 }
 
-func (tm *TestKeeper) SignalPG(sig os.Signal) error {
-	p, err := tm.GetPGProcess()
+func (tk *TestKeeper) SignalPG(sig os.Signal) error {
+	p, err := tk.GetPGProcess()
 	if err != nil {
 		return err
 	}
 	return p.Signal(sig)
 }
 
-func (tm *TestKeeper) IsMaster() (bool, error) {
-	rows, err := tm.Query("SELECT pg_is_in_recovery from pg_is_in_recovery()")
+func (tk *TestKeeper) IsMaster() (bool, error) {
+	rows, err := tk.Query("SELECT pg_is_in_recovery from pg_is_in_recovery()")
 	if err != nil {
 		return false, err
 	}
@@ -333,11 +333,11 @@ func (tm *TestKeeper) IsMaster() (bool, error) {
 	return false, fmt.Errorf("no rows returned")
 }
 
-func (tm *TestKeeper) WaitRole(r common.Role, timeout time.Duration) error {
+func (tk *TestKeeper) WaitRole(r common.Role, timeout time.Duration) error {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
 		time.Sleep(2 * time.Second)
-		ok, err := tm.IsMaster()
+		ok, err := tk.IsMaster()
 		if err != nil {
 			continue
 		}
@@ -352,11 +352,11 @@ func (tm *TestKeeper) WaitRole(r common.Role, timeout time.Duration) error {
 	return fmt.Errorf("timeout")
 }
 
-func (tm *TestKeeper) WaitProcess(timeout time.Duration) error {
+func (tk *TestKeeper) WaitProcess(timeout time.Duration) error {
 	timeoutCh := time.NewTimer(timeout).C
 	endCh := make(chan error)
 	go func() {
-		err := tm.cmd.Wait()
+		err := tk.cmd.Wait()
 		endCh <- err
 	}()
 	select {
