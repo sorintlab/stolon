@@ -16,9 +16,12 @@ package integration
 
 import (
 	"bufio"
+	"crypto/tls"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -26,9 +29,11 @@ import (
 	"time"
 
 	"github.com/sorintlab/stolon/common"
+	"github.com/sorintlab/stolon/pkg/cluster"
 
 	_ "github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/lib/pq"
 	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/satori/go.uuid"
+	"github.com/sorintlab/stolon/Godeps/_workspace/src/golang.org/x/net/context"
 )
 
 type TestKeeper struct {
@@ -37,7 +42,12 @@ type TestKeeper struct {
 	keeperBin string
 	args      []string
 	cmd       *exec.Cmd
-	db        *sql.DB
+
+	listenAddress   string
+	port            string
+	pgListenAddress string
+	pgPort          string
+	db              *sql.DB
 }
 
 func NewTestKeeperWithID(dir string, id string, clusterName string) (*TestKeeper, error) {
@@ -46,29 +56,30 @@ func NewTestKeeperWithID(dir string, id string, clusterName string) (*TestKeeper
 	dataDir := filepath.Join(dir, fmt.Sprintf("st%s", id))
 
 	// Hack to find a free tcp port
-	ln, err := net.Listen("tcp", ":0")
+	ln, err := net.Listen("tcp", "localhost:0")
 	if err != nil {
 		return nil, err
 	}
 	defer ln.Close()
-	ln2, err := net.Listen("tcp", ":0")
+	ln2, err := net.Listen("tcp", "localhost:0")
 	if err != nil {
 		return nil, err
 	}
 	defer ln2.Close()
 
-	port := ln.Addr().(*net.TCPAddr).Port
-	port2 := ln2.Addr().(*net.TCPAddr).Port
+	listenAddress := ln.Addr().(*net.TCPAddr).IP.String()
+	port := strconv.Itoa(ln.Addr().(*net.TCPAddr).Port)
+	pgListenAddress := ln2.Addr().(*net.TCPAddr).IP.String()
+	pgPort := strconv.Itoa(ln2.Addr().(*net.TCPAddr).Port)
 
 	args = append(args, fmt.Sprintf("--id=%s", id))
 	args = append(args, fmt.Sprintf("--cluster-name=%s", clusterName))
-	args = append(args, fmt.Sprintf("--port=%d", port))
-	args = append(args, fmt.Sprintf("--pg-port=%d", port2))
+	args = append(args, fmt.Sprintf("--port=%s", port))
+	args = append(args, fmt.Sprintf("--pg-port=%s", pgPort))
 	args = append(args, fmt.Sprintf("--data-dir=%s", dataDir))
 	args = append(args, "--debug")
 
-	host := "127.0.0.1"
-	connString := fmt.Sprintf("postgres://%s:%d/postgres?sslmode=disable", host, port2)
+	connString := fmt.Sprintf("postgres://%s:%s/postgres?sslmode=disable", pgListenAddress, pgPort)
 	db, err := sql.Open("postgres", connString)
 	if err != nil {
 		return nil, err
@@ -79,11 +90,15 @@ func NewTestKeeperWithID(dir string, id string, clusterName string) (*TestKeeper
 		return nil, fmt.Errorf("missing STKEEPER_BIN env")
 	}
 	tm := &TestKeeper{
-		id:        id,
-		dataDir:   dataDir,
-		keeperBin: keeperBin,
-		args:      args,
-		db:        db,
+		id:              id,
+		dataDir:         dataDir,
+		keeperBin:       keeperBin,
+		args:            args,
+		listenAddress:   listenAddress,
+		port:            port,
+		pgListenAddress: pgListenAddress,
+		pgPort:          pgPort,
+		db:              db,
 	}
 	return tm, nil
 }
@@ -201,6 +216,76 @@ func (tm *TestKeeper) WaitDBDown(timeout time.Duration) error {
 	return fmt.Errorf("timeout")
 }
 
+func (tm *TestKeeper) WaitUp(timeout time.Duration) error {
+	start := time.Now()
+	for time.Now().Add(-timeout).Before(start) {
+		_, err := tm.GetKeeperInfo(timeout - time.Now().Sub(start))
+		if err == nil {
+			return nil
+		}
+		fmt.Printf("tm: %v, error: %v\n", tm.id, err)
+		time.Sleep(1 * time.Second)
+	}
+
+	return fmt.Errorf("timeout")
+}
+
+func (tm *TestKeeper) WaitDown(timeout time.Duration) error {
+	start := time.Now()
+	for time.Now().Add(-timeout).Before(start) {
+		_, err := tm.GetKeeperInfo(timeout - time.Now().Sub(start))
+		if err != nil {
+			return nil
+		}
+		time.Sleep(2 * time.Second)
+	}
+
+	return fmt.Errorf("timeout")
+}
+
+func (tm *TestKeeper) GetKeeperInfo(timeout time.Duration) (*cluster.KeeperInfo, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/info", net.JoinHostPort(tm.listenAddress, tm.port)), nil)
+	if err != nil {
+		return nil, err
+	}
+	var data cluster.KeeperInfo
+	err = httpDo(ctx, req, nil, func(resp *http.Response, err error) error {
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("http error code: %d, error: %s", resp.StatusCode, resp.Status)
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &data, nil
+}
+
+func httpDo(ctx context.Context, req *http.Request, tlsConfig *tls.Config, f func(*http.Response, error) error) error {
+	tr := &http.Transport{DisableKeepAlives: true, TLSClientConfig: tlsConfig}
+	client := &http.Client{Transport: tr}
+	c := make(chan error, 1)
+	go func() { c <- f(client.Do(req)) }()
+	select {
+	case <-ctx.Done():
+		tr.CancelRequest(req)
+		<-c
+		return ctx.Err()
+	case err := <-c:
+		return err
+	}
+}
+
 func (tm *TestKeeper) GetPGProcess() (*os.Process, error) {
 	fh, err := os.Open(filepath.Join(tm.dataDir, "postgres/postmaster.pid"))
 	if err != nil {
@@ -309,6 +394,9 @@ type TestSentinel struct {
 	cmd         *exec.Cmd
 	sentinelBin string
 	args        []string
+
+	listenAddress string
+	port          string
 }
 
 func NewTestSentinel(dir string, clusterName string) (*TestSentinel, error) {
@@ -316,17 +404,18 @@ func NewTestSentinel(dir string, clusterName string) (*TestSentinel, error) {
 	id := fmt.Sprintf("%x", u[:4])
 
 	// Hack to find a free tcp port
-	ln, err := net.Listen("tcp", ":0")
+	ln, err := net.Listen("tcp", "localhost:0")
 	if err != nil {
 		return nil, err
 	}
 	defer ln.Close()
 
-	port := ln.Addr().(*net.TCPAddr).Port
+	listenAddress := ln.Addr().(*net.TCPAddr).IP.String()
+	port := strconv.Itoa(ln.Addr().(*net.TCPAddr).Port)
 
 	args := []string{}
 	args = append(args, fmt.Sprintf("--cluster-name=%s", clusterName))
-	args = append(args, fmt.Sprintf("--port=%d", port))
+	args = append(args, fmt.Sprintf("--port=%s", port))
 	args = append(args, "--debug")
 
 	sentinelBin := os.Getenv("STSENTINEL_BIN")
@@ -334,9 +423,11 @@ func NewTestSentinel(dir string, clusterName string) (*TestSentinel, error) {
 		return nil, fmt.Errorf("missing STSENTINEL_BIN env")
 	}
 	ts := &TestSentinel{
-		id:          id,
-		sentinelBin: sentinelBin,
-		args:        args,
+		id:            id,
+		sentinelBin:   sentinelBin,
+		args:          args,
+		listenAddress: listenAddress,
+		port:          port,
 	}
 	return ts, nil
 }

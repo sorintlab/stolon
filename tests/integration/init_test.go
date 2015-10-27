@@ -78,6 +78,11 @@ func TestExclusiveLock(t *testing.T) {
 	}
 	defer tk1.Stop()
 
+	// Wait for tk1 up before starting tk2
+	if err := tk1.WaitUp(10 * time.Second); err != nil {
+		t.Fatalf("expecting tk1 up but it's down")
+	}
+
 	tk2, err := NewTestKeeperWithID(dir, id, clusterName)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
