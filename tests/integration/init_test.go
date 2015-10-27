@@ -40,18 +40,18 @@ func TestInit(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	defer ts.Stop()
-	tm, err := NewTestKeeper(dir, clusterName)
+	tk, err := NewTestKeeper(dir, clusterName)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	t.Logf("tm: %v", tm)
+	t.Logf("tk: %v", tk)
 
-	if err := tm.Start(); err != nil {
+	if err := tk.Start(); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	defer tm.Stop()
+	defer tk.Stop()
 
-	if err := tm.WaitDBUp(60 * time.Second); err != nil {
+	if err := tk.WaitDBUp(60 * time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	t.Logf("database is up")
