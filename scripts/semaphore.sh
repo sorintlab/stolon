@@ -14,9 +14,8 @@ mkdir etcd
 cd etcd
 curl -L  https://github.com/coreos/etcd/releases/download/v2.2.1/etcd-v2.2.1-linux-amd64.tar.gz -o etcd-v2.2.1-linux-amd64.tar.gz
 tar xzvf etcd-v2.2.1-linux-amd64.tar.gz
-cd etcd-v2.2.1-linux-amd64
-start-stop-daemon -b --start --exec $PWD/etcd -- --data-dir=$PWD/
-cd ../../
+cd ../
 
 # Run tests
+export ETCD_BIN="${PWD}/etcd/etcd-v2.2.1-linux-amd64/etcd"
 export PATH=/usr/lib/postgresql/9.4/bin/:$PATH ; INTEGRATION=1 ./test

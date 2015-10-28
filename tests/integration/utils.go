@@ -26,11 +26,13 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/sorintlab/stolon/common"
 	"github.com/sorintlab/stolon/pkg/cluster"
 
+	etcd "github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/coreos/etcd/client"
 	_ "github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/lib/pq"
 	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/satori/go.uuid"
 	"github.com/sorintlab/stolon/Godeps/_workspace/src/golang.org/x/net/context"
@@ -50,7 +52,7 @@ type TestKeeper struct {
 	db              *sql.DB
 }
 
-func NewTestKeeperWithID(dir string, id string, clusterName string) (*TestKeeper, error) {
+func NewTestKeeperWithID(dir string, id string, clusterName string, etcdEndpoints string) (*TestKeeper, error) {
 	args := []string{}
 
 	dataDir := filepath.Join(dir, fmt.Sprintf("st%s", id))
@@ -77,6 +79,7 @@ func NewTestKeeperWithID(dir string, id string, clusterName string) (*TestKeeper
 	args = append(args, fmt.Sprintf("--port=%s", port))
 	args = append(args, fmt.Sprintf("--pg-port=%s", pgPort))
 	args = append(args, fmt.Sprintf("--data-dir=%s", dataDir))
+	args = append(args, fmt.Sprintf("--etcd-endpoints=%s", etcdEndpoints))
 	args = append(args, "--debug")
 
 	connString := fmt.Sprintf("postgres://%s:%s/postgres?sslmode=disable", pgListenAddress, pgPort)
@@ -103,11 +106,11 @@ func NewTestKeeperWithID(dir string, id string, clusterName string) (*TestKeeper
 	return tk, nil
 }
 
-func NewTestKeeper(dir string, clusterName string) (*TestKeeper, error) {
+func NewTestKeeper(dir string, clusterName string, etcdEndpoints string) (*TestKeeper, error) {
 	u := uuid.NewV4()
 	id := fmt.Sprintf("%x", u[:4])
 
-	return NewTestKeeperWithID(dir, id, clusterName)
+	return NewTestKeeperWithID(dir, id, clusterName, etcdEndpoints)
 }
 
 func (tk *TestKeeper) Start() error {
@@ -399,7 +402,7 @@ type TestSentinel struct {
 	port          string
 }
 
-func NewTestSentinel(dir string, clusterName string) (*TestSentinel, error) {
+func NewTestSentinel(dir string, clusterName string, etcdEndpoints string) (*TestSentinel, error) {
 	u := uuid.NewV4()
 	id := fmt.Sprintf("%x", u[:4])
 
@@ -416,6 +419,7 @@ func NewTestSentinel(dir string, clusterName string) (*TestSentinel, error) {
 	args := []string{}
 	args = append(args, fmt.Sprintf("--cluster-name=%s", clusterName))
 	args = append(args, fmt.Sprintf("--port=%s", port))
+	args = append(args, fmt.Sprintf("--etcd-endpoints=%s", etcdEndpoints))
 	args = append(args, "--debug")
 
 	sentinelBin := os.Getenv("STSENTINEL_BIN")
@@ -491,4 +495,160 @@ func (ts *TestSentinel) Stop() {
 	ts.cmd.Process.Signal(os.Interrupt)
 	ts.cmd.Wait()
 	ts.cmd = nil
+}
+
+type TestEtcd struct {
+	cmd     *exec.Cmd
+	etcdBin string
+	args    []string
+
+	listenAddress string
+	port          string
+	eClient       etcd.Client
+	kAPI          etcd.KeysAPI
+}
+
+func NewTestEtcd(dir string, a ...string) (*TestEtcd, error) {
+	dataDir := filepath.Join(dir, "etcd")
+
+	// Hack to find a free tcp port
+	ln, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		return nil, err
+	}
+	defer ln.Close()
+	ln2, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		return nil, err
+	}
+	defer ln2.Close()
+
+	listenAddress := ln.Addr().(*net.TCPAddr).IP.String()
+	port := strconv.Itoa(ln.Addr().(*net.TCPAddr).Port)
+	listenAddress2 := ln2.Addr().(*net.TCPAddr).IP.String()
+	port2 := strconv.Itoa(ln2.Addr().(*net.TCPAddr).Port)
+
+	args := []string{}
+	args = append(args, fmt.Sprintf("--data-dir=%s", dataDir))
+	args = append(args, fmt.Sprintf("--listen-client-urls=http://%s:%s", listenAddress, port))
+	args = append(args, fmt.Sprintf("--advertise-client-urls=http://%s:%s", listenAddress, port))
+	args = append(args, fmt.Sprintf("--listen-peer-urls=http://%s:%s", listenAddress2, port2))
+	args = append(args, a...)
+
+	etcdEndpoints := fmt.Sprintf("http://%s:%s", listenAddress, port)
+	eCfg := etcd.Config{
+		Transport: &http.Transport{},
+		Endpoints: strings.Split(etcdEndpoints, ","),
+	}
+	eClient, err := etcd.New(eCfg)
+	if err != nil {
+		return nil, err
+	}
+	kAPI := etcd.NewKeysAPI(eClient)
+
+	etcdBin := os.Getenv("ETCD_BIN")
+	if etcdBin == "" {
+		return nil, fmt.Errorf("missing ETCD_BIN env")
+	}
+	te := &TestEtcd{
+		etcdBin:       etcdBin,
+		args:          args,
+		listenAddress: listenAddress,
+		port:          port,
+		eClient:       eClient,
+		kAPI:          kAPI,
+	}
+	return te, nil
+}
+
+func (te *TestEtcd) Start() error {
+	if te.cmd != nil {
+		panic("te: etcd not cleanly stopped")
+	}
+	te.cmd = exec.Command(te.etcdBin, te.args...)
+	err := te.cmd.Start()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (te *TestEtcd) Signal(sig os.Signal) error {
+	fmt.Printf("signalling etcd with %s\n", sig)
+	if te.cmd == nil {
+		panic("te: cmd is empty")
+	}
+	return te.cmd.Process.Signal(sig)
+}
+
+func (te *TestEtcd) Kill() {
+	fmt.Printf("killing etcd")
+	if te.cmd == nil {
+		panic("te: cmd is empty")
+	}
+	te.cmd.Process.Signal(os.Kill)
+	te.cmd.Wait()
+	te.cmd = nil
+}
+
+func (te *TestEtcd) Stop() {
+	fmt.Printf("stopping etcd\n")
+	if te.cmd == nil {
+		panic("te: cmd is empty")
+	}
+	te.cmd.Process.Signal(os.Interrupt)
+	te.cmd.Wait()
+	te.cmd = nil
+}
+
+func (te *TestEtcd) WaitProcess(timeout time.Duration) error {
+	timeoutCh := time.NewTimer(timeout).C
+	endCh := make(chan error)
+	go func() {
+		err := te.cmd.Wait()
+		endCh <- err
+	}()
+	select {
+	case <-timeoutCh:
+		return fmt.Errorf("timeout waiting on process")
+	case <-endCh:
+		return nil
+	}
+}
+
+func (te *TestEtcd) WaitUp(timeout time.Duration) error {
+	start := time.Now()
+	for time.Now().Add(-timeout).Before(start) {
+		_, err := te.GetEtcdNode(timeout-time.Now().Sub(start), "/")
+		if err == nil {
+			return nil
+		}
+		time.Sleep(1 * time.Second)
+	}
+
+	return fmt.Errorf("timeout")
+}
+
+func (te *TestEtcd) WaitDown(timeout time.Duration) error {
+	start := time.Now()
+	for time.Now().Add(-timeout).Before(start) {
+		_, err := te.GetEtcdNode(timeout-time.Now().Sub(start), "/")
+		if err != nil {
+			return nil
+		}
+		time.Sleep(2 * time.Second)
+	}
+
+	return fmt.Errorf("timeout")
+}
+
+func (te *TestEtcd) GetEtcdNode(timeout time.Duration, path string) (*etcd.Node, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	res, err := te.kAPI.Get(ctx, path, &etcd.GetOptions{Quorum: true})
+	if err != nil {
+		return nil, err
+	}
+	return res.Node, nil
 }

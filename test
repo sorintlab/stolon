@@ -92,6 +92,15 @@ if [ -n "$INTEGRATION" ]; then
 	export STKEEPER_BIN=${BINDIR}/stolon-keeper
 	export STSENTINEL_BIN=${BINDIR}/stolon-sentinel
 	export STPROXY_BIN=${BINDIR}/stolon-proxy
+	if [ -z ${ETCD_BIN} ]; then
+		if [ -z $(which etcd) ]; then
+			echo "cannot find etcd in PATH and ETCD_BIN environment variable not defined"
+			exit 1
+		fi
+		ETCD_BIN=$(which etcd)
+	fi
+	echo "using etcd from $ETCD_BIN"
+	export ETCD_BIN
 	go test -timeout 20m $@ -v ${REPO_PATH}/tests/integration
 fi
 
