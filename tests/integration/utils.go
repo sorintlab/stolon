@@ -497,6 +497,153 @@ func (ts *TestSentinel) Stop() {
 	ts.cmd = nil
 }
 
+type TestProxy struct {
+	id       string
+	cmd      *exec.Cmd
+	proxyBin string
+	args     []string
+
+	listenAddress string
+	port          string
+}
+
+func NewTestProxy(dir string, clusterName string, etcdEndpoints string, a ...string) (*TestProxy, error) {
+	u := uuid.NewV4()
+	id := fmt.Sprintf("%x", u[:4])
+
+	// Hack to find a free tcp port
+	ln, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		return nil, err
+	}
+	defer ln.Close()
+
+	listenAddress := ln.Addr().(*net.TCPAddr).IP.String()
+	port := strconv.Itoa(ln.Addr().(*net.TCPAddr).Port)
+
+	args := []string{}
+	args = append(args, fmt.Sprintf("--cluster-name=%s", clusterName))
+	args = append(args, fmt.Sprintf("--port=%s", port))
+	args = append(args, fmt.Sprintf("--etcd-endpoints=%s", etcdEndpoints))
+	args = append(args, "--debug")
+	args = append(args, a...)
+
+	proxyBin := os.Getenv("STPROXY_BIN")
+	if proxyBin == "" {
+		return nil, fmt.Errorf("missing STPROXY_BIN env")
+	}
+	tp := &TestProxy{
+		id:            id,
+		proxyBin:      proxyBin,
+		args:          args,
+		listenAddress: listenAddress,
+		port:          port,
+	}
+	return tp, nil
+}
+
+func (tp *TestProxy) Start() error {
+	if tp.cmd != nil {
+		panic(fmt.Errorf("tp: %s, cmd not cleanly stopped", tp.id))
+	}
+	tp.cmd = exec.Command(tp.proxyBin, tp.args...)
+	stdoutPipe, err := tp.cmd.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	go func() {
+		scanner := bufio.NewScanner(stdoutPipe)
+		for scanner.Scan() {
+			fmt.Printf("[%s]: %s\n", tp.id, scanner.Text())
+		}
+	}()
+
+	stderrPipe, err := tp.cmd.StderrPipe()
+	if err != nil {
+		return err
+	}
+	go func() {
+		scanner := bufio.NewScanner(stderrPipe)
+		for scanner.Scan() {
+			fmt.Printf("[%s]: %s\n", tp.id, scanner.Text())
+		}
+	}()
+	err = tp.cmd.Start()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (tp *TestProxy) Signal(sig os.Signal) error {
+	fmt.Printf("signalling proxy: %s with %s\n", tp.id, sig)
+	if tp.cmd == nil {
+		panic(fmt.Errorf("tp: %s, cmd is empty", tp.id))
+	}
+	return tp.cmd.Process.Signal(sig)
+}
+
+func (tp *TestProxy) Kill() {
+	fmt.Printf("killing proxy: %s\n", tp.id)
+	if tp.cmd == nil {
+		panic(fmt.Errorf("tp: %s, cmd is empty", tp.id))
+	}
+	tp.cmd.Process.Signal(os.Kill)
+	tp.cmd.Wait()
+	tp.cmd = nil
+}
+
+func (tp *TestProxy) Stop() {
+	fmt.Printf("stopping proxy: %s\n", tp.id)
+	if tp.cmd == nil {
+		panic(fmt.Errorf("tp: %s, cmd is empty", tp.id))
+	}
+	tp.cmd.Process.Signal(os.Interrupt)
+	tp.cmd.Wait()
+	tp.cmd = nil
+}
+
+func (tp *TestProxy) WaitProcess(timeout time.Duration) error {
+	timeoutCh := time.NewTimer(timeout).C
+	endCh := make(chan error)
+	go func() {
+		err := tp.cmd.Wait()
+		endCh <- err
+	}()
+	select {
+	case <-timeoutCh:
+		return fmt.Errorf("timeout waiting on process")
+	case <-endCh:
+		return nil
+	}
+}
+
+func (tp *TestProxy) WaitListening(timeout time.Duration) error {
+	start := time.Now()
+	for time.Now().Add(-timeout).Before(start) {
+		_, err := net.DialTimeout("tcp", net.JoinHostPort(tp.listenAddress, tp.port), timeout-time.Now().Sub(start))
+		if err == nil {
+			return nil
+		}
+		fmt.Printf("tp: %v, error: %v\n", tp.id, err)
+		time.Sleep(2 * time.Second)
+	}
+	return fmt.Errorf("timeout")
+}
+
+func (tp *TestProxy) WaitNotListening(timeout time.Duration) error {
+	start := time.Now()
+	for time.Now().Add(-timeout).Before(start) {
+		_, err := net.DialTimeout("tcp", net.JoinHostPort(tp.listenAddress, tp.port), timeout-time.Now().Sub(start))
+		if err != nil {
+			return nil
+		}
+		fmt.Printf("tp: %v, error: %v\n", tp.id, err)
+		time.Sleep(2 * time.Second)
+	}
+	return fmt.Errorf("timeout")
+}
+
 type TestEtcd struct {
 	cmd     *exec.Cmd
 	etcdBin string
