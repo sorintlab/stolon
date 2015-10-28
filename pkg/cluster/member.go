@@ -39,13 +39,6 @@ func (k *KeeperInfo) Copy() *KeeperInfo {
 	return &nk
 }
 
-func (ki *KeeperInfo) Changed(k *KeeperState) bool {
-	if k.ClusterViewVersion != ki.ClusterViewVersion || k.ListenAddress != ki.ListenAddress || k.Port != ki.Port || k.PGListenAddress != ki.PGListenAddress || k.PGPort != ki.PGPort {
-		return true
-	}
-	return false
-}
-
 type PostgresTimeLinesHistory []*PostgresTimeLineHistory
 
 func (tlsh PostgresTimeLinesHistory) Copy() PostgresTimeLinesHistory {
