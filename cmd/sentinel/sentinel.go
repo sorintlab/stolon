@@ -524,6 +524,9 @@ func (s *Sentinel) updateClusterView(cv *cluster.ClusterView, keepersState clust
 			if k.PGState == nil {
 				return nil, fmt.Errorf("cannot init cluster using keeper %q since its pg state is unknown", id)
 			}
+			if !k.PGState.Initialized {
+				return nil, fmt.Errorf("cannot init cluster using keeper %q since pg instance is not initializied", id)
+			}
 			log.Infof("initializing cluster with master: %q", id)
 			wantedMasterID = id
 			break
