@@ -96,6 +96,10 @@ func NewClusterChecker(id string, cfg config) (*ClusterChecker, error) {
 }
 
 func (c *ClusterChecker) startPollonProxy() error {
+	if c.pp != nil {
+		return nil
+	}
+
 	log.Infof("Starting proxying")
 	addr, err := net.ResolveTCPAddr("tcp", net.JoinHostPort(cfg.listenAddress, cfg.port))
 	if err != nil {
@@ -215,7 +219,9 @@ func (c *ClusterChecker) Start() error {
 				checkCh <- c.Check()
 			}()
 		case err := <-checkCh:
-			log.Debugf("err: %v", err)
+			if err != nil {
+				log.Debugf("check reported error: %v", err)
+			}
 			if err != nil {
 				return fmt.Errorf("checker fatal error: %v", err)
 			}
