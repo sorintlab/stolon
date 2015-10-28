@@ -31,6 +31,7 @@ import (
 
 	"github.com/sorintlab/stolon/common"
 	"github.com/sorintlab/stolon/pkg/cluster"
+	etcdm "github.com/sorintlab/stolon/pkg/etcd"
 
 	etcd "github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/coreos/etcd/client"
 	_ "github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/lib/pq"
@@ -645,6 +646,7 @@ func (tp *TestProxy) WaitNotListening(timeout time.Duration) error {
 }
 
 type TestEtcd struct {
+	id      string
 	cmd     *exec.Cmd
 	etcdBin string
 	args    []string
@@ -656,6 +658,9 @@ type TestEtcd struct {
 }
 
 func NewTestEtcd(dir string, a ...string) (*TestEtcd, error) {
+	u := uuid.NewV4()
+	id := fmt.Sprintf("%x", u[:4])
+
 	dataDir := filepath.Join(dir, "etcd")
 
 	// Hack to find a free tcp port
@@ -676,10 +681,13 @@ func NewTestEtcd(dir string, a ...string) (*TestEtcd, error) {
 	port2 := strconv.Itoa(ln2.Addr().(*net.TCPAddr).Port)
 
 	args := []string{}
+	args = append(args, fmt.Sprintf("--name=%s", id))
 	args = append(args, fmt.Sprintf("--data-dir=%s", dataDir))
 	args = append(args, fmt.Sprintf("--listen-client-urls=http://%s:%s", listenAddress, port))
 	args = append(args, fmt.Sprintf("--advertise-client-urls=http://%s:%s", listenAddress, port))
 	args = append(args, fmt.Sprintf("--listen-peer-urls=http://%s:%s", listenAddress2, port2))
+	args = append(args, fmt.Sprintf("--initial-advertise-peer-urls=http://%s:%s", listenAddress2, port2))
+	args = append(args, fmt.Sprintf("--initial-cluster=%s=http://%s:%s", id, listenAddress2, port2))
 	args = append(args, a...)
 
 	etcdEndpoints := fmt.Sprintf("http://%s:%s", listenAddress, port)
@@ -698,6 +706,7 @@ func NewTestEtcd(dir string, a ...string) (*TestEtcd, error) {
 		return nil, fmt.Errorf("missing ETCD_BIN env")
 	}
 	te := &TestEtcd{
+		id:            id,
 		etcdBin:       etcdBin,
 		args:          args,
 		listenAddress: listenAddress,
@@ -710,10 +719,31 @@ func NewTestEtcd(dir string, a ...string) (*TestEtcd, error) {
 
 func (te *TestEtcd) Start() error {
 	if te.cmd != nil {
-		panic("te: etcd not cleanly stopped")
+		panic(fmt.Errorf("te: %s, etcd not cleanly stopped", te.id))
 	}
 	te.cmd = exec.Command(te.etcdBin, te.args...)
-	err := te.cmd.Start()
+	stdoutPipe, err := te.cmd.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	go func() {
+		scanner := bufio.NewScanner(stdoutPipe)
+		for scanner.Scan() {
+			fmt.Printf("[%s]: %s\n", te.id, scanner.Text())
+		}
+	}()
+
+	stderrPipe, err := te.cmd.StderrPipe()
+	if err != nil {
+		return err
+	}
+	go func() {
+		scanner := bufio.NewScanner(stderrPipe)
+		for scanner.Scan() {
+			fmt.Printf("[%s]: %s\n", te.id, scanner.Text())
+		}
+	}()
+	err = te.cmd.Start()
 	if err != nil {
 		return err
 	}
@@ -723,15 +753,15 @@ func (te *TestEtcd) Start() error {
 func (te *TestEtcd) Signal(sig os.Signal) error {
 	fmt.Printf("signalling etcd with %s\n", sig)
 	if te.cmd == nil {
-		panic("te: cmd is empty")
+		panic(fmt.Errorf("te: %s, cmd is empty", te.id))
 	}
 	return te.cmd.Process.Signal(sig)
 }
 
 func (te *TestEtcd) Kill() {
-	fmt.Printf("killing etcd")
+	fmt.Printf("killing etcd\n")
 	if te.cmd == nil {
-		panic("te: cmd is empty")
+		panic(fmt.Errorf("te: %s, cmd is empty", te.id))
 	}
 	te.cmd.Process.Signal(os.Kill)
 	te.cmd.Wait()
@@ -741,7 +771,7 @@ func (te *TestEtcd) Kill() {
 func (te *TestEtcd) Stop() {
 	fmt.Printf("stopping etcd\n")
 	if te.cmd == nil {
-		panic("te: cmd is empty")
+		panic(fmt.Errorf("te: %s, cmd is empty", te.id))
 	}
 	te.cmd.Process.Signal(os.Interrupt)
 	te.cmd.Wait()
@@ -798,4 +828,23 @@ func (te *TestEtcd) GetEtcdNode(timeout time.Duration, path string) (*etcd.Node,
 		return nil, err
 	}
 	return res.Node, nil
+}
+
+func WaitClusterViewMaster(master string, e *etcdm.EtcdManager, timeout time.Duration) error {
+	start := time.Now()
+	for time.Now().Add(-timeout).Before(start) {
+		cv, _, err := e.GetClusterView()
+		if err != nil {
+			goto end
+		}
+		if cv != nil {
+			if cv.Master == master {
+				return nil
+			}
+		}
+	end:
+		time.Sleep(2 * time.Second)
+	}
+	return fmt.Errorf("timeout")
+
 }

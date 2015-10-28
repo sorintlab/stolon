@@ -46,7 +46,7 @@ func setupServers(t *testing.T, dir string, numKeepers, numSentinels uint8, sync
 	clusterName := uuid.NewV4().String()
 
 	etcdPath := filepath.Join(common.EtcdBasePath, clusterName)
-	e, err := etcdm.NewEtcdManager(common.DefaultEtcdEndpoints, etcdPath, common.DefaultEtcdRequestTimeout)
+	e, err := etcdm.NewEtcdManager(etcdEndpoints, etcdPath, common.DefaultEtcdRequestTimeout)
 	if err != nil {
 		t.Fatalf("cannot create etcd manager: %v", err)
 	}
@@ -92,6 +92,10 @@ func setupServers(t *testing.T, dir string, numKeepers, numSentinels uint8, sync
 	}
 	if err := tk.WaitRole(common.MasterRole, 30*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
+	}
+	// Wait for clusterView containing tk as master
+	if err := WaitClusterViewMaster(tk.id, e, 30*time.Second); err != nil {
+		t.Fatalf("expected master %q in cluster view", tk.id)
 	}
 
 	// Start standbys
@@ -166,7 +170,7 @@ func shutdown(tks []*TestKeeper, tss []*TestSentinel, te *TestEtcd) {
 		}
 	}
 	if te.cmd != nil {
-		te.Stop()
+		te.Kill()
 	}
 }
 
