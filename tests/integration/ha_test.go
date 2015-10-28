@@ -29,7 +29,20 @@ import (
 	etcdm "github.com/sorintlab/stolon/pkg/etcd"
 )
 
-func setupServers(t *testing.T, dir string, numKeepers, numSentinels uint8, syncRepl bool) ([]*TestKeeper, []*TestSentinel) {
+func setupServers(t *testing.T, dir string, numKeepers, numSentinels uint8, syncRepl bool) ([]*TestKeeper, []*TestSentinel, *TestEtcd) {
+	te, err := NewTestEtcd(dir)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := te.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := te.WaitUp(10 * time.Second); err != nil {
+		t.Fatalf("error waiting on etcd up: %v", err)
+	}
+
+	etcdEndpoints := fmt.Sprintf("http://%s:%s", te.listenAddress, te.port)
+
 	clusterName := uuid.NewV4().String()
 
 	etcdPath := filepath.Join(common.EtcdBasePath, clusterName)
@@ -52,7 +65,7 @@ func setupServers(t *testing.T, dir string, numKeepers, numSentinels uint8, sync
 	tks := []*TestKeeper{}
 	tss := []*TestSentinel{}
 
-	tk, err := NewTestKeeper(dir, clusterName)
+	tk, err := NewTestKeeper(dir, clusterName, etcdEndpoints)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -62,7 +75,7 @@ func setupServers(t *testing.T, dir string, numKeepers, numSentinels uint8, sync
 
 	// Start sentinels
 	for i := uint8(0); i < numSentinels; i++ {
-		ts, err := NewTestSentinel(dir, clusterName)
+		ts, err := NewTestSentinel(dir, clusterName, etcdEndpoints)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -83,7 +96,7 @@ func setupServers(t *testing.T, dir string, numKeepers, numSentinels uint8, sync
 
 	// Start standbys
 	for i := uint8(1); i < numKeepers; i++ {
-		tk, err := NewTestKeeper(dir, clusterName)
+		tk, err := NewTestKeeper(dir, clusterName, etcdEndpoints)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -98,7 +111,7 @@ func setupServers(t *testing.T, dir string, numKeepers, numSentinels uint8, sync
 		}
 		tks = append(tks, tk)
 	}
-	return tks, tss
+	return tks, tss, te
 }
 
 func populate(t *testing.T, tk *TestKeeper) error {
@@ -141,7 +154,7 @@ func waitLines(t *testing.T, tk *TestKeeper, num int, timeout time.Duration) err
 
 }
 
-func shutdown(tks []*TestKeeper, tss []*TestSentinel) {
+func shutdown(tks []*TestKeeper, tss []*TestSentinel, te *TestEtcd) {
 	for _, ts := range tss {
 		if ts.cmd != nil {
 			ts.Stop()
@@ -151,6 +164,9 @@ func shutdown(tks []*TestKeeper, tss []*TestSentinel) {
 		if tk.cmd != nil {
 			tk.Stop()
 		}
+	}
+	if te.cmd != nil {
+		te.Stop()
 	}
 }
 
@@ -176,8 +192,8 @@ func testMasterStandby(t *testing.T, syncRepl bool) {
 	}
 	defer os.RemoveAll(dir)
 
-	tks, tss := setupServers(t, dir, 2, 1, syncRepl)
-	defer shutdown(tks, tss)
+	tks, tss, te := setupServers(t, dir, 2, 1, syncRepl)
+	defer shutdown(tks, tss, te)
 
 	master, standbys, err := getRoles(t, tks)
 	if err != nil {
@@ -224,8 +240,8 @@ func testFailover(t *testing.T, syncRepl bool) {
 	}
 	defer os.RemoveAll(dir)
 
-	tks, tss := setupServers(t, dir, 2, 1, syncRepl)
-	defer shutdown(tks, tss)
+	tks, tss, te := setupServers(t, dir, 2, 1, syncRepl)
+	defer shutdown(tks, tss, te)
 
 	master, standbys, err := getRoles(t, tks)
 	if err != nil {
@@ -270,8 +286,8 @@ func testOldMasterRestart(t *testing.T, syncRepl bool) {
 	}
 	defer os.RemoveAll(dir)
 
-	tks, tss := setupServers(t, dir, 2, 1, syncRepl)
-	defer shutdown(tks, tss)
+	tks, tss, te := setupServers(t, dir, 2, 1, syncRepl)
+	defer shutdown(tks, tss, te)
 
 	master, standbys, err := getRoles(t, tks)
 	if err != nil {
@@ -337,8 +353,8 @@ func testPartition1(t *testing.T, syncRepl bool) {
 	}
 	defer os.RemoveAll(dir)
 
-	tks, tss := setupServers(t, dir, 2, 1, syncRepl)
-	defer shutdown(tks, tss)
+	tks, tss, te := setupServers(t, dir, 2, 1, syncRepl)
+	defer shutdown(tks, tss, te)
 
 	master, standbys, err := getRoles(t, tks)
 	if err != nil {
@@ -413,8 +429,8 @@ func testTimelineFork(t *testing.T, syncRepl bool) {
 	}
 	defer os.RemoveAll(dir)
 
-	tks, tss := setupServers(t, dir, 3, 1, syncRepl)
-	defer shutdown(tks, tss)
+	tks, tss, te := setupServers(t, dir, 3, 1, syncRepl)
+	defer shutdown(tks, tss, te)
 
 	master, standbys, err := getRoles(t, tks)
 	if err != nil {

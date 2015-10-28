@@ -30,9 +30,23 @@ func TestInit(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	defer os.RemoveAll(dir)
+
+	te, err := NewTestEtcd(dir)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := te.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := te.WaitUp(10 * time.Second); err != nil {
+		t.Fatalf("error waiting on etcd up: %v", err)
+	}
+	etcdEndpoints := fmt.Sprintf("http://%s:%s", te.listenAddress, te.port)
+	defer te.Stop()
+
 	clusterName := uuid.NewV4().String()
 
-	ts, err := NewTestSentinel(dir, clusterName)
+	ts, err := NewTestSentinel(dir, clusterName, etcdEndpoints)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -40,7 +54,7 @@ func TestInit(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	defer ts.Stop()
-	tk, err := NewTestKeeper(dir, clusterName)
+	tk, err := NewTestKeeper(dir, clusterName, etcdEndpoints)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -64,12 +78,26 @@ func TestExclusiveLock(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	defer os.RemoveAll(dir)
+
+	te, err := NewTestEtcd(dir)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := te.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := te.WaitUp(10 * time.Second); err != nil {
+		t.Fatalf("error waiting on etcd up: %v", err)
+	}
+	etcdEndpoints := fmt.Sprintf("http://%s:%s", te.listenAddress, te.port)
+	defer te.Stop()
+
 	clusterName := uuid.NewV4().String()
 
 	u := uuid.NewV4()
 	id := fmt.Sprintf("%x", u[:4])
 
-	tk1, err := NewTestKeeperWithID(dir, id, clusterName)
+	tk1, err := NewTestKeeperWithID(dir, id, clusterName, etcdEndpoints)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -83,7 +111,7 @@ func TestExclusiveLock(t *testing.T) {
 		t.Fatalf("expecting tk1 up but it's down")
 	}
 
-	tk2, err := NewTestKeeperWithID(dir, id, clusterName)
+	tk2, err := NewTestKeeperWithID(dir, id, clusterName, etcdEndpoints)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
