@@ -61,7 +61,7 @@ func init() {
 	cmdProxy.PersistentFlags().StringVar(&cfg.clusterName, "cluster-name", "", "cluster name")
 	cmdProxy.PersistentFlags().StringVar(&cfg.listenAddress, "listen-address", "127.0.0.1", "proxy listening address")
 	cmdProxy.PersistentFlags().StringVar(&cfg.port, "port", "5432", "proxy listening port")
-	cmdProxy.PersistentFlags().BoolVar(&cfg.stopListening, "stop-listening", true, "stop listening on etcd error or empty proxy conf")
+	cmdProxy.PersistentFlags().BoolVar(&cfg.stopListening, "stop-listening", true, "stop listening on etcd error")
 	cmdProxy.PersistentFlags().BoolVar(&cfg.debug, "debug", false, "enable debug logging")
 }
 
@@ -167,21 +167,19 @@ func (c *ClusterChecker) Check() error {
 		return nil
 	}
 	log.Debugf(spew.Sprintf("clusterview: %#v", cv))
+
+	// Start pollon if not active
+	c.startPollonProxy()
+
 	if cv == nil {
 		log.Infof("no clusterview available, closing connections to previous master")
 		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
-		if c.stopListening {
-			c.stopPollonProxy()
-		}
 		return nil
 	}
 	pc := cv.ProxyConf
 	if pc == nil {
 		log.Infof("no proxyconf available, closing connections to previous master")
 		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
-		if c.stopListening {
-			c.stopPollonProxy()
-		}
 		if err := c.SetProxyInfo(c.e, cv.Version, 2*cluster.DefaultProxyCheckInterval); err != nil {
 			log.Errorf("failed to update proxyInfo: %v", err)
 		}
@@ -191,9 +189,6 @@ func (c *ClusterChecker) Check() error {
 	if err != nil {
 		log.Errorf("err: %v", err)
 		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
-		if c.stopListening {
-			c.stopPollonProxy()
-		}
 		return nil
 	}
 	log.Infof("master address: %v", addr)
@@ -201,8 +196,6 @@ func (c *ClusterChecker) Check() error {
 		log.Errorf("failed to update proxyInfo: %v", err)
 	}
 
-	// Start pollon if not active
-	c.startPollonProxy()
 	c.sendPollonConfData(pollon.ConfData{DestAddr: addr})
 	return nil
 }

@@ -17,6 +17,7 @@ package integration
 import (
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
 	"path/filepath"
 	"testing"
@@ -36,11 +37,31 @@ func TestProxyListening(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 
+	clusterName := uuid.NewV4().String()
+
 	te, err := NewTestEtcd(dir)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	etcdEndpoints := fmt.Sprintf("http://%s:%s", te.listenAddress, te.port)
+
+	tp, err := NewTestProxy(dir, clusterName, etcdEndpoints)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := tp.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer tp.Stop()
+
+	log.Printf("test proxy start with etcd down. Should not listen")
+	// tp should not listen because it cannot talk with etcd
+	if err := tp.WaitNotListening(10 * time.Second); err != nil {
+		t.Fatalf("expecting tp not listening due to failed etcd communication, but it's listening.")
+	}
+
+	tp.Stop()
+
 	if err := te.Start(); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -52,8 +73,6 @@ func TestProxyListening(t *testing.T) {
 			te.Stop()
 		}
 	}()
-
-	clusterName := uuid.NewV4().String()
 
 	etcdPath := filepath.Join(common.EtcdBasePath, clusterName)
 	e, err := etcdm.NewEtcdManager(etcdEndpoints, etcdPath, common.DefaultEtcdRequestTimeout)
@@ -79,20 +98,18 @@ func TestProxyListening(t *testing.T) {
 	}
 	prevCDIndex := res.Node.ModifiedIndex
 
-	tp, err := NewTestProxy(dir, clusterName, etcdEndpoints)
-	if err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
+	// test etcd start with etcd up
+	log.Printf("test proxy start with etcd up. Should listen")
 	if err := tp.Start(); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	defer tp.Stop()
 
 	// tp should listen
 	if err := tp.WaitListening(10 * time.Second); err != nil {
 		t.Fatalf("expecting tp listening, but it's not listening.")
 	}
 
+	log.Printf("test proxy error communicating with etcd. Should stop listening")
 	// Stop etcd
 	te.Stop()
 	if err := te.WaitDown(10 * time.Second); err != nil {
@@ -104,6 +121,7 @@ func TestProxyListening(t *testing.T) {
 		t.Fatalf("expecting tp not listening due to failed etcd communication, but it's listening.")
 	}
 
+	log.Printf("test proxy communication with etcd restored. Should start listening")
 	// Start etcd
 	if err := te.Start(); err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -116,6 +134,7 @@ func TestProxyListening(t *testing.T) {
 		t.Fatalf("expecting tp listening, but it's not listening.")
 	}
 
+	log.Printf("test proxyConf removed. Should continue listening")
 	// remove proxyConf
 	res, err = e.SetClusterData(cluster.KeepersState{},
 		&cluster.ClusterView{
@@ -131,11 +150,12 @@ func TestProxyListening(t *testing.T) {
 	}
 	prevCDIndex = res.Node.ModifiedIndex
 
-	// tp should not listen because proxyConf is empty
-	if err := tp.WaitNotListening(10 * time.Second); err != nil {
-		t.Fatalf("expecting tp not listening due to empty proxyConf, but it's listening.")
+	// tp should listen
+	if err := tp.WaitListening(10 * time.Second); err != nil {
+		t.Fatalf("expecting tp listening, but it's not listening.")
 	}
 
+	log.Printf("test proxyConf restored. Should continue listening")
 	// Set proxyConf again
 	res, err = e.SetClusterData(cluster.KeepersState{},
 		&cluster.ClusterView{
@@ -160,15 +180,15 @@ func TestProxyListening(t *testing.T) {
 		t.Fatalf("expecting tp listening, but it's not listening.")
 	}
 
+	log.Printf("test clusterView removed. Should continue listening")
 	// remove whole clusterview
 	_, err = e.SetClusterData(cluster.KeepersState{}, nil, prevCDIndex)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	// tp should not listen because clusterView is empty
-	if err := tp.WaitNotListening(10 * time.Second); err != nil {
-		t.Fatalf("expecting tp not listening due to empty clusterView, but it's listening.")
+	// tp should listen
+	if err := tp.WaitListening(10 * time.Second); err != nil {
+		t.Fatalf("expecting tp listening, but it's not listening.")
 	}
-
 }
