@@ -15,6 +15,7 @@
 package cluster
 
 import (
+	"fmt"
 	"reflect"
 	"sort"
 	"time"
@@ -28,6 +29,23 @@ func (kss KeepersState) Copy() KeepersState {
 		nkss[k] = v.Copy()
 	}
 	return nkss
+}
+
+func (kss KeepersState) NewFromKeeperInfo(ki *KeeperInfo) error {
+	id := ki.ID
+	if _, ok := kss[id]; ok {
+		return fmt.Errorf("keeperState with id %q already exists", id)
+	}
+	kss[id] = &KeeperState{
+		ErrorStartTime:     time.Time{},
+		ID:                 ki.ID,
+		ClusterViewVersion: ki.ClusterViewVersion,
+		ListenAddress:      ki.ListenAddress,
+		Port:               ki.Port,
+		PGListenAddress:    ki.PGListenAddress,
+		PGPort:             ki.PGPort,
+	}
+	return nil
 }
 
 type KeeperState struct {
@@ -50,11 +68,31 @@ func (ks *KeeperState) Copy() *KeeperState {
 	return &nks
 }
 
-func (ks *KeeperState) Changed(ki *KeeperInfo) bool {
-	if ks.ClusterViewVersion != ki.ClusterViewVersion || ks.ListenAddress != ki.ListenAddress || ks.Port != ki.Port || ks.PGListenAddress != ki.PGListenAddress || ks.PGPort != ki.PGPort {
-		return true
+func (ks *KeeperState) ChangedFromKeeperInfo(ki *KeeperInfo) (bool, error) {
+	if ks.ID != ki.ID {
+		return false, fmt.Errorf("different IDs, keeperState.ID: %s != keeperInfo.ID: %s", ks.ID, ki.ID)
 	}
-	return false
+	if ks.ClusterViewVersion != ki.ClusterViewVersion ||
+		ks.ListenAddress != ki.ListenAddress ||
+		ks.Port != ki.Port ||
+		ks.PGListenAddress != ki.PGListenAddress ||
+		ks.PGPort != ki.PGPort {
+		return true, nil
+	}
+	return false, nil
+}
+
+func (ks *KeeperState) UpdateFromKeeperInfo(ki *KeeperInfo) error {
+	if ks.ID != ki.ID {
+		return fmt.Errorf("different IDs, keeperState.ID: %s != keeperInfo.ID: %s", ks.ID, ki.ID)
+	}
+	ks.ClusterViewVersion = ki.ClusterViewVersion
+	ks.ListenAddress = ki.ListenAddress
+	ks.Port = ki.Port
+	ks.PGListenAddress = ki.PGListenAddress
+	ks.PGPort = ki.PGPort
+
+	return nil
 }
 
 func (ks *KeeperState) SetError() {
@@ -79,6 +117,14 @@ func (ksr KeepersRole) Copy() KeepersRole {
 		nksr[k] = v.Copy()
 	}
 	return nksr
+}
+
+func (ksr KeepersRole) Add(id string, follow string) error {
+	if _, ok := ksr[id]; ok {
+		return fmt.Errorf("keeperRole with id %q already exists", id)
+	}
+	ksr[id] = &KeeperRole{ID: id, Follow: follow}
+	return nil
 }
 
 type KeeperRole struct {

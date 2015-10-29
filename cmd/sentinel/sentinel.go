@@ -456,29 +456,22 @@ func (s *Sentinel) updateKeepersState(keepersState cluster.KeepersState, keepers
 	// Add new keepersInfo to newKeepersState
 	for id, ki := range keepersInfo {
 		if _, ok := newKeepersState[id]; !ok {
-			newKeepersState[id] = &cluster.KeeperState{
-				ErrorStartTime:     time.Time{},
-				ID:                 ki.ID,
-				ClusterViewVersion: ki.ClusterViewVersion,
-				ListenAddress:      ki.ListenAddress,
-				Port:               ki.Port,
-				PGListenAddress:    ki.PGListenAddress,
-				PGPort:             ki.PGPort,
+			if err := newKeepersState.NewFromKeeperInfo(ki); err != nil {
+				// This shouldn't happen
+				panic(err)
 			}
 		}
 	}
 
 	// Update keeperState with keepersInfo
 	for id, ki := range keepersInfo {
-		if ki.Changed(newKeepersState[id]) {
-			newKeepersState[id] = &cluster.KeeperState{
-				ID:                 ki.ID,
-				ClusterViewVersion: ki.ClusterViewVersion,
-				ListenAddress:      ki.ListenAddress,
-				Port:               ki.Port,
-				PGListenAddress:    ki.PGListenAddress,
-				PGPort:             ki.PGPort,
-			}
+		changed, err := newKeepersState[id].ChangedFromKeeperInfo(ki)
+		if err != nil {
+			// This shouldn't happen
+			panic(err)
+		}
+		if changed {
+			newKeepersState[id].UpdateFromKeeperInfo(ki)
 		}
 	}
 
@@ -572,18 +565,20 @@ func (s *Sentinel) updateClusterView(cv *cluster.ClusterView, keepersState clust
 	newCV := cv.Copy()
 	newKeepersRole := newCV.KeepersRole
 
-	// Add new keepers from keepersState
+	// Add new keepersRole from keepersState
 	for id, _ := range keepersState {
 		if _, ok := newKeepersRole[id]; !ok {
-			newKeepersRole[id] = &cluster.KeeperRole{}
+			if err := newKeepersRole.Add(id, ""); err != nil {
+				// This shouldn't happen
+				panic(err)
+			}
 		}
-
 	}
 
 	// Setup master role
 	if cv.Master != wantedMasterID {
 		newCV.Master = wantedMasterID
-		newKeepersRole[wantedMasterID] = &cluster.KeeperRole{ID: wantedMasterID, Follow: ""}
+		newKeepersRole[wantedMasterID].Follow = ""
 	}
 
 	// Setup standbys
@@ -595,7 +590,7 @@ func (s *Sentinel) updateClusterView(cv *cluster.ClusterView, keepersState clust
 				if id == wantedMasterID {
 					continue
 				}
-				newKeepersRole[id] = &cluster.KeeperRole{ID: id, Follow: wantedMasterID}
+				newKeepersRole[id].Follow = wantedMasterID
 			}
 		}
 	}
