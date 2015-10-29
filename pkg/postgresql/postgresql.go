@@ -48,6 +48,7 @@ type Manager struct {
 	pgBinPath        string
 	requestTimeout   time.Duration
 	serverParameters ServerParameters
+	confDir          string
 }
 
 type ServerParameters map[string]string
@@ -73,7 +74,7 @@ func (s ServerParameters) Equals(is ServerParameters) bool {
 	return reflect.DeepEqual(s, is)
 }
 
-func NewManager(name string, pgBinPath string, dataDir string, serverParameters ServerParameters, connString, replConnString, replUser, replPassword string, requestTimeout time.Duration) (*Manager, error) {
+func NewManager(name string, pgBinPath string, dataDir string, confDir string, serverParameters ServerParameters, connString, replConnString, replUser, replPassword string, requestTimeout time.Duration) (*Manager, error) {
 	return &Manager{
 		name:             name,
 		dataDir:          filepath.Join(dataDir, "postgres"),
@@ -84,6 +85,7 @@ func NewManager(name string, pgBinPath string, dataDir string, serverParameters 
 		pgBinPath:        pgBinPath,
 		requestTimeout:   requestTimeout,
 		serverParameters: serverParameters,
+		confDir:          confDir,
 	}, nil
 }
 
@@ -104,6 +106,10 @@ func (p *Manager) Init() error {
 	// Move current (initdb generated) postgresql.conf ot postgresql-base.conf
 	if err := os.Rename(filepath.Join(p.dataDir, "postgresql.conf"), filepath.Join(p.dataDir, "postgresql-base.conf")); err != nil {
 		return fmt.Errorf("error moving postgresql.conf file to postgresql-base.conf: %v", err)
+	}
+	// Create default confDir
+	if err := os.Mkdir(filepath.Join(p.dataDir, "conf.d"), 0700); err != nil {
+		return fmt.Errorf("error creating conf.d inside dataDir: %v", err)
 	}
 	if err := p.WriteConf(); err != nil {
 		return fmt.Errorf("error writing postgresql.conf file: %v", err)
@@ -328,6 +334,11 @@ func (p *Manager) WriteConf() error {
 	defer f.Close()
 
 	f.WriteString("include 'postgresql-base.conf'\n")
+	if p.confDir != "" {
+		f.WriteString(fmt.Sprintf("include_dir '%s'\n", p.confDir))
+	} else {
+		f.WriteString("include_dir 'conf.d'\n")
+	}
 	for k, v := range p.serverParameters {
 		// TODO(sgotti) escape single quotes inside parameter value
 		_, err = f.WriteString(fmt.Sprintf("%s = '%s'\n", k, v))

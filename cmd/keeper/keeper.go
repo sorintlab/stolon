@@ -66,6 +66,7 @@ type config struct {
 	pgListenAddress string
 	pgPort          string
 	pgBinPath       string
+	pgConfDir       string
 	debug           bool
 }
 
@@ -80,7 +81,8 @@ func init() {
 	cmdKeeper.PersistentFlags().StringVar(&cfg.port, "port", "5431", "keeper listening port")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.pgListenAddress, "pg-listen-address", "localhost", "postgresql instance listening address")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.pgPort, "pg-port", "5432", "postgresql instance listening port")
-	cmdKeeper.PersistentFlags().StringVar(&cfg.pgBinPath, "pg-bin-path", "", "path to postgresql binaries. If empty they will be searched in the current PATH")
+	cmdKeeper.PersistentFlags().StringVar(&cfg.pgBinPath, "pg-bin-path", "", "absolute path to postgresql binaries. If empty they will be searched in the current PATH")
+	cmdKeeper.PersistentFlags().StringVar(&cfg.pgConfDir, "pg-conf-dir", "", "absolute path to user provided postgres configuration. If empty a default dir under $dataDir/postgres/conf.d will be used")
 	cmdKeeper.PersistentFlags().BoolVar(&cfg.debug, "debug", false, "enable debug logging")
 }
 
@@ -174,7 +176,7 @@ func NewPostgresKeeper(id string, cfg config, stop chan bool, end chan error) (*
 	}
 
 	serverParameters := p.createServerParameters()
-	pgm, err := postgresql.NewManager(id, cfg.pgBinPath, cfg.dataDir, serverParameters, p.getOurConnString(), p.getOurReplConnString(), clusterConfig.PGReplUser, clusterConfig.PGReplPassword, clusterConfig.RequestTimeout)
+	pgm, err := postgresql.NewManager(id, cfg.pgBinPath, cfg.dataDir, cfg.pgConfDir, serverParameters, p.getOurConnString(), p.getOurReplConnString(), clusterConfig.PGReplUser, clusterConfig.PGReplPassword, clusterConfig.RequestTimeout)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create postgres manager: %v", err)
 	}
@@ -693,6 +695,19 @@ func keeper(cmd *cobra.Command, args []string) {
 
 	if err := os.MkdirAll(cfg.dataDir, 0700); err != nil {
 		log.Fatalf("error: %v", err)
+	}
+
+	if cfg.pgConfDir != "" {
+		if !filepath.IsAbs(cfg.pgConfDir) {
+			log.Fatalf("pg-conf-dir must be an absolute path")
+		}
+		fi, err := os.Stat(cfg.pgConfDir)
+		if err != nil {
+			log.Fatalf("cannot stat pg-conf-dir: %v", err)
+		}
+		if !fi.IsDir() {
+			log.Fatalf("pg-conf-dir is not a directory")
+		}
 	}
 
 	// Take an exclusive lock on dataDir
