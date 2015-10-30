@@ -39,13 +39,94 @@ import (
 	"github.com/sorintlab/stolon/Godeps/_workspace/src/golang.org/x/net/context"
 )
 
-type TestKeeper struct {
-	id        string
-	dataDir   string
-	keeperBin string
-	args      []string
-	cmd       *exec.Cmd
+type Process struct {
+	id   string
+	name string
+	args []string
+	cmd  *exec.Cmd
+	bin  string
+}
 
+func (p *Process) Start() error {
+	if p.cmd != nil {
+		panic(fmt.Errorf("%s: cmd not cleanly stopped", p.id))
+	}
+	p.cmd = exec.Command(p.bin, p.args...)
+	stdoutPipe, err := p.cmd.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	go func() {
+		scanner := bufio.NewScanner(stdoutPipe)
+		for scanner.Scan() {
+			fmt.Printf("[%s]: %s\n", p.id, scanner.Text())
+		}
+	}()
+
+	stderrPipe, err := p.cmd.StderrPipe()
+	if err != nil {
+		return err
+	}
+	go func() {
+		scanner := bufio.NewScanner(stderrPipe)
+		for scanner.Scan() {
+			fmt.Printf("[%s]: %s\n", p.id, scanner.Text())
+		}
+	}()
+	err = p.cmd.Start()
+	if err != nil {
+		return err
+	}
+	return nil
+
+}
+
+func (p *Process) Signal(sig os.Signal) error {
+	fmt.Printf("signalling %s %s with %s\n", p.name, p.id, sig)
+	if p.cmd == nil {
+		panic(fmt.Errorf("p: %s, cmd is empty", p.id))
+	}
+	return p.cmd.Process.Signal(sig)
+}
+
+func (p *Process) Kill() {
+	fmt.Printf("killing %s %s\n", p.name, p.id)
+	if p.cmd == nil {
+		panic(fmt.Errorf("p: %s, cmd is empty", p.id))
+	}
+	p.cmd.Process.Signal(os.Kill)
+	p.cmd.Wait()
+	p.cmd = nil
+}
+
+func (p *Process) Stop() {
+	fmt.Printf("stopping %s %s\n", p.name, p.id)
+	if p.cmd == nil {
+		panic(fmt.Errorf("p: %s, cmd is empty", p.id))
+	}
+	p.cmd.Process.Signal(os.Interrupt)
+	p.cmd.Wait()
+	p.cmd = nil
+}
+
+func (p *Process) Wait(timeout time.Duration) error {
+	timeoutCh := time.NewTimer(timeout).C
+	endCh := make(chan error)
+	go func() {
+		err := p.cmd.Wait()
+		endCh <- err
+	}()
+	select {
+	case <-timeoutCh:
+		return fmt.Errorf("timeout waiting on process")
+	case <-endCh:
+		return nil
+	}
+}
+
+type TestKeeper struct {
+	Process
+	dataDir         string
 	listenAddress   string
 	port            string
 	pgListenAddress string
@@ -53,7 +134,7 @@ type TestKeeper struct {
 	db              *sql.DB
 }
 
-func NewTestKeeperWithID(dir string, id string, clusterName string, etcdEndpoints string) (*TestKeeper, error) {
+func NewTestKeeperWithID(dir string, id string, clusterName string, etcdEndpoints string, a ...string) (*TestKeeper, error) {
 	args := []string{}
 
 	dataDir := filepath.Join(dir, fmt.Sprintf("st%s", id))
@@ -82,6 +163,7 @@ func NewTestKeeperWithID(dir string, id string, clusterName string, etcdEndpoint
 	args = append(args, fmt.Sprintf("--data-dir=%s", dataDir))
 	args = append(args, fmt.Sprintf("--etcd-endpoints=%s", etcdEndpoints))
 	args = append(args, "--debug")
+	args = append(args, a...)
 
 	connString := fmt.Sprintf("postgres://%s:%s/postgres?sslmode=disable", pgListenAddress, pgPort)
 	db, err := sql.Open("postgres", connString)
@@ -89,15 +171,18 @@ func NewTestKeeperWithID(dir string, id string, clusterName string, etcdEndpoint
 		return nil, err
 	}
 
-	keeperBin := os.Getenv("STKEEPER_BIN")
-	if keeperBin == "" {
+	bin := os.Getenv("STKEEPER_BIN")
+	if bin == "" {
 		return nil, fmt.Errorf("missing STKEEPER_BIN env")
 	}
 	tk := &TestKeeper{
-		id:              id,
+		Process: Process{
+			id:   id,
+			name: "keeper",
+			bin:  bin,
+			args: args,
+		},
 		dataDir:         dataDir,
-		keeperBin:       keeperBin,
-		args:            args,
 		listenAddress:   listenAddress,
 		port:            port,
 		pgListenAddress: pgListenAddress,
@@ -107,72 +192,11 @@ func NewTestKeeperWithID(dir string, id string, clusterName string, etcdEndpoint
 	return tk, nil
 }
 
-func NewTestKeeper(dir string, clusterName string, etcdEndpoints string) (*TestKeeper, error) {
+func NewTestKeeper(dir string, clusterName string, etcdEndpoints string, a ...string) (*TestKeeper, error) {
 	u := uuid.NewV4()
 	id := fmt.Sprintf("%x", u[:4])
 
-	return NewTestKeeperWithID(dir, id, clusterName, etcdEndpoints)
-}
-
-func (tk *TestKeeper) Start() error {
-	if tk.cmd != nil {
-		panic(fmt.Errorf("tk: %s, cmd not cleanly stopped", tk.id))
-	}
-	tk.cmd = exec.Command(tk.keeperBin, tk.args...)
-	stdoutPipe, err := tk.cmd.StdoutPipe()
-	if err != nil {
-		return err
-	}
-	go func() {
-		scanner := bufio.NewScanner(stdoutPipe)
-		for scanner.Scan() {
-			fmt.Printf("[%s]: %s\n", tk.id, scanner.Text())
-		}
-	}()
-
-	stderrPipe, err := tk.cmd.StderrPipe()
-	if err != nil {
-		return err
-	}
-	go func() {
-		scanner := bufio.NewScanner(stderrPipe)
-		for scanner.Scan() {
-			fmt.Printf("[%s]: %s\n", tk.id, scanner.Text())
-		}
-	}()
-	err = tk.cmd.Start()
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (tk *TestKeeper) Signal(sig os.Signal) error {
-	fmt.Printf("signalling keeper: %s with %s\n", tk.id, sig)
-	if tk.cmd == nil {
-		panic(fmt.Errorf("tk: %s, cmd is empty", tk.id))
-	}
-	return tk.cmd.Process.Signal(sig)
-}
-
-func (tk *TestKeeper) Kill() {
-	fmt.Printf("killing keeper: %s\n", tk.id)
-	if tk.cmd == nil {
-		panic(fmt.Errorf("tk: %s, cmd is empty", tk.id))
-	}
-	tk.cmd.Process.Signal(os.Kill)
-	tk.cmd.Wait()
-	tk.cmd = nil
-}
-
-func (tk *TestKeeper) Stop() {
-	fmt.Printf("stopping keeper: %s\n", tk.id)
-	if tk.cmd == nil {
-		panic(fmt.Errorf("tk: %s, cmd is empty", tk.id))
-	}
-	tk.cmd.Process.Signal(os.Interrupt)
-	tk.cmd.Wait()
-	tk.cmd = nil
+	return NewTestKeeperWithID(dir, id, clusterName, etcdEndpoints, a...)
 }
 
 func (tk *TestKeeper) Exec(query string, args ...interface{}) (sql.Result, error) {
@@ -356,21 +380,6 @@ func (tk *TestKeeper) WaitRole(r common.Role, timeout time.Duration) error {
 	return fmt.Errorf("timeout")
 }
 
-func (tk *TestKeeper) WaitProcess(timeout time.Duration) error {
-	timeoutCh := time.NewTimer(timeout).C
-	endCh := make(chan error)
-	go func() {
-		err := tk.cmd.Wait()
-		endCh <- err
-	}()
-	select {
-	case <-timeoutCh:
-		return fmt.Errorf("timeout waiting on process")
-	case <-endCh:
-		return nil
-	}
-}
-
 type CheckFunc func(time.Duration) error
 
 func waitChecks(timeout time.Duration, fns ...CheckFunc) error {
@@ -394,10 +403,7 @@ func waitChecks(timeout time.Duration, fns ...CheckFunc) error {
 }
 
 type TestSentinel struct {
-	id          string
-	cmd         *exec.Cmd
-	sentinelBin string
-	args        []string
+	Process
 
 	listenAddress string
 	port          string
@@ -423,86 +429,25 @@ func NewTestSentinel(dir string, clusterName string, etcdEndpoints string) (*Tes
 	args = append(args, fmt.Sprintf("--etcd-endpoints=%s", etcdEndpoints))
 	args = append(args, "--debug")
 
-	sentinelBin := os.Getenv("STSENTINEL_BIN")
-	if sentinelBin == "" {
+	bin := os.Getenv("STSENTINEL_BIN")
+	if bin == "" {
 		return nil, fmt.Errorf("missing STSENTINEL_BIN env")
 	}
 	ts := &TestSentinel{
-		id:            id,
-		sentinelBin:   sentinelBin,
-		args:          args,
+		Process: Process{
+			id:   id,
+			name: "sentinel",
+			bin:  bin,
+			args: args,
+		},
 		listenAddress: listenAddress,
 		port:          port,
 	}
 	return ts, nil
 }
 
-func (ts *TestSentinel) Start() error {
-	if ts.cmd != nil {
-		panic(fmt.Errorf("ts: %s, cmd not cleanly stopped", ts.id))
-	}
-	ts.cmd = exec.Command(ts.sentinelBin, ts.args...)
-	stdoutPipe, err := ts.cmd.StdoutPipe()
-	if err != nil {
-		return err
-	}
-	go func() {
-		scanner := bufio.NewScanner(stdoutPipe)
-		for scanner.Scan() {
-			fmt.Printf("[%s]: %s\n", ts.id, scanner.Text())
-		}
-	}()
-
-	stderrPipe, err := ts.cmd.StderrPipe()
-	if err != nil {
-		return err
-	}
-	go func() {
-		scanner := bufio.NewScanner(stderrPipe)
-		for scanner.Scan() {
-			fmt.Printf("[%s]: %s\n", ts.id, scanner.Text())
-		}
-	}()
-	err = ts.cmd.Start()
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (ts *TestSentinel) Signal(sig os.Signal) error {
-	fmt.Printf("signalling sentinel: %s with %s\n", ts.id, sig)
-	if ts.cmd == nil {
-		panic(fmt.Errorf("ts: %s, cmd is empty", ts.id))
-	}
-	return ts.cmd.Process.Signal(sig)
-}
-
-func (ts *TestSentinel) Kill() {
-	fmt.Printf("killing sentinel: %s\n", ts.id)
-	if ts.cmd == nil {
-		panic(fmt.Errorf("ts: %s, cmd is empty", ts.id))
-	}
-	ts.cmd.Process.Signal(os.Kill)
-	ts.cmd.Wait()
-	ts.cmd = nil
-}
-
-func (ts *TestSentinel) Stop() {
-	fmt.Printf("stopping sentinel: %s\n", ts.id)
-	if ts.cmd == nil {
-		panic(fmt.Errorf("ts: %s, cmd is empty", ts.id))
-	}
-	ts.cmd.Process.Signal(os.Interrupt)
-	ts.cmd.Wait()
-	ts.cmd = nil
-}
-
 type TestProxy struct {
-	id       string
-	cmd      *exec.Cmd
-	proxyBin string
-	args     []string
+	Process
 
 	listenAddress string
 	port          string
@@ -529,94 +474,21 @@ func NewTestProxy(dir string, clusterName string, etcdEndpoints string, a ...str
 	args = append(args, "--debug")
 	args = append(args, a...)
 
-	proxyBin := os.Getenv("STPROXY_BIN")
-	if proxyBin == "" {
+	bin := os.Getenv("STPROXY_BIN")
+	if bin == "" {
 		return nil, fmt.Errorf("missing STPROXY_BIN env")
 	}
 	tp := &TestProxy{
-		id:            id,
-		proxyBin:      proxyBin,
-		args:          args,
+		Process: Process{
+			id:   id,
+			name: "proxy",
+			bin:  bin,
+			args: args,
+		},
 		listenAddress: listenAddress,
 		port:          port,
 	}
 	return tp, nil
-}
-
-func (tp *TestProxy) Start() error {
-	if tp.cmd != nil {
-		panic(fmt.Errorf("tp: %s, cmd not cleanly stopped", tp.id))
-	}
-	tp.cmd = exec.Command(tp.proxyBin, tp.args...)
-	stdoutPipe, err := tp.cmd.StdoutPipe()
-	if err != nil {
-		return err
-	}
-	go func() {
-		scanner := bufio.NewScanner(stdoutPipe)
-		for scanner.Scan() {
-			fmt.Printf("[%s]: %s\n", tp.id, scanner.Text())
-		}
-	}()
-
-	stderrPipe, err := tp.cmd.StderrPipe()
-	if err != nil {
-		return err
-	}
-	go func() {
-		scanner := bufio.NewScanner(stderrPipe)
-		for scanner.Scan() {
-			fmt.Printf("[%s]: %s\n", tp.id, scanner.Text())
-		}
-	}()
-	err = tp.cmd.Start()
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (tp *TestProxy) Signal(sig os.Signal) error {
-	fmt.Printf("signalling proxy: %s with %s\n", tp.id, sig)
-	if tp.cmd == nil {
-		panic(fmt.Errorf("tp: %s, cmd is empty", tp.id))
-	}
-	return tp.cmd.Process.Signal(sig)
-}
-
-func (tp *TestProxy) Kill() {
-	fmt.Printf("killing proxy: %s\n", tp.id)
-	if tp.cmd == nil {
-		panic(fmt.Errorf("tp: %s, cmd is empty", tp.id))
-	}
-	tp.cmd.Process.Signal(os.Kill)
-	tp.cmd.Wait()
-	tp.cmd = nil
-}
-
-func (tp *TestProxy) Stop() {
-	fmt.Printf("stopping proxy: %s\n", tp.id)
-	if tp.cmd == nil {
-		panic(fmt.Errorf("tp: %s, cmd is empty", tp.id))
-	}
-	tp.cmd.Process.Signal(os.Interrupt)
-	tp.cmd.Wait()
-	tp.cmd = nil
-}
-
-func (tp *TestProxy) WaitProcess(timeout time.Duration) error {
-	timeoutCh := time.NewTimer(timeout).C
-	endCh := make(chan error)
-	go func() {
-		err := tp.cmd.Wait()
-		endCh <- err
-	}()
-	select {
-	case <-timeoutCh:
-		return fmt.Errorf("timeout waiting on process")
-	case <-endCh:
-		return nil
-	}
 }
 
 func (tp *TestProxy) WaitListening(timeout time.Duration) error {
@@ -646,10 +518,7 @@ func (tp *TestProxy) WaitNotListening(timeout time.Duration) error {
 }
 
 type TestEtcd struct {
-	id      string
-	cmd     *exec.Cmd
-	etcdBin string
-	args    []string
+	Process
 
 	listenAddress string
 	port          string
@@ -701,96 +570,23 @@ func NewTestEtcd(dir string, a ...string) (*TestEtcd, error) {
 	}
 	kAPI := etcd.NewKeysAPI(eClient)
 
-	etcdBin := os.Getenv("ETCD_BIN")
-	if etcdBin == "" {
+	bin := os.Getenv("ETCD_BIN")
+	if bin == "" {
 		return nil, fmt.Errorf("missing ETCD_BIN env")
 	}
 	te := &TestEtcd{
-		id:            id,
-		etcdBin:       etcdBin,
-		args:          args,
+		Process: Process{
+			id:   id,
+			name: "etcd",
+			bin:  bin,
+			args: args,
+		},
 		listenAddress: listenAddress,
 		port:          port,
 		eClient:       eClient,
 		kAPI:          kAPI,
 	}
 	return te, nil
-}
-
-func (te *TestEtcd) Start() error {
-	if te.cmd != nil {
-		panic(fmt.Errorf("te: %s, etcd not cleanly stopped", te.id))
-	}
-	te.cmd = exec.Command(te.etcdBin, te.args...)
-	stdoutPipe, err := te.cmd.StdoutPipe()
-	if err != nil {
-		return err
-	}
-	go func() {
-		scanner := bufio.NewScanner(stdoutPipe)
-		for scanner.Scan() {
-			fmt.Printf("[%s]: %s\n", te.id, scanner.Text())
-		}
-	}()
-
-	stderrPipe, err := te.cmd.StderrPipe()
-	if err != nil {
-		return err
-	}
-	go func() {
-		scanner := bufio.NewScanner(stderrPipe)
-		for scanner.Scan() {
-			fmt.Printf("[%s]: %s\n", te.id, scanner.Text())
-		}
-	}()
-	err = te.cmd.Start()
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (te *TestEtcd) Signal(sig os.Signal) error {
-	fmt.Printf("signalling etcd with %s\n", sig)
-	if te.cmd == nil {
-		panic(fmt.Errorf("te: %s, cmd is empty", te.id))
-	}
-	return te.cmd.Process.Signal(sig)
-}
-
-func (te *TestEtcd) Kill() {
-	fmt.Printf("killing etcd\n")
-	if te.cmd == nil {
-		panic(fmt.Errorf("te: %s, cmd is empty", te.id))
-	}
-	te.cmd.Process.Signal(os.Kill)
-	te.cmd.Wait()
-	te.cmd = nil
-}
-
-func (te *TestEtcd) Stop() {
-	fmt.Printf("stopping etcd\n")
-	if te.cmd == nil {
-		panic(fmt.Errorf("te: %s, cmd is empty", te.id))
-	}
-	te.cmd.Process.Signal(os.Interrupt)
-	te.cmd.Wait()
-	te.cmd = nil
-}
-
-func (te *TestEtcd) WaitProcess(timeout time.Duration) error {
-	timeoutCh := time.NewTimer(timeout).C
-	endCh := make(chan error)
-	go func() {
-		err := te.cmd.Wait()
-		endCh <- err
-	}()
-	select {
-	case <-timeoutCh:
-		return fmt.Errorf("timeout waiting on process")
-	case <-endCh:
-		return nil
-	}
 }
 
 func (te *TestEtcd) WaitUp(timeout time.Duration) error {
