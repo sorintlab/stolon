@@ -4,10 +4,16 @@ In this example you'll see how stolon can provide an high available postgreSQL c
 
 
 ## Docker image
-A prebuilt image is available on the dockerhub (sorintlab/stolon:0.1) and it's the one used by this example.
+Prebuilt images are available on the dockerhub, the images' tags are their release version. Additional images are available:
 
-in the [image](examples/kubernetes/image/docker) directory you'll find the Dockerfile to build the image used in this example. Once the image is built you should push it to the docker registry used by your kubernetes infrastructure.
+* `latest`: latest released image (actually not existing, it will apppear when the first release is done)
+* `master`: automatically built after every commit to the master branch.
 
+
+In the [image](examples/kubernetes/image/docker) directory you'll find the Dockerfile to build the image used in this example. Once the image is built you should push it to the docker registry used by your kubernetes infrastructure.
+
+`sorintlab/stolon:master` is the one used by the kubernetes definitions in this example.
+For a more stable testing you can use `sorintlab/stolon:latest` (when available)
 
 ## Cluster setup and tests
 
