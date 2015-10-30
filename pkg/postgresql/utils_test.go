@@ -66,3 +66,26 @@ func TestParseTimeLineHistory(t *testing.T) {
 	}
 
 }
+
+func TestValidReplSlotName(t *testing.T) {
+	tests := []struct {
+		name  string
+		valid bool
+	}{
+		{"aaaaaaaa", true},
+		{"a12345aa", true},
+		{"_a1_2345aa_", true},
+		{"", false},
+		{"a-aaaaaaa", false},
+		{"_a1_-2345aa_", false},
+		{"ABC123", false},
+		{"$123", false},
+	}
+
+	for i, tt := range tests {
+		valid := IsValidReplSlotName(tt.name)
+		if valid != tt.valid {
+			t.Errorf("%d: replication slot name %q got valid: %t but wanted valid: %t", i, tt.name, valid, tt.valid)
+		}
+	}
+}
