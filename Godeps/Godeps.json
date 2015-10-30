@@ -60,12 +60,25 @@
 			"Rev": "e874b168d07ecc7808bc950a17998a8aa3141d82"
 		},
 		{
+			"ImportPath": "github.com/kballard/go-shellquote",
+			"Rev": "e5c918b80c17694cbc49aab32a759f9a40067f5d"
+		},
+		{
+			"ImportPath": "github.com/kr/pty",
+			"Comment": "release.r56-25-g05017fc",
+			"Rev": "05017fcccf23c823bfdea560dcc958a136e54fb7"
+		},
+		{
 			"ImportPath": "github.com/lib/pq",
 			"Rev": "7175accbed18058468c07811f76440d6e8d7cf19"
 		},
 		{
 			"ImportPath": "github.com/satori/go.uuid",
 			"Rev": "46e1db27972f44c7722f23195ba6a8d2c2f3a0a3"
+		},
+		{
+			"ImportPath": "github.com/sgotti/gexpect",
+			"Rev": "81b69f472c22d5a42aefcf07b58015d0ef4da2e1"
 		},
 		{
 			"ImportPath": "github.com/sorintlab/pollon",

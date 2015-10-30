@@ -36,6 +36,7 @@ import (
 	etcd "github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/coreos/etcd/client"
 	_ "github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/lib/pq"
 	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/satori/go.uuid"
+	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/sgotti/gexpect"
 	"github.com/sorintlab/stolon/Godeps/_workspace/src/golang.org/x/net/context"
 )
 
@@ -43,42 +44,43 @@ type Process struct {
 	id   string
 	name string
 	args []string
-	cmd  *exec.Cmd
+	cmd  *gexpect.ExpectSubprocess
 	bin  string
 }
 
-func (p *Process) Start() error {
+func (p *Process) start() error {
 	if p.cmd != nil {
 		panic(fmt.Errorf("%s: cmd not cleanly stopped", p.id))
 	}
-	p.cmd = exec.Command(p.bin, p.args...)
-	stdoutPipe, err := p.cmd.StdoutPipe()
+	cmd := exec.Command(p.bin, p.args...)
+	pr, pw, err := os.Pipe()
 	if err != nil {
 		return err
 	}
+	p.cmd = &gexpect.ExpectSubprocess{Cmd: cmd, Output: pw}
+	if err := p.cmd.Start(); err != nil {
+		return err
+	}
 	go func() {
-		scanner := bufio.NewScanner(stdoutPipe)
+		scanner := bufio.NewScanner(pr)
 		for scanner.Scan() {
 			fmt.Printf("[%s]: %s\n", p.id, scanner.Text())
 		}
 	}()
 
-	stderrPipe, err := p.cmd.StderrPipe()
-	if err != nil {
-		return err
-	}
-	go func() {
-		scanner := bufio.NewScanner(stderrPipe)
-		for scanner.Scan() {
-			fmt.Printf("[%s]: %s\n", p.id, scanner.Text())
-		}
-	}()
-	err = p.cmd.Start()
-	if err != nil {
-		return err
-	}
 	return nil
+}
 
+func (p *Process) Start() error {
+	if err := p.start(); err != nil {
+		return err
+	}
+	p.cmd.Continue()
+	return nil
+}
+
+func (p *Process) StartExpect() error {
+	return p.start()
 }
 
 func (p *Process) Signal(sig os.Signal) error {
@@ -86,7 +88,7 @@ func (p *Process) Signal(sig os.Signal) error {
 	if p.cmd == nil {
 		panic(fmt.Errorf("p: %s, cmd is empty", p.id))
 	}
-	return p.cmd.Process.Signal(sig)
+	return p.cmd.Cmd.Process.Signal(sig)
 }
 
 func (p *Process) Kill() {
@@ -94,7 +96,7 @@ func (p *Process) Kill() {
 	if p.cmd == nil {
 		panic(fmt.Errorf("p: %s, cmd is empty", p.id))
 	}
-	p.cmd.Process.Signal(os.Kill)
+	p.cmd.Cmd.Process.Signal(os.Kill)
 	p.cmd.Wait()
 	p.cmd = nil
 }
@@ -104,7 +106,8 @@ func (p *Process) Stop() {
 	if p.cmd == nil {
 		panic(fmt.Errorf("p: %s, cmd is empty", p.id))
 	}
-	p.cmd.Process.Signal(os.Interrupt)
+	p.cmd.Continue()
+	p.cmd.Cmd.Process.Signal(os.Interrupt)
 	p.cmd.Wait()
 	p.cmd = nil
 }
