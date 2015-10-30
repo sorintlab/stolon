@@ -72,7 +72,7 @@ type config struct {
 var cfg config
 
 func init() {
-	cmdKeeper.PersistentFlags().StringVar(&cfg.id, "id", "", "keeper id (must be unique in the cluster)")
+	cmdKeeper.PersistentFlags().StringVar(&cfg.id, "id", "", "keeper id (must be unique in the cluster and can contain only lower-case letters, numbers and the underscore character). If not provided a random id will be generated.")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.etcdEndpoints, "etcd-endpoints", common.DefaultEtcdEndpoints, "a comma-delimited list of etcd endpoints")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.dataDir, "data-dir", "", "data directory")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.clusterName, "cluster-name", "", "cluster name")
@@ -701,6 +701,11 @@ func keeper(cmd *cobra.Command, args []string) {
 		log.Fatalf("cannot take exclusive lock on data dir %q: %v", cfg.dataDir, err)
 	}
 
+	if cfg.id != "" {
+		if !pg.IsValidReplSlotName(cfg.id) {
+			log.Fatalf("keeper id %q not valid. It can contain only lower-case letters, numbers and the underscore character", cfg.id)
+		}
+	}
 	id, err := getIDFromFile(cfg)
 	if err != nil {
 		log.Fatalf("error: %v", err)
@@ -716,11 +721,11 @@ func keeper(cmd *cobra.Command, args []string) {
 				u := uuid.NewV4()
 				id = fmt.Sprintf("%x", u[:4])
 			}
+			log.Infof("generated id: %s", id)
 		}
 		if err := saveIDToFile(cfg, id); err != nil {
 			log.Fatalf("error: %v", err)
 		}
-		log.Infof("generated id: %s", id)
 	}
 
 	log.Infof("id: %s", id)

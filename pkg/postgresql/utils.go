@@ -30,6 +30,10 @@ import (
 	"github.com/sorintlab/stolon/Godeps/_workspace/src/golang.org/x/net/context"
 )
 
+var (
+	ValidReplSlotName = regexp.MustCompile("^[a-z0-9_]+$")
+)
+
 func Exec(ctx context.Context, db *sql.DB, query string, args ...interface{}) (sql.Result, error) {
 	ch := make(chan struct {
 		res sql.Result
@@ -248,4 +252,8 @@ func GetTimelinesHistory(ctx context.Context, timeline uint64, replConnString st
 		return tlsh, nil
 	}
 	return nil, fmt.Errorf("query returned 0 rows")
+}
+
+func IsValidReplSlotName(name string) bool {
+	return ValidReplSlotName.MatchString(name)
 }
