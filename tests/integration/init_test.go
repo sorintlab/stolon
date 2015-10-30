@@ -121,7 +121,7 @@ func TestExclusiveLock(t *testing.T) {
 	defer tk2.Stop()
 
 	// tk2 should exit because it cannot take an exclusive lock on dataDir
-	if err := tk2.WaitProcess(10 * time.Second); err != nil {
+	if err := tk2.Wait(10 * time.Second); err != nil {
 		t.Fatalf("expecting tk2 exiting due to failed exclusive lock, but it's active.")
 	}
 
