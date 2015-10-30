@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+
+set -e
+
+VER=$1
+PROJ="stolon"
+
+if [ -z "$1" ]; then
+	echo "Usage: ${0} VERSION" >> /dev/stderr
+	exit 255
+fi
+
+set -u
+
+function setup_env {
+	local proj=${1}
+	local ver=${2}
+
+	if [ ! -d ${proj} ]; then
+		git clone https://github.com/sorintlab/${proj}
+	fi
+
+	pushd ${proj} >/dev/null
+		git checkout master
+		git fetch --all
+		git reset --hard origin/master
+		git checkout $ver
+	popd >/dev/null
+}
+
+
+function package {
+	local target=${1}
+	local srcdir="${2}/bin"
+
+	local ccdir="${srcdir}/${GOOS}_${GOARCH}"
+	if [ -d ${ccdir} ]; then
+		srcdir=${ccdir}
+	fi
+	for bin in stolon-keeper stolon-sentinel stolon-proxy stolonctl; do
+		cp ${srcdir}/${bin} ${target}/${bin}
+	done
+
+	cp stolon/README.md ${target}/README.md
+
+	cp -R stolon/doc ${target}/doc
+	cp -R stolon/examples ${target}/examples
+}
+
+function main {
+	mkdir -p release
+	cd release
+	setup_env ${PROJ} ${VER}
+
+	for os in linux; do
+		export GOOS=${os}
+		export GOARCH="amd64"
+
+		pushd stolon >/dev/null
+			./build
+		popd >/dev/null
+
+		TARGET="stolon-${VER}-${GOOS}-${GOARCH}"
+		mkdir -p ${TARGET}
+		package ${TARGET} ${PROJ}
+
+		if [ ${GOOS} == "linux" ]; then
+			tar cfz ${TARGET}.tar.gz ${TARGET}
+			echo "Wrote release/${TARGET}.tar.gz"
+		else
+			zip -qr ${TARGET}.zip ${TARGET}
+			echo "Wrote release/${TARGET}.zip"
+		fi
+	done
+}
+
+main

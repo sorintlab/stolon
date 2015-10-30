@@ -13,3 +13,4 @@ Session.vim
 #
 bin/
 /gopath/
+/release/
