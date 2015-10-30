@@ -29,3 +29,8 @@ spec:
             value: "true"
         ports:
           - containerPort: 5432
+        readinessProbe:
+          tcpSocket:
+            port: 5432
+          initialDelaySeconds: 10
+          timeoutSeconds: 5
