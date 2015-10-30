@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"text/tabwriter"
 
 	"github.com/sorintlab/stolon/common"
@@ -102,6 +103,7 @@ func status(cmd *cobra.Command, args []string) {
 	if len(sentinelsInfo) == 0 {
 		stdout("No active sentinels")
 	} else {
+		sort.Sort(sentinelsInfo)
 		fmt.Fprintf(tabOut, "ID\tLISTENADDRESS\tLEADER\n")
 		for _, si := range sentinelsInfo {
 			leader := false
@@ -126,6 +128,7 @@ func status(cmd *cobra.Command, args []string) {
 	if len(proxiesInfo) == 0 {
 		stdout("No active proxies")
 	} else {
+		sort.Sort(proxiesInfo)
 		fmt.Fprintf(tabOut, "ID\tLISTENADDRESS\tCV VERSION\n")
 		for _, pi := range proxiesInfo {
 			fmt.Fprintf(tabOut, "%s\t%s:%s\t%d\n", pi.ID, pi.ListenAddress, pi.Port, pi.ClusterViewVersion)
@@ -141,18 +144,20 @@ func status(cmd *cobra.Command, args []string) {
 		die("cluster data not available: %v", err)
 	}
 	cv := clusterData.ClusterView
-	ks := clusterData.KeepersState
+	kss := clusterData.KeepersState
 
 	stdout("")
 	stdout("=== Keepers ===")
 	stdout("")
-	if ks == nil {
+	if kss == nil {
 		stdout("No keepers state available")
 		stdout("")
 	} else {
+		kssKeys := kss.SortedKeys()
 		fmt.Fprintf(tabOut, "ID\tLISTENADDRESS\tPG LISTENADDRESS\tCV VERSION\tHEALTHY\n")
-		for _, k := range ks {
-			fmt.Fprintf(tabOut, "%s\t%s:%s\t%s:%s\t%d\t%t\n", k.ID, k.ListenAddress, k.Port, k.PGListenAddress, k.PGPort, k.ClusterViewVersion, k.Healthy)
+		for _, k := range kssKeys {
+			ks := kss[k]
+			fmt.Fprintf(tabOut, "%s\t%s:%s\t%s:%s\t%d\t%t\n", ks.ID, ks.ListenAddress, ks.Port, ks.PGListenAddress, ks.PGPort, ks.ClusterViewVersion, ks.Healthy)
 		}
 	}
 	tabOut.Flush()

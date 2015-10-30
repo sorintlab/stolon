@@ -23,6 +23,15 @@ import (
 
 type KeepersState map[string]*KeeperState
 
+func (kss KeepersState) SortedKeys() []string {
+	keys := []string{}
+	for k, _ := range kss {
+		keys = append(keys, k)
+	}
+	sort.Sort(sort.StringSlice(keys))
+	return keys
+}
+
 func (kss KeepersState) Copy() KeepersState {
 	nkss := KeepersState{}
 	for k, v := range kss {

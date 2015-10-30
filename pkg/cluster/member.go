@@ -92,6 +92,10 @@ type KeeperDiscoveryInfo struct {
 
 type SentinelsInfo []*SentinelInfo
 
+func (s SentinelsInfo) Len() int           { return len(s) }
+func (s SentinelsInfo) Less(i, j int) bool { return s[i].ID < s[j].ID }
+func (s SentinelsInfo) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+
 type SentinelInfo struct {
 	ID            string
 	ListenAddress string
@@ -99,6 +103,10 @@ type SentinelInfo struct {
 }
 
 type ProxiesInfo []*ProxyInfo
+
+func (p ProxiesInfo) Len() int           { return len(p) }
+func (p ProxiesInfo) Less(i, j int) bool { return p[i].ID < p[j].ID }
+func (p ProxiesInfo) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 
 type ProxyInfo struct {
 	ID                 string
