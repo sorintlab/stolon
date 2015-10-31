@@ -16,7 +16,6 @@ package postgresql
 
 import (
 	"bufio"
-	"database/sql"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -103,8 +102,7 @@ func (p *Manager) Init() error {
 		return fmt.Errorf("error: %v, output: %s", err, out)
 	}
 	// Move current (initdb generated) postgresql.conf ot postgresql-base.conf
-	err = os.Rename(filepath.Join(p.dataDir, "postgresql.conf"), filepath.Join(p.dataDir, "postgresql-base.conf"))
-	if err != nil {
+	if err := os.Rename(filepath.Join(p.dataDir, "postgresql.conf"), filepath.Join(p.dataDir, "postgresql-base.conf")); err != nil {
 		return fmt.Errorf("error moving postgresql.conf file to postgresql-base.conf: %v", err)
 	}
 	if err := p.WriteConf(); err != nil {
@@ -112,19 +110,16 @@ func (p *Manager) Init() error {
 	}
 
 	log.Infof("Setting required accesses to pg_hba.conf")
-	err = p.writePgHba()
-	if err != nil {
+	if err := p.writePgHba(); err != nil {
 		return fmt.Errorf("error setting requires accesses to pg_hba.conf: %v", err)
 	}
 
-	err = p.Start()
-	if err != nil {
+	if err := p.Start(); err != nil {
 		return fmt.Errorf("error starting instance: %v", err)
 	}
-	log.Infof("Creating repl user")
-	err = p.CreateReplUser()
-	if err != nil {
-		return fmt.Errorf("error creating replication user: %v", err)
+	log.Infof("Creating replication role")
+	if err := p.CreateReplRole(); err != nil {
+		return fmt.Errorf("error creating replication role: %v", err)
 	}
 	err = p.Stop(true)
 	if err != nil {
@@ -146,8 +141,7 @@ func (p *Manager) Start() error {
 	// only when postgres is stopped). So this functions will never return.
 	// To avoid this no output is captured. If needed there's the need to
 	// find a way to get the output whitout blocking.
-	err := cmd.Run()
-	if err != nil {
+	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("error: %v", err)
 	}
 	return nil
@@ -190,8 +184,7 @@ func (p *Manager) Reload() error {
 	}
 	name := filepath.Join(p.pgBinPath, "pg_ctl")
 	cmd := exec.Command(name, "reload", "-D", p.dataDir, "-o", "-c unix_socket_directories=/tmp")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
+	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("error: %v, output: %s", err, string(out))
 	}
 	return nil
@@ -199,12 +192,10 @@ func (p *Manager) Reload() error {
 
 func (p *Manager) Restart(fast bool) error {
 	log.Infof("Restarting database")
-	err := p.Stop(true)
-	if err != nil {
+	if err := p.Stop(true); err != nil {
 		return err
 	}
-	err = p.Start()
-	if err != nil {
+	if err := p.Start(); err != nil {
 		return err
 	}
 	return nil
@@ -214,85 +205,38 @@ func (p *Manager) Promote() error {
 	log.Infof("Promoting database")
 	name := filepath.Join(p.pgBinPath, "pg_ctl")
 	cmd := exec.Command(name, "promote", "-w", "-D", p.dataDir)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
+	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("error: %v, output: %s", err, string(out))
 	}
 	return nil
 }
 
 func (p *Manager) BecomeStandby(masterconnString string) error {
-	err := p.WriteRecoveryConf(masterconnString)
-	if err != nil {
-		return err
-	}
-	return nil
+	return p.WriteRecoveryConf(masterconnString)
 }
 
-func (p *Manager) CreateReplUser() error {
-	db, err := sql.Open("postgres", p.connString)
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-
+func (p *Manager) CreateReplRole() error {
 	ctx, cancel := context.WithTimeout(context.Background(), p.requestTimeout)
-	_, err = Exec(ctx, db, fmt.Sprintf(`CREATE USER "%s" WITH REPLICATION ENCRYPTED PASSWORD '%s';`, p.replUser, p.replPassword))
-	cancel()
-	return err
+	defer cancel()
+	return CreateReplRole(ctx, p.connString, p.replUser, p.replPassword)
 }
 
 func (p *Manager) GetReplicatinSlots() ([]string, error) {
-	db, err := sql.Open("postgres", p.connString)
-	if err != nil {
-		return nil, err
-	}
-	defer db.Close()
-
-	replSlots := []string{}
-
 	ctx, cancel := context.WithTimeout(context.Background(), p.requestTimeout)
-	rows, err := Query(ctx, db, "SELECT slot_name from pg_replication_slots")
-	cancel()
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var slotName string
-		if err := rows.Scan(&slotName); err != nil {
-			return nil, err
-		}
-		replSlots = append(replSlots, slotName)
-	}
-
-	return replSlots, nil
+	defer cancel()
+	return GetReplicatinSlots(ctx, p.connString)
 }
 
 func (p *Manager) CreateReplicationSlot(name string) error {
-	db, err := sql.Open("postgres", p.connString)
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-
 	ctx, cancel := context.WithTimeout(context.Background(), p.requestTimeout)
-	_, err = Exec(ctx, db, fmt.Sprintf("select pg_create_physical_replication_slot('%s')", name))
-	cancel()
-	return err
+	defer cancel()
+	return CreateReplicationSlot(ctx, p.connString, name)
 }
 
 func (p *Manager) DropReplicationSlot(name string) error {
-	db, err := sql.Open("postgres", p.connString)
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-
 	ctx, cancel := context.WithTimeout(context.Background(), p.requestTimeout)
-	_, err = Exec(ctx, db, fmt.Sprintf("select pg_drop_replication_slot('%s')", name))
-	cancel()
-	return err
+	defer cancel()
+	return DropReplicationSlot(ctx, p.connString, name)
 }
 
 func (p *Manager) IsInitialized() (bool, error) {
@@ -315,30 +259,9 @@ func (p *Manager) IsInitialized() (bool, error) {
 }
 
 func (p *Manager) GetRoleFromDB() (common.Role, error) {
-	db, err := sql.Open("postgres", p.connString)
-	if err != nil {
-		return 0, err
-	}
-	defer db.Close()
-
 	ctx, cancel := context.WithTimeout(context.Background(), p.requestTimeout)
-	rows, err := Query(ctx, db, "SELECT pg_is_in_recovery from pg_is_in_recovery()")
-	cancel()
-	if err != nil {
-		return 0, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var isInRecovery bool
-		if err := rows.Scan(&isInRecovery); err != nil {
-			return 0, err
-		}
-		if isInRecovery {
-			return common.StandbyRole, nil
-		}
-		return common.MasterRole, nil
-	}
-	return 0, fmt.Errorf("cannot get pg role from db: no rows returned")
+	defer cancel()
+	return GetRole(ctx, p.connString)
 }
 
 func (p *Manager) GetRole() (common.Role, error) {
@@ -375,7 +298,7 @@ func (p *Manager) GetPrimaryConninfo() (connParams, error) {
 	return nil, nil
 }
 
-func (p *Manager) HasconnString() (bool, error) {
+func (p *Manager) HasConnString() (bool, error) {
 	regex, err := regexp.Compile(`primary_conninfo`)
 	if err != nil {
 		return false, err
@@ -494,8 +417,7 @@ func (p *Manager) SyncFromMaster(masterconnString string) error {
 	cmd := exec.Command(name, "-R", "-D", p.dataDir, "--host="+host, "--port="+port, "-U", user)
 	cmd.Env = append(cmd.Env, fmt.Sprintf("PGPASSFILE=%s", pgpass.Name()))
 	log.Debugf("execing cmd: %s", cmd)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
+	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("error: %v, output: %s", err, string(out))
 	}
 	return nil
