@@ -98,7 +98,7 @@ func (c *NilConfig) UnmarshalJSON(in []byte) error {
 	if err != nil {
 		return err
 	}
-	*c = *jc.ToConfig()
+	*c = *jc.ToNilConfig()
 	if err := c.Validate(); err != nil {
 		return fmt.Errorf("config validation failed: %v", err)
 	}
@@ -154,7 +154,7 @@ func (c *NilConfig) ToJsonConfig() *jsonConfig {
 	}
 }
 
-func (jc *jsonConfig) ToConfig() *NilConfig {
+func (jc *jsonConfig) ToNilConfig() *NilConfig {
 	return &NilConfig{
 		RequestTimeout:         (*time.Duration)(jc.RequestTimeout),
 		SleepInterval:          (*time.Duration)(jc.SleepInterval),
@@ -204,30 +204,6 @@ func (c *NilConfig) Validate() error {
 		return fmt.Errorf("MaxStandbysPerSender must be at least 1")
 	}
 	return nil
-}
-
-func (c *NilConfig) Patch(nc *NilConfig) {
-	if nc.RequestTimeout != nil {
-		c.RequestTimeout = DurationP(*nc.RequestTimeout)
-	}
-	if nc.SleepInterval != nil {
-		c.SleepInterval = DurationP(*nc.SleepInterval)
-	}
-	if nc.KeeperFailInterval != nil {
-		c.KeeperFailInterval = DurationP(*nc.KeeperFailInterval)
-	}
-	if nc.PGReplUser != nil {
-		c.PGReplUser = StringP(*nc.PGReplUser)
-	}
-	if nc.PGReplPassword != nil {
-		c.PGReplPassword = StringP(*nc.PGReplPassword)
-	}
-	if nc.MaxStandbysPerSender != nil {
-		c.MaxStandbysPerSender = UintP(*nc.MaxStandbysPerSender)
-	}
-	if nc.SynchronousReplication != nil {
-		c.SynchronousReplication = BoolP(*nc.SynchronousReplication)
-	}
 }
 
 func (c *NilConfig) MergeDefaults() {

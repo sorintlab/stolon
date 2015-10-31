@@ -2,7 +2,7 @@
 
 The cluster configuration is saved in the cluster view. It's updatable using [stolonctl](stolonctl.md).
 
-It's possible to replace the whole current configuration or patch only some configuration options.
+It's possible to replace the whole current configuration or patch only some configuration options (see https://tools.ietf.org/html/rfc7386).
 
 ### Configuration replace example
 

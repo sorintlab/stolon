@@ -26,6 +26,7 @@ import (
 	etcdm "github.com/sorintlab/stolon/pkg/etcd"
 
 	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/spf13/cobra"
+	"github.com/sorintlab/stolon/Godeps/_workspace/src/k8s.io/kubernetes/pkg/util/strategicpatch"
 )
 
 var cmdConfigPatch = &cobra.Command{
@@ -46,13 +47,22 @@ func init() {
 	cmdConfig.AddCommand(cmdConfigPatch)
 }
 
-func patchConfig(e *etcdm.EtcdManager, nc *cluster.NilConfig) error {
+func patchConfig(e *etcdm.EtcdManager, ncj []byte) error {
 	curnc, err := getConfig(e)
 	if err != nil {
 		return fmt.Errorf("cannot get config: %v", err)
 	}
-	curnc.Patch(nc)
-	if err = replaceConfig(e, curnc); err != nil {
+	curncj, err := json.Marshal(curnc)
+	if err != nil {
+		return fmt.Errorf("failed to marshall config: %v", err)
+	}
+
+	pcj, err := strategicpatch.StrategicMergePatch(curncj, ncj, &cluster.Config{})
+	if err != nil {
+		return fmt.Errorf("failed to merge patch config: %v", err)
+	}
+
+	if err = replaceConfig(e, pcj); err != nil {
 		return err
 	}
 
@@ -94,13 +104,7 @@ func configPatch(cmd *cobra.Command, args []string) {
 		die("error: %v", err)
 	}
 
-	var nc cluster.NilConfig
-	err = json.Unmarshal(config, &nc)
-	if err != nil {
-		die("failed to marshal config: %v", err)
-	}
-
-	if err = patchConfig(e, &nc); err != nil {
+	if err = patchConfig(e, config); err != nil {
 		die("failed to patch config: %v", err)
 	}
 }

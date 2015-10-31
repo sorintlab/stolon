@@ -16,7 +16,6 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -24,7 +23,6 @@ import (
 	"path/filepath"
 
 	"github.com/sorintlab/stolon/common"
-	"github.com/sorintlab/stolon/pkg/cluster"
 	etcdm "github.com/sorintlab/stolon/pkg/etcd"
 
 	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/spf13/cobra"
@@ -48,18 +46,13 @@ func init() {
 	cmdConfig.AddCommand(cmdConfigReplace)
 }
 
-func replaceConfig(e *etcdm.EtcdManager, nc *cluster.NilConfig) error {
+func replaceConfig(e *etcdm.EtcdManager, config []byte) error {
 	lsi, _, err := e.GetLeaderSentinelInfo()
 	if lsi == nil {
 		return fmt.Errorf("leader sentinel info not available")
 	}
 
-	ncj, err := json.Marshal(nc)
-	if err != nil {
-		return fmt.Errorf("failed to marshall config: %v", err)
-	}
-
-	req, err := http.NewRequest("PUT", fmt.Sprintf("http://%s:%s/config/current", lsi.ListenAddress, lsi.Port), bytes.NewReader(ncj))
+	req, err := http.NewRequest("PUT", fmt.Sprintf("http://%s:%s/config/current", lsi.ListenAddress, lsi.Port), bytes.NewReader(config))
 	if err != nil {
 		return fmt.Errorf("cannot create request: %v", err)
 	}
@@ -101,13 +94,7 @@ func configReplace(cmd *cobra.Command, args []string) {
 		die("error: %v", err)
 	}
 
-	var nc cluster.NilConfig
-	err = json.Unmarshal(config, &nc)
-	if err != nil {
-		die("failed to marshal config: %v", err)
-	}
-
-	if err = replaceConfig(e, &nc); err != nil {
+	if err = replaceConfig(e, config); err != nil {
 		die("error: %v", err)
 	}
 }
