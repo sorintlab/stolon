@@ -90,6 +90,64 @@ func CheckDBStatus(ctx context.Context, connString string) error {
 	return nil
 }
 
+func CreateReplRole(ctx context.Context, connString, replUser, replPassword string) error {
+	db, err := sql.Open("postgres", connString)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	_, err = Exec(ctx, db, fmt.Sprintf(`create role "%s" with login replication encrypted password '%s';`, replUser, replPassword))
+	return err
+}
+
+func GetReplicatinSlots(ctx context.Context, connString string) ([]string, error) {
+	db, err := sql.Open("postgres", connString)
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+
+	replSlots := []string{}
+
+	rows, err := Query(ctx, db, "select slot_name from pg_replication_slots")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var slotName string
+		if err := rows.Scan(&slotName); err != nil {
+			return nil, err
+		}
+		replSlots = append(replSlots, slotName)
+	}
+
+	return replSlots, nil
+}
+
+func CreateReplicationSlot(ctx context.Context, connString string, name string) error {
+	db, err := sql.Open("postgres", connString)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	_, err = Exec(ctx, db, fmt.Sprintf("select pg_create_physical_replication_slot('%s')", name))
+	return err
+}
+
+func DropReplicationSlot(ctx context.Context, connString string, name string) error {
+	db, err := sql.Open("postgres", connString)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	_, err = Exec(ctx, db, fmt.Sprintf("select pg_drop_replication_slot('%s')", name))
+	return err
+}
+
 func GetRole(ctx context.Context, connString string) (common.Role, error) {
 	db, err := sql.Open("postgres", connString)
 	if err != nil {
@@ -97,7 +155,7 @@ func GetRole(ctx context.Context, connString string) (common.Role, error) {
 	}
 	defer db.Close()
 
-	rows, err := Query(ctx, db, "SELECT pg_is_in_recovery from pg_is_in_recovery()")
+	rows, err := Query(ctx, db, "select pg_is_in_recovery from pg_is_in_recovery()")
 	if err != nil {
 		return 0, err
 	}
