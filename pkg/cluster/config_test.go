@@ -83,7 +83,11 @@ func TestParseConfig(t *testing.T) {
 		},
 		// All options defined
 		{
-			in: `{ "request_timeout": "10s", "sleep_interval": "10s", "keeper_fail_interval": "100s", "pg_repl_user": "username", "pg_repl_password": "password", "max_standbys_per_sender": 5, "synchronous_replication": true}`,
+			in: `{ "request_timeout": "10s", "sleep_interval": "10s", "keeper_fail_interval": "100s", "pg_repl_user": "username", "pg_repl_password": "password", "max_standbys_per_sender": 5, "synchronous_replication": true,
+			       "pg_parameters": {
+			         "param01": "value01"
+				}
+			     }`,
 			cfg: mergeDefaults(&NilConfig{
 				RequestTimeout:         &Duration{10 * time.Second},
 				SleepInterval:          &Duration{10 * time.Second},
@@ -92,6 +96,9 @@ func TestParseConfig(t *testing.T) {
 				PGReplPassword:         StringP("password"),
 				MaxStandbysPerSender:   UintP(5),
 				SynchronousReplication: BoolP(true),
+				PGParameters: &map[string]string{
+					"param01": "value01",
+				},
 			}).ToConfig(),
 			err: nil,
 		},
@@ -100,17 +107,17 @@ func TestParseConfig(t *testing.T) {
 	for i, tt := range tests {
 		var nilCfg *NilConfig
 		err := json.Unmarshal([]byte(tt.in), &nilCfg)
-		nilCfg.MergeDefaults()
-		cfg := nilCfg.ToConfig()
-		if tt.err != nil {
-			if err == nil {
-				t.Errorf("#%d: got no error, wanted error: %v", i, tt.err)
+		if err != nil {
+			if tt.err == nil {
+				t.Errorf("#%d: unexpected error: %v", i, err)
 			} else if tt.err.Error() != err.Error() {
 				t.Errorf("#%d: got error: %v, wanted error: %v", i, err, tt.err)
 			}
 		} else {
-			if err != nil {
-				t.Errorf("#%d: unexpected error: %v", i, err)
+			nilCfg.MergeDefaults()
+			cfg := nilCfg.ToConfig()
+			if tt.err != nil {
+				t.Errorf("#%d: got no error, wanted error: %v", i, tt.err)
 			}
 			if !reflect.DeepEqual(cfg, tt.cfg) {
 				t.Errorf(spew.Sprintf("#%d: wrong config: got: %#v, want: %#v", i, cfg, tt.cfg))
