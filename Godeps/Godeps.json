@@ -99,6 +99,16 @@
 		{
 			"ImportPath": "golang.org/x/net/context",
 			"Rev": "1dfe7915deaf3f80b962c163b918868d8a6d8974"
+		},
+		{
+			"ImportPath": "k8s.io/kubernetes/pkg/util/strategicpatch",
+			"Comment": "v1.2.0-alpha.2-603-g7b8bf75",
+			"Rev": "7b8bf758f3b67634fd001eb7cf6b5a9b481528c1"
+		},
+		{
+			"ImportPath": "k8s.io/kubernetes/third_party/forked/json",
+			"Comment": "v1.2.0-alpha.2-603-g7b8bf75",
+			"Rev": "7b8bf758f3b67634fd001eb7cf6b5a9b481528c1"
 		}
 	]
 }

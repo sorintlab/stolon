@@ -2,25 +2,25 @@
 
 The cluster configuration is saved in the cluster view. It's updatable using [stolonctl](stolonctl.md).
 
-It's possible to replace the whole current configuration or patch only some configuration options.
+It's possible to replace the whole current configuration or patch only some configuration options (see https://tools.ietf.org/html/rfc7386).
 
 ### Configuration replace example
 
 ``` bash
-echo '{ "requestTimeout": "10s", "sleepInterval": "10s" }' | stolonctl --cluster-name=mycluster config replace -f - '
+echo '{ "request_timeout": "10s", "sleep_interval": "10s" }' | stolonctl --cluster-name=mycluster config replace -f - '
 ```
 
 
 ### Configuration patch example
 
 ``` bash
-stolonctl --cluster-name=mycluster config patch '{ "synchronousreplication" : true }'
+stolonctl --cluster-name=mycluster config patch '{ "synchronous_replication" : true }'
 ```
 
 or
 
 ``` bash
-echo '{ "synchronousreplication" : true }' | stolonctl --cluster-name=mycluster config patch -f -
+echo '{ "synchronous_replication" : true }' | stolonctl --cluster-name=mycluster config patch -f -
 ```
 
 In both commands the configuration must be provided in json format.
@@ -32,13 +32,13 @@ By default the cluster configuration is empty. For every empty field a default i
 
 ``` json
 {
-    "requestTimeout": "10s",
-    "sleepInterval": "5s",
-    "keeperFailInterval": "20s",
-    "pgreplUser": "username",
-    "pgreplPassword": "password",
-    "maxStandbysPerSender": 3,
-    "synchronousReplication": false
+    "request_timeout": "10s",
+    "sleep_interval": "5s",
+    "keeper_fail_interval": "20s",
+    "pg_repl_user": "username",
+    "pg_repl_password": "password",
+    "max_standbys_per_sender": 3,
+    "synchronous_replication": false
 }
 ```
 

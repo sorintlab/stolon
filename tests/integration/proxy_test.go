@@ -84,8 +84,8 @@ func TestProxyListening(t *testing.T) {
 		&cluster.ClusterView{
 			Version: 1,
 			Config: &cluster.NilConfig{
-				SleepInterval:      cluster.DurationP(5 * time.Second),
-				KeeperFailInterval: cluster.DurationP(10 * time.Second),
+				SleepInterval:      &cluster.Duration{5 * time.Second},
+				KeeperFailInterval: &cluster.Duration{10 * time.Second},
 			},
 			ProxyConf: &cluster.ProxyConf{
 				// fake pg address, not relevant
@@ -140,8 +140,8 @@ func TestProxyListening(t *testing.T) {
 		&cluster.ClusterView{
 			Version: 1,
 			Config: &cluster.NilConfig{
-				SleepInterval:      cluster.DurationP(5 * time.Second),
-				KeeperFailInterval: cluster.DurationP(10 * time.Second),
+				SleepInterval:      &cluster.Duration{5 * time.Second},
+				KeeperFailInterval: &cluster.Duration{10 * time.Second},
 			},
 			ProxyConf: nil,
 		}, prevCDIndex)
@@ -161,8 +161,8 @@ func TestProxyListening(t *testing.T) {
 		&cluster.ClusterView{
 			Version: 1,
 			Config: &cluster.NilConfig{
-				SleepInterval:      cluster.DurationP(5 * time.Second),
-				KeeperFailInterval: cluster.DurationP(10 * time.Second),
+				SleepInterval:      &cluster.Duration{5 * time.Second},
+				KeeperFailInterval: &cluster.Duration{10 * time.Second},
 			},
 			ProxyConf: &cluster.ProxyConf{
 				// fake pg address, not relevant

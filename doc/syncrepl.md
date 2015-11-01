@@ -8,11 +8,11 @@ You can do this with `stolonctl`.
 
 Assuming that you cluster name is `mycluster` and etcd is listening on localhost:2379:
 ```
-stolonctl --cluster-name=mycluster config patch '{ "synchronousreplication" : true }'
+stolonctl --cluster-name=mycluster config patch '{ "synchronous_replication" : true }'
 ```
 
 ## Disable synchronous replication.
 
 ```
-stolonctl --cluster-name=mycluster config patch '{ "synchronousreplication" : false }'
+stolonctl --cluster-name=mycluster config patch '{ "synchronous_replication" : false }'
 ```
