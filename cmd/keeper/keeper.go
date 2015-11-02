@@ -88,11 +88,8 @@ func init() {
 
 var defaultPGParameters = pg.Parameters{
 	"unix_socket_directories": "/tmp",
-	"archive_mode":            "on",
 	"wal_level":               "hot_standby",
-	"archive_command":         "mkdir -p ../wal_archive && cp %p ../wal_archive/%f",
 	"wal_keep_segments":       "8",
-	"archive_timeout":         "1800s",
 	"hot_standby":             "on",
 }
 
