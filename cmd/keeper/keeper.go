@@ -86,7 +86,7 @@ func init() {
 	cmdKeeper.PersistentFlags().BoolVar(&cfg.debug, "debug", false, "enable debug logging")
 }
 
-var defaultServerParameters = pg.ServerParameters{
+var defaultPGParameters = pg.Parameters{
 	"unix_socket_directories": "/tmp",
 	"archive_mode":            "on",
 	"wal_level":               "hot_standby",
@@ -108,14 +108,28 @@ func (p *PostgresKeeper) getOurReplConnString() string {
 	return fmt.Sprintf("postgres://%s:%s@%s:%s?sslmode=disable", p.clusterConfig.PGReplUser, p.clusterConfig.PGReplPassword, p.pgListenAddress, p.pgPort)
 }
 
-func (p *PostgresKeeper) createServerParameters() pg.ServerParameters {
-	serverParameters := defaultServerParameters.Copy()
-	serverParameters["listen_addresses"] = fmt.Sprintf("127.0.0.1,%s", cfg.pgListenAddress)
-	serverParameters["port"] = cfg.pgPort
-	serverParameters["max_replication_slots"] = strconv.FormatUint(uint64(p.clusterConfig.MaxStandbysPerSender), 10)
+func (p *PostgresKeeper) createPGParameters(followersIDs []string) pg.Parameters {
+	pgParameters := p.clusterConfig.PGParameters
+
+	// Merge default PGParameters
+	for k, v := range defaultPGParameters.Copy() {
+		pgParameters[k] = v
+	}
+
+	pgParameters["listen_addresses"] = fmt.Sprintf("127.0.0.1,%s", cfg.pgListenAddress)
+	pgParameters["port"] = cfg.pgPort
+	pgParameters["max_replication_slots"] = strconv.FormatUint(uint64(p.clusterConfig.MaxStandbysPerSender), 10)
 	// Add some more wal senders, since also the keeper will use them
-	serverParameters["max_wal_senders"] = strconv.FormatUint(uint64(p.clusterConfig.MaxStandbysPerSender+2), 10)
-	return serverParameters
+	pgParameters["max_wal_senders"] = strconv.FormatUint(uint64(p.clusterConfig.MaxStandbysPerSender+2), 10)
+
+	// Setup synchronous replication
+	if p.clusterConfig.SynchronousReplication {
+		pgParameters["synchronous_standby_names"] = strings.Join(followersIDs, ",")
+	} else {
+		pgParameters["synchronous_standby_names"] = ""
+	}
+
+	return pgParameters
 }
 
 type PostgresKeeper struct {
@@ -175,8 +189,9 @@ func NewPostgresKeeper(id string, cfg config, stop chan bool, end chan error) (*
 		end:             end,
 	}
 
-	serverParameters := p.createServerParameters()
-	pgm, err := postgresql.NewManager(id, cfg.pgBinPath, cfg.dataDir, cfg.pgConfDir, serverParameters, p.getOurConnString(), p.getOurReplConnString(), clusterConfig.PGReplUser, clusterConfig.PGReplPassword, clusterConfig.RequestTimeout)
+	followersIDs := cv.GetFollowersIDs(p.id)
+	pgParameters := p.createPGParameters(followersIDs)
+	pgm, err := postgresql.NewManager(id, cfg.pgBinPath, cfg.dataDir, cfg.pgConfDir, pgParameters, p.getOurConnString(), p.getOurReplConnString(), clusterConfig.PGReplUser, clusterConfig.PGReplPassword, clusterConfig.RequestTimeout)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create postgres manager: %v", err)
 	}
@@ -384,7 +399,7 @@ func (p *PostgresKeeper) fullResync(master *cluster.KeeperState, initialized, st
 
 	err = pgm.Start()
 	if err != nil {
-		return fmt.Errorf("err: %v", err)
+		return fmt.Errorf("failed to start postgres: %v", err)
 	}
 	return nil
 }
@@ -424,11 +439,19 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 		return
 	}
 
+	followersIDs := cv.GetFollowersIDs(p.id)
+
 	// Update cluster config
 	clusterConfig := cv.Config.ToConfig()
 	log.Debugf(spew.Sprintf("clusterConfig: %#v", clusterConfig))
 	// This shouldn't need a lock
 	p.clusterConfig = clusterConfig
+
+	prevPGParameters := pgm.GetParameters()
+	// create postgres parameteres
+	pgParameters := p.createPGParameters(followersIDs)
+	// update pgm postgres parameters
+	pgm.SetParameters(pgParameters)
 
 	keepersState, _, err := e.GetKeepersState()
 	if err != nil {
@@ -470,7 +493,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 		} else if !started {
 			err = pgm.Start()
 			if err != nil {
-				log.Errorf("err: %v", err)
+				log.Errorf("failed to start postgres: %v", err)
 			} else {
 				started = true
 			}
@@ -516,8 +539,6 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 
 	master := keepersState[masterID]
 	log.Debugf(spew.Sprintf("masterState: %#v", master))
-
-	followersIDs := cv.GetFollowersIDs(p.id)
 
 	keeperRole, ok := cv.KeepersRole[p.id]
 	if !ok {
@@ -565,22 +586,6 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				}
 			}
 
-			// Setup synchronous replication
-			syncStandbyNames, _ := pgm.GetServerParameter("synchronous_standby_names")
-			if p.clusterConfig.SynchronousReplication {
-				newSyncStandbyNames := strings.Join(followersIDs, ",")
-				if syncStandbyNames != newSyncStandbyNames {
-					log.Infof("needed synchronous_standby_names changed from %q to %q, reconfiguring", syncStandbyNames, newSyncStandbyNames)
-					pgm.SetServerParameter("synchronous_standby_names", newSyncStandbyNames)
-					pgm.Reload()
-				}
-			} else {
-				if syncStandbyNames != "" {
-					log.Infof("sync replication disabled, removing current synchronous_standby_names %q", syncStandbyNames)
-					pgm.SetServerParameter("synchronous_standby_names", "")
-					pgm.Reload()
-				}
-			}
 		}
 	} else {
 		log.Infof("our cluster requested state is standby following %q", keeperRole.Follow)
@@ -643,6 +648,30 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				}
 			}
 		}
+	}
+
+	// Log synchronous replication changes
+	prevSyncStandbyNames := prevPGParameters["synchronous_standby_names"]
+	syncStandbyNames := pgParameters["synchronous_standby_names"]
+	if p.clusterConfig.SynchronousReplication {
+		if prevSyncStandbyNames != syncStandbyNames {
+			log.Infof("needed synchronous_standby_names changed from %q to %q", prevSyncStandbyNames, syncStandbyNames)
+		}
+	} else {
+		if prevSyncStandbyNames != "" {
+			log.Infof("sync replication disabled, removing current synchronous_standby_names %q", prevSyncStandbyNames)
+		}
+	}
+
+	if !pgParameters.Equals(prevPGParameters) {
+		log.Infof("postgres parameters changed, reloading postgres instance")
+		pgm.SetParameters(pgParameters)
+		if err := pgm.Reload(); err != nil {
+			log.Errorf("failed to reload postgres instance: %v", err)
+		}
+	} else {
+		// for tests
+		log.Debugf("postgres parameters not changed")
 	}
 	if err := p.saveCVVersion(cv.Version); err != nil {
 		log.Errorf("err: %v", err)

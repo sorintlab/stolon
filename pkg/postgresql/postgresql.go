@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"strings"
 	"syscall"
 	"time"
 
@@ -39,62 +40,62 @@ var (
 )
 
 type Manager struct {
-	name             string
-	dataDir          string
-	replUser         string
-	replPassword     string
-	connString       string
-	replConnString   string
-	pgBinPath        string
-	requestTimeout   time.Duration
-	serverParameters ServerParameters
-	confDir          string
+	name           string
+	dataDir        string
+	replUser       string
+	replPassword   string
+	connString     string
+	replConnString string
+	pgBinPath      string
+	requestTimeout time.Duration
+	parameters     Parameters
+	confDir        string
 }
 
-type ServerParameters map[string]string
+type Parameters map[string]string
 
-func (s ServerParameters) Copy() ServerParameters {
-	serverParameters := ServerParameters{}
+func (s Parameters) Copy() Parameters {
+	parameters := Parameters{}
 	for k, v := range s {
-		serverParameters[k] = v
+		parameters[k] = v
 	}
-	return serverParameters
+	return parameters
 }
 
-func (s ServerParameters) Set(k, v string) {
+func (s Parameters) Set(k, v string) {
 	s[k] = v
 }
 
-func (s ServerParameters) Get(k string) (string, bool) {
+func (s Parameters) Get(k string) (string, bool) {
 	v, ok := s[k]
 	return v, ok
 }
 
-func (s ServerParameters) Equals(is ServerParameters) bool {
+func (s Parameters) Equals(is Parameters) bool {
 	return reflect.DeepEqual(s, is)
 }
 
-func NewManager(name string, pgBinPath string, dataDir string, confDir string, serverParameters ServerParameters, connString, replConnString, replUser, replPassword string, requestTimeout time.Duration) (*Manager, error) {
+func NewManager(name string, pgBinPath string, dataDir string, confDir string, parameters Parameters, connString, replConnString, replUser, replPassword string, requestTimeout time.Duration) (*Manager, error) {
 	return &Manager{
-		name:             name,
-		dataDir:          filepath.Join(dataDir, "postgres"),
-		replUser:         replUser,
-		replPassword:     replPassword,
-		connString:       connString,
-		replConnString:   replConnString,
-		pgBinPath:        pgBinPath,
-		requestTimeout:   requestTimeout,
-		serverParameters: serverParameters,
-		confDir:          confDir,
+		name:           name,
+		dataDir:        filepath.Join(dataDir, "postgres"),
+		replUser:       replUser,
+		replPassword:   replPassword,
+		connString:     connString,
+		replConnString: replConnString,
+		pgBinPath:      pgBinPath,
+		requestTimeout: requestTimeout,
+		parameters:     parameters,
+		confDir:        confDir,
 	}, nil
 }
 
-func (p *Manager) SetServerParameter(k, v string) {
-	p.serverParameters.Set(k, v)
+func (p *Manager) SetParameters(parameters Parameters) {
+	p.parameters = parameters
 }
 
-func (p *Manager) GetServerParameter(k string) (string, bool) {
-	return p.serverParameters.Get(k)
+func (p *Manager) GetParameters() Parameters {
+	return p.parameters
 }
 
 func (p *Manager) Init() error {
@@ -339,9 +340,10 @@ func (p *Manager) WriteConf() error {
 	} else {
 		f.WriteString("include_dir 'conf.d'\n")
 	}
-	for k, v := range p.serverParameters {
-		// TODO(sgotti) escape single quotes inside parameter value
-		_, err = f.WriteString(fmt.Sprintf("%s = '%s'\n", k, v))
+	for k, v := range p.parameters {
+		// Single quotes needs to be doubled
+		ev := strings.Replace(v, `'`, `''`, -1)
+		_, err = f.WriteString(fmt.Sprintf("%s = '%s'\n", k, ev))
 		if err != nil {
 			os.Remove(f.Name())
 			return err

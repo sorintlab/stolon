@@ -229,11 +229,11 @@ func testMasterStandby(t *testing.T, syncRepl bool) {
 
 }
 
-func TestMasterStandbySyncRepl(t *testing.T) {
+func TestMasterStandby(t *testing.T) {
 	testMasterStandby(t, false)
 }
 
-func TestMasterStandby(t *testing.T) {
+func TestMasterStandbySyncRepl(t *testing.T) {
 	testMasterStandby(t, true)
 }
 

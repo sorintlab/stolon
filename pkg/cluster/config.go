@@ -34,13 +34,14 @@ const (
 )
 
 type NilConfig struct {
-	RequestTimeout         *Duration `json:"request_timeout,omitempty"`
-	SleepInterval          *Duration `json:"sleep_interval,omitempty"`
-	KeeperFailInterval     *Duration `json:"keeper_fail_interval,omitempty"`
-	PGReplUser             *string   `json:"pg_repl_user,omitempty"`
-	PGReplPassword         *string   `json:"pg_repl_password,omitempty"`
-	MaxStandbysPerSender   *uint     `json:"max_standbys_per_sender,omitempty"`
-	SynchronousReplication *bool     `json:"synchronous_replication,omitempty"`
+	RequestTimeout         *Duration          `json:"request_timeout,omitempty"`
+	SleepInterval          *Duration          `json:"sleep_interval,omitempty"`
+	KeeperFailInterval     *Duration          `json:"keeper_fail_interval,omitempty"`
+	PGReplUser             *string            `json:"pg_repl_user,omitempty"`
+	PGReplPassword         *string            `json:"pg_repl_password,omitempty"`
+	MaxStandbysPerSender   *uint              `json:"max_standbys_per_sender,omitempty"`
+	SynchronousReplication *bool              `json:"synchronous_replication,omitempty"`
+	PGParameters           *map[string]string `json:"pg_parameters,omitempty"`
 }
 
 type Config struct {
@@ -59,6 +60,8 @@ type Config struct {
 	MaxStandbysPerSender uint
 	// Use Synchronous replication between master and its standbys
 	SynchronousReplication bool
+	// Map of postgres parameters
+	PGParameters map[string]string
 }
 
 func StringP(s string) *string {
@@ -75,6 +78,14 @@ func BoolP(b bool) *bool {
 
 func DurationP(d Duration) *Duration {
 	return &d
+}
+
+func MapStringP(m map[string]string) *map[string]string {
+	nm := map[string]string{}
+	for k, v := range m {
+		nm[k] = v
+	}
+	return &nm
 }
 
 type nilConfig NilConfig
@@ -116,6 +127,9 @@ func (c *NilConfig) Copy() *NilConfig {
 	}
 	if c.SynchronousReplication != nil {
 		nc.SynchronousReplication = BoolP(*c.SynchronousReplication)
+	}
+	if c.PGParameters != nil {
+		nc.PGParameters = MapStringP(*c.PGParameters)
 	}
 	return &nc
 }
@@ -192,6 +206,9 @@ func (c *NilConfig) MergeDefaults() {
 	if c.SynchronousReplication == nil {
 		c.SynchronousReplication = BoolP(DefaultSynchronousReplication)
 	}
+	if c.PGParameters == nil {
+		c.PGParameters = &map[string]string{}
+	}
 }
 
 func (c *NilConfig) ToConfig() *Config {
@@ -205,6 +222,7 @@ func (c *NilConfig) ToConfig() *Config {
 		PGReplPassword:         *nc.PGReplPassword,
 		MaxStandbysPerSender:   *nc.MaxStandbysPerSender,
 		SynchronousReplication: *nc.SynchronousReplication,
+		PGParameters:           *nc.PGParameters,
 	}
 }
 
