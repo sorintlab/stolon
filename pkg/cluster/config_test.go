@@ -81,6 +81,7 @@ func TestParseConfig(t *testing.T) {
 			cfg: nil,
 			err: fmt.Errorf("config validation failed: max_standbys_per_sender must be at least 1"),
 		},
+
 		// All options defined
 		{
 			in: `{ "request_timeout": "10s", "sleep_interval": "10s", "keeper_fail_interval": "100s", "pg_repl_user": "username", "pg_repl_password": "password", "max_standbys_per_sender": 5, "synchronous_replication": true,

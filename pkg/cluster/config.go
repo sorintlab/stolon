@@ -31,6 +31,10 @@ const (
 	DefaultPGReplPassword         = "replpassword"
 	DefaultMaxStandbysPerSender   = 3
 	DefaultSynchronousReplication = false
+
+	// PG_REWIND (TODO)
+	DefaultWalLogHints    = true
+	DefaultFullPageWrites = true
 )
 
 type NilConfig struct {

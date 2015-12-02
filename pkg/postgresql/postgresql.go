@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -411,7 +412,14 @@ func (p *Manager) SyncFromMaster(masterconnString string) error {
 	if err != nil {
 		return err
 	}
-
+	// First, we try to do pg_rewind.
+	if PGRewindCanBeUsed(p.dataDir) == true {
+		log.Infof("Running pg_rewind")
+		if err = p.SyncFromMasterByPGRewind(masterconnString); err == nil {
+			return nil // pg_rewind successfully finished.
+		}
+	}
+	// Well, we do pg_basebackup.
 	pgpass, err := ioutil.TempFile("", "pgpass")
 	if err != nil {
 		return err
@@ -419,6 +427,10 @@ func (p *Manager) SyncFromMaster(masterconnString string) error {
 	defer os.Remove(pgpass.Name())
 	defer pgpass.Close()
 
+	err = p.RemoveAll()
+	if err != nil {
+		return fmt.Errorf("failed to remove the postgres data dir: %v", err)
+	}
 	host := cp.Get("host")
 	port := cp.Get("port")
 	user := cp.Get("user")
@@ -453,4 +465,171 @@ func (p *Manager) RemoveAll() error {
 		return fmt.Errorf("cannot remove postregsql database. Instance is active")
 	}
 	return os.RemoveAll(p.dataDir)
+}
+
+func getConfParams(basedir, file string, params map[string]string) error {
+	confFile := basedir + "/" + file
+
+	fp, err := os.Open(confFile)
+	if err != nil {
+		return err
+	}
+	defer fp.Close()
+
+	rep_inc, _ := regexp.Compile("^include\\s+")
+	rep_incdir, _ := regexp.Compile("^include_dir\\s+")
+
+	scanner := bufio.NewScanner(fp)
+	for scanner.Scan() {
+		s := scanner.Text()
+		if rep_inc.MatchString(s) {
+			s = regexp.MustCompile("include").ReplaceAllString(s, "")
+			s = strings.Trim(strings.TrimRight(strings.TrimSpace(s), "\n"), "'")
+			if err = getConfParams(basedir, s, params); err != nil {
+				return err
+			}
+		} else if rep_incdir.MatchString(s) {
+			s = regexp.MustCompile("include_dir").ReplaceAllString(s, "")
+			s = strings.Trim(strings.TrimRight(strings.TrimSpace(s), "\n"), "'")
+			files, _ := ioutil.ReadDir(basedir + "/" + s)
+			for _, f := range files {
+				if err = getConfParams(basedir+"/"+s, f.Name(), params); err != nil {
+					return err
+				}
+			}
+		} else {
+			pf1 := "^\\s*[#]*\\s*[\\w\\/\\_\\-]+\\s*=\\s*\\'[\\w\\/\\.\\,\\_\\-\\%\\s*\\$\\:\\!\\+\"]*\\'"
+			pf2 := "^\\s*[#]*\\s*[\\w\\/\\_\\-]+\\s*=\\s*[\\w\\/\\.\\,\\_\\-]+"
+			pformats := []string{pf1, pf2}
+			for _, v := range pformats {
+				if match, _ := regexp.MatchString(v, s); match == true {
+					// Delete ^#
+					if match, _ = regexp.MatchString("^\\s*#", s); match == true {
+						s = strings.TrimLeft(s, "#")
+					}
+					line := strings.Split(s, "#")     // Delete comment
+					pv := strings.Split(line[0], "=") // Get param and value
+					pv[0] = strings.TrimSpace(pv[0])
+					pv[1] = strings.TrimSpace(pv[1])
+					params[pv[0]] = pv[1]
+				}
+			}
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	exceptions := []string{"TB", "GB", "MB", "name", "d"} // These are samples in comment.
+	for _, v := range exceptions {
+		if _, ex := params[v]; ex == true {
+			delete(params, v)
+		}
+	}
+	return nil
+}
+
+func PGRewindCanBeUsed(dataDir string) bool {
+	var version string
+
+	// Check cluster version; it should be greater than or equal to 9.5
+	if _, err := os.Stat(dataDir + "/PG_VERSION"); err != nil {
+		log.Debugf("the specified base directory:%s not found.\n", dataDir)
+		return false
+	}
+	if rawBytes, err := ioutil.ReadFile(dataDir + "/PG_VERSION"); err != nil {
+		log.Debugf("PG_VERSION file not read.\n")
+		return false
+	} else {
+		log.Debugf("database cluster version is %s\n", version)
+		version = strings.TrimRight(string(rawBytes), "\n")
+	}
+	vformat := "^\\d+\\.\\d+\\.*\\d*$"
+	if _, err := regexp.MatchString(vformat, version); err != nil {
+		log.Debugf("The value of PG_VERSION is invalid.\n")
+		return false
+	}
+	lowestVersion := [3]int{9, 5, 0}
+	for k, x := range strings.Split(version, ".") {
+		v, _ := strconv.Atoi(x)
+		if v < lowestVersion[k] {
+			log.Debugf("pg_rewind cannot be used in version %s\n", version)
+			return false
+		}
+	}
+	// Check recovery.conf
+	if _, err := os.Stat(dataDir + "/recovery.conf"); err != nil {
+		log.Debugf("There is no recovery.conf.\n")
+		return false
+	}
+	// Check parameter values
+	params := map[string]string{}
+	if err := getConfParams(dataDir, "postgresql.conf", params); err != nil {
+		log.Debugf("ERRER: %v.\n", err)
+		return false
+	}
+	for _, x := range []string{"wal_log_hints", "full_page_writes"} {
+		if strings.ToLower(strings.Trim(params[x], "'")) != "on" {
+			log.Debugf("%s is disabled.\n", x)
+			return false
+		}
+	}
+	log.Debugf("pg_rewind can be used.\n")
+	return true
+}
+
+func makeConnStr(masterconnString string) (string, error) {
+	connstr := ""
+	cp, err := URLToConnParams(masterconnString)
+	if err != nil {
+		return connstr, err
+	}
+	var m map[string]string = make(map[string]string)
+	m["host"] = cp.Get("host")
+	m["port"] = cp.Get("port")
+
+	// TODO: superuser authentication
+	m["user"] = "postgres"
+	//m["password"] = cp.Get("password")
+
+	for k, v := range m {
+		if v != "" {
+			connstr += k + "=" + v + " "
+		}
+	}
+	connstr = strings.TrimRight(connstr, " ")
+	log.Debugf("pg_rewind's connstr:%s", connstr)
+
+	return connstr, nil
+}
+
+func (p *Manager) SyncFromMasterByPGRewind(masterconnString string) error {
+	// Change the database cluster's state from "shut down in recovery" to "shut down"
+	//
+	// Though pg_rewind requires that the cluster's state is "shut down",
+	// the stopped standby's state is "shut down in recovery".
+	// Therefore, we should start the database instance in normal mode,
+	// and then we should stop it again.
+	if err := os.Remove(p.dataDir + "/recovery.conf"); err != nil {
+		return err
+	}
+	if err := p.Start(); err != nil {
+		return err
+	}
+	if err := p.Stop(true); err != nil {
+		return err
+	}
+
+	// Do pg_rewind
+	name := filepath.Join(p.pgBinPath, "pg_rewind")
+	if connstr, err := makeConnStr(masterconnString); err != nil {
+		log.Errorf("error stopping instance: %v", err)
+		return err
+	} else {
+		cmd := exec.Command(name, "-D", p.dataDir, "--source-server", connstr)
+		log.Debugf("execing cmd: %s", cmd)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("error: %v, output: %s", err, string(out))
+		}
+	}
+	return nil
 }
