@@ -20,6 +20,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strconv"
@@ -105,6 +106,27 @@ func (p *PostgresKeeper) getOurReplConnString() string {
 	return fmt.Sprintf("postgres://%s:%s@%s:%s?sslmode=disable", p.clusterConfig.PGReplUser, p.clusterConfig.PGReplPassword, p.pgListenAddress, p.pgPort)
 }
 
+func (p *PostgresKeeper) PGRewindIsEnabled(pgBinPath string) bool {
+	ret := false
+	switch p.pg_rewind {
+	case TBD:
+		name := filepath.Join(pgBinPath, "pg_rewind")
+		cmd := exec.Command(name, "-V")
+		log.Debugf("execing cmd: %s", cmd)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			log.Debugf("error: %v, output: %s", err, string(out))
+			p.pg_rewind = Disabled
+		} else {
+			p.pg_rewind = Enabled
+			ret = true
+		}
+	case Enabled:
+		ret = true
+	case Disabled:
+	}
+	return ret
+}
+
 func (p *PostgresKeeper) createPGParameters(followersIDs []string) pg.Parameters {
 	pgParameters := p.clusterConfig.PGParameters
 
@@ -119,6 +141,12 @@ func (p *PostgresKeeper) createPGParameters(followersIDs []string) pg.Parameters
 	// Add some more wal senders, since also the keeper will use them
 	pgParameters["max_wal_senders"] = strconv.FormatUint(uint64(p.clusterConfig.MaxStandbysPerSender+2), 10)
 
+	// for pg_rewind
+	if p.PGRewindIsEnabled(cfg.pgBinPath) {
+		pgParameters["wal_log_hints"] = fmt.Sprintf("on")
+		pgParameters["full_page_writes"] = fmt.Sprintf("on")
+	}
+
 	// Setup synchronous replication
 	if p.clusterConfig.SynchronousReplication {
 		pgParameters["synchronous_standby_names"] = strings.Join(followersIDs, ",")
@@ -128,6 +156,12 @@ func (p *PostgresKeeper) createPGParameters(followersIDs []string) pg.Parameters
 
 	return pgParameters
 }
+
+const (
+	TBD = iota
+	Enabled
+	Disabled
+)
 
 type PostgresKeeper struct {
 	id      string
@@ -149,6 +183,8 @@ type PostgresKeeper struct {
 
 	pgStateMutex sync.Mutex
 	lastPGState  *cluster.PostgresState
+
+	pg_rewind int
 }
 
 func NewPostgresKeeper(id string, cfg config, stop chan bool, end chan error) (*PostgresKeeper, error) {
@@ -184,6 +220,7 @@ func NewPostgresKeeper(id string, cfg config, stop chan bool, end chan error) (*
 		clusterConfig:   clusterConfig,
 		stop:            stop,
 		end:             end,
+		pg_rewind:       TBD,
 	}
 
 	followersIDs := cv.GetFollowersIDs(p.id)
@@ -377,16 +414,14 @@ func (p *PostgresKeeper) fullResync(master *cluster.KeeperState, initialized, st
 			return fmt.Errorf("failed to stop pg instance: %v", err)
 		}
 	}
-	err := pgm.RemoveAll()
-	if err != nil {
-		return fmt.Errorf("failed to remove the postgres data dir: %v", err)
-	}
+
 	replConnString := p.getReplConnString(master)
 	log.Infof("syncing from master %q with connection url %q", master.ID, replConnString)
-	err = pgm.SyncFromMaster(replConnString)
+	err := pgm.SyncFromMaster(replConnString)
 	if err != nil {
 		return fmt.Errorf("error: %v", err)
 	}
+
 	log.Infof("sync from master %q successfully finished", master.ID)
 
 	err = pgm.BecomeStandby(replConnString)
