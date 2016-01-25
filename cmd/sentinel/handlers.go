@@ -48,7 +48,7 @@ func (s *Sentinel) updateConfigHandler(w http.ResponseWriter, req *http.Request)
 	s.updateMutex.Lock()
 	defer s.updateMutex.Unlock()
 
-	if !isLeader(s.l, s.id) {
+	if !s.isLeader() {
 		log.Errorf("we aren't the sentinels leader. cannot process config update request.")
 		http.Error(w, "we aren't the sentinels leader. cannot process config update request.", http.StatusBadRequest)
 	}
@@ -57,14 +57,10 @@ func (s *Sentinel) updateConfigHandler(w http.ResponseWriter, req *http.Request)
 
 	e := s.e
 
-	cd, res, err := e.GetClusterData()
+	cd, pair, err := e.GetClusterData()
 	if err != nil {
 		log.Errorf("error retrieving cluster data: %v", err)
 		http.Error(w, fmt.Sprintf("error retrieving cluster data: %v", err), http.StatusInternalServerError)
-	}
-	var prevCDIndex uint64
-	if res != nil {
-		prevCDIndex = res.Node.ModifiedIndex
 	}
 
 	if cd == nil {
@@ -81,8 +77,7 @@ func (s *Sentinel) updateConfigHandler(w http.ResponseWriter, req *http.Request)
 	newcv := cd.ClusterView.Copy()
 	newcv.Config = config
 	newcv.Version += 1
-	_, err = e.SetClusterData(cd.KeepersState, newcv, prevCDIndex)
-	if err != nil {
+	if _, err := e.SetClusterData(cd.KeepersState, newcv, pair); err != nil {
 		log.Errorf("error saving clusterdata: %v", err)
 		http.Error(w, fmt.Sprintf("error saving clusterdata: %v", err), http.StatusInternalServerError)
 	}

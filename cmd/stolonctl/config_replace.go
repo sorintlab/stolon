@@ -23,7 +23,7 @@ import (
 	"path/filepath"
 
 	"github.com/sorintlab/stolon/common"
-	etcdm "github.com/sorintlab/stolon/pkg/etcd"
+	"github.com/sorintlab/stolon/pkg/store"
 
 	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/spf13/cobra"
 )
@@ -46,8 +46,13 @@ func init() {
 	cmdConfig.AddCommand(cmdConfigReplace)
 }
 
-func replaceConfig(e *etcdm.EtcdManager, config []byte) error {
-	lsi, _, err := e.GetLeaderSentinelInfo()
+func replaceConfig(e *store.StoreManager, config []byte) error {
+	lsid, err := e.GetLeaderSentinelId()
+	if err != nil {
+		die("cannot get leader sentinel info")
+	}
+
+	lsi, _, err := e.GetSentinelInfo(lsid)
 	if lsi == nil {
 		return fmt.Errorf("leader sentinel info not available")
 	}
@@ -88,11 +93,13 @@ func configReplace(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	etcdPath := filepath.Join(common.EtcdBasePath, cfg.clusterName)
-	e, err := etcdm.NewEtcdManager(cfg.etcdEndpoints, etcdPath, common.DefaultEtcdRequestTimeout)
+	storePath := filepath.Join(common.StoreBasePath, cfg.clusterName)
+
+	kvstore, err := store.NewStore(store.Backend(cfg.storeBackend), cfg.storeEndpoints)
 	if err != nil {
-		die("error: %v", err)
+		die("cannot create store: %v", err)
 	}
+	e := store.NewStoreManager(kvstore, storePath)
 
 	if err = replaceConfig(e, config); err != nil {
 		die("error: %v", err)

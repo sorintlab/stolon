@@ -24,7 +24,7 @@ Use the `go` command:
 
 UUID package requires any stable version of Go Programming Language.
 
-It is tested against following versions of Go: 1.0, 1.1, 1.2
+It is tested against following versions of Go: 1.0-1.5
 
 ## Example
 
@@ -60,7 +60,7 @@ func main() {
 
 ## Copyright
 
-Copyright (C) 2013 by Maxim Bublis <b@codemonkey.ru>.
+Copyright (C) 2013-2015 by Maxim Bublis <b@codemonkey.ru>.
 
 UUID package released under MIT License.
 See [LICENSE](https://github.com/satori/go.uuid/blob/master/LICENSE) for details.

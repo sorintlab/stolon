@@ -17,7 +17,7 @@ For a more stable testing you can use `sorintlab/stolon:latest`
 
 ## Cluster setup and tests
 
-These example points to a single node etcd cluster on `http://10.245.1.1:4001`. You can change the ST${COMPONENT}_ETCD_ENDPOINTS environment variables in the definitions to point to the right etcd cluster.
+These example points to a single node etcd cluster on `10.245.1.1:2379` without tls. You can change the ST${COMPONENT}_STORE_ENDPOINTS environment variables in the definitions to point to the right etcd cluster.
 
 ### Create the sentinel(s)
 

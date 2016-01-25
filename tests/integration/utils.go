@@ -20,20 +20,20 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/sorintlab/stolon/common"
 	"github.com/sorintlab/stolon/pkg/cluster"
-	etcdm "github.com/sorintlab/stolon/pkg/etcd"
+	"github.com/sorintlab/stolon/pkg/store"
 
-	etcd "github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/coreos/etcd/client"
+	kvstore "github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/docker/libkv/store"
 	_ "github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/lib/pq"
 	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/satori/go.uuid"
 	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/sgotti/gexpect"
@@ -137,7 +137,7 @@ type TestKeeper struct {
 	db              *sql.DB
 }
 
-func NewTestKeeperWithID(dir string, id string, clusterName string, etcdEndpoints string, a ...string) (*TestKeeper, error) {
+func NewTestKeeperWithID(dir string, id string, clusterName string, storeBackend store.Backend, storeEndpoints string, a ...string) (*TestKeeper, error) {
 	args := []string{}
 
 	dataDir := filepath.Join(dir, fmt.Sprintf("st%s", id))
@@ -164,7 +164,8 @@ func NewTestKeeperWithID(dir string, id string, clusterName string, etcdEndpoint
 	args = append(args, fmt.Sprintf("--port=%s", port))
 	args = append(args, fmt.Sprintf("--pg-port=%s", pgPort))
 	args = append(args, fmt.Sprintf("--data-dir=%s", dataDir))
-	args = append(args, fmt.Sprintf("--etcd-endpoints=%s", etcdEndpoints))
+	args = append(args, fmt.Sprintf("--store-backend=%s", storeBackend))
+	args = append(args, fmt.Sprintf("--store-endpoints=%s", storeEndpoints))
 	args = append(args, "--debug")
 	args = append(args, a...)
 
@@ -195,11 +196,11 @@ func NewTestKeeperWithID(dir string, id string, clusterName string, etcdEndpoint
 	return tk, nil
 }
 
-func NewTestKeeper(dir string, clusterName string, etcdEndpoints string, a ...string) (*TestKeeper, error) {
+func NewTestKeeper(dir string, clusterName string, storeBackend store.Backend, storeEndpoints string, a ...string) (*TestKeeper, error) {
 	u := uuid.NewV4()
 	id := fmt.Sprintf("%x", u[:4])
 
-	return NewTestKeeperWithID(dir, id, clusterName, etcdEndpoints, a...)
+	return NewTestKeeperWithID(dir, id, clusterName, storeBackend, storeEndpoints, a...)
 }
 
 func (tk *TestKeeper) Exec(query string, args ...interface{}) (sql.Result, error) {
@@ -412,7 +413,7 @@ type TestSentinel struct {
 	port          string
 }
 
-func NewTestSentinel(dir string, clusterName string, etcdEndpoints string) (*TestSentinel, error) {
+func NewTestSentinel(dir string, clusterName string, storeBackend store.Backend, storeEndpoints string) (*TestSentinel, error) {
 	u := uuid.NewV4()
 	id := fmt.Sprintf("%x", u[:4])
 
@@ -429,7 +430,8 @@ func NewTestSentinel(dir string, clusterName string, etcdEndpoints string) (*Tes
 	args := []string{}
 	args = append(args, fmt.Sprintf("--cluster-name=%s", clusterName))
 	args = append(args, fmt.Sprintf("--port=%s", port))
-	args = append(args, fmt.Sprintf("--etcd-endpoints=%s", etcdEndpoints))
+	args = append(args, fmt.Sprintf("--store-backend=%s", storeBackend))
+	args = append(args, fmt.Sprintf("--store-endpoints=%s", storeEndpoints))
 	args = append(args, "--debug")
 
 	bin := os.Getenv("STSENTINEL_BIN")
@@ -456,7 +458,7 @@ type TestProxy struct {
 	port          string
 }
 
-func NewTestProxy(dir string, clusterName string, etcdEndpoints string, a ...string) (*TestProxy, error) {
+func NewTestProxy(dir string, clusterName string, storeBackend store.Backend, storeEndpoints string, a ...string) (*TestProxy, error) {
 	u := uuid.NewV4()
 	id := fmt.Sprintf("%x", u[:4])
 
@@ -473,7 +475,8 @@ func NewTestProxy(dir string, clusterName string, etcdEndpoints string, a ...str
 	args := []string{}
 	args = append(args, fmt.Sprintf("--cluster-name=%s", clusterName))
 	args = append(args, fmt.Sprintf("--port=%s", port))
-	args = append(args, fmt.Sprintf("--etcd-endpoints=%s", etcdEndpoints))
+	args = append(args, fmt.Sprintf("--store-backend=%s", storeBackend))
+	args = append(args, fmt.Sprintf("--store-endpoints=%s", storeEndpoints))
 	args = append(args, "--debug")
 	args = append(args, a...)
 
@@ -520,16 +523,27 @@ func (tp *TestProxy) WaitNotListening(timeout time.Duration) error {
 	return fmt.Errorf("timeout")
 }
 
-type TestEtcd struct {
+type TestStore struct {
 	Process
 
 	listenAddress string
 	port          string
-	eClient       etcd.Client
-	kAPI          etcd.KeysAPI
+	store         kvstore.Store
+	storeBackend  store.Backend
 }
 
-func NewTestEtcd(dir string, a ...string) (*TestEtcd, error) {
+func NewTestStore(dir string, a ...string) (*TestStore, error) {
+	storeBackend := store.Backend(os.Getenv("STOLON_TEST_STORE_BACKEND"))
+	switch storeBackend {
+	case store.CONSUL:
+		return NewTestConsul(dir, a...)
+	case store.ETCD:
+		return NewTestEtcd(dir, a...)
+	}
+	return nil, fmt.Errorf("wrong store backend")
+}
+
+func NewTestEtcd(dir string, a ...string) (*TestStore, error) {
 	u := uuid.NewV4()
 	id := fmt.Sprintf("%x", u[:4])
 
@@ -562,22 +576,18 @@ func NewTestEtcd(dir string, a ...string) (*TestEtcd, error) {
 	args = append(args, fmt.Sprintf("--initial-cluster=%s=http://%s:%s", id, listenAddress2, port2))
 	args = append(args, a...)
 
-	etcdEndpoints := fmt.Sprintf("http://%s:%s", listenAddress, port)
-	eCfg := etcd.Config{
-		Transport: &http.Transport{},
-		Endpoints: strings.Split(etcdEndpoints, ","),
-	}
-	eClient, err := etcd.New(eCfg)
+	storeEndpoints := fmt.Sprintf("%s:%s", listenAddress, port)
+
+	kvstore, err := store.NewStore(store.ETCD, storeEndpoints)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("cannot create store: %v", err)
 	}
-	kAPI := etcd.NewKeysAPI(eClient)
 
 	bin := os.Getenv("ETCD_BIN")
 	if bin == "" {
 		return nil, fmt.Errorf("missing ETCD_BIN env")
 	}
-	te := &TestEtcd{
+	te := &TestStore{
 		Process: Process{
 			id:   id,
 			name: "etcd",
@@ -586,16 +596,100 @@ func NewTestEtcd(dir string, a ...string) (*TestEtcd, error) {
 		},
 		listenAddress: listenAddress,
 		port:          port,
-		eClient:       eClient,
-		kAPI:          kAPI,
+		store:         kvstore,
+		storeBackend:  store.ETCD,
 	}
 	return te, nil
 }
 
-func (te *TestEtcd) WaitUp(timeout time.Duration) error {
+func NewTestConsul(dir string, a ...string) (*TestStore, error) {
+	u := uuid.NewV4()
+	id := fmt.Sprintf("%x", u[:4])
+
+	dataDir := filepath.Join(dir, "consul")
+
+	listenAddress, portHTTP, err := getFreeTCPPort()
+	if err != nil {
+		return nil, err
+	}
+	_, portRPC, err := getFreeTCPPort()
+	if err != nil {
+		return nil, err
+	}
+	_, portSerfLan, err := getFreeTCPUDPPort()
+	if err != nil {
+		return nil, err
+	}
+	_, portSerfWan, err := getFreeTCPUDPPort()
+	if err != nil {
+		return nil, err
+	}
+	_, portServer, err := getFreeTCPPort()
+	if err != nil {
+		return nil, err
+	}
+
+	f, err := ioutil.TempFile(dir, "consul.json")
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	f.WriteString(fmt.Sprintf(`{
+		"ports": {
+			"dns": -1,
+			"http": %s,
+			"rpc": %s,
+			"serf_lan": %s,
+			"serf_wan": %s,
+			"server": %s
+		}
+	}`, portHTTP, portRPC, portSerfLan, portSerfWan, portServer))
+
+	args := []string{}
+	args = append(args, "agent")
+	args = append(args, "-server")
+	args = append(args, fmt.Sprintf("-config-file=%s", f.Name()))
+	args = append(args, fmt.Sprintf("-data-dir=%s", dataDir))
+	args = append(args, fmt.Sprintf("-bind=%s", listenAddress))
+	args = append(args, fmt.Sprintf("-advertise=%s", listenAddress))
+	args = append(args, "-bootstrap-expect=1")
+	args = append(args, a...)
+
+	storeEndpoints := fmt.Sprintf("%s:%s", listenAddress, portHTTP)
+
+	kvstore, err := store.NewStore(store.CONSUL, storeEndpoints)
+	if err != nil {
+		return nil, fmt.Errorf("cannot create store: %v", err)
+	}
+
+	bin := os.Getenv("CONSUL_BIN")
+	if bin == "" {
+		return nil, fmt.Errorf("missing CONSUL_BIN env")
+	}
+	te := &TestStore{
+		Process: Process{
+			id:   id,
+			name: "consul",
+			bin:  bin,
+			args: args,
+		},
+		listenAddress: listenAddress,
+		port:          portHTTP,
+		store:         kvstore,
+		storeBackend:  store.CONSUL,
+	}
+	return te, nil
+}
+
+func (te *TestStore) WaitUp(timeout time.Duration) error {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
-		_, err := te.GetEtcdNode(timeout-time.Now().Sub(start), "/")
+		_, err := te.store.Get("anykey")
+		fmt.Printf("err: %v\n", err)
+		if err != nil && err == kvstore.ErrKeyNotFound {
+			return nil
+		}
 		if err == nil {
 			return nil
 		}
@@ -605,11 +699,11 @@ func (te *TestEtcd) WaitUp(timeout time.Duration) error {
 	return fmt.Errorf("timeout")
 }
 
-func (te *TestEtcd) WaitDown(timeout time.Duration) error {
+func (te *TestStore) WaitDown(timeout time.Duration) error {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
-		_, err := te.GetEtcdNode(timeout-time.Now().Sub(start), "/")
-		if err != nil {
+		_, err := te.store.Get("anykey")
+		if err != nil && err != kvstore.ErrKeyNotFound {
 			return nil
 		}
 		time.Sleep(2 * time.Second)
@@ -618,18 +712,7 @@ func (te *TestEtcd) WaitDown(timeout time.Duration) error {
 	return fmt.Errorf("timeout")
 }
 
-func (te *TestEtcd) GetEtcdNode(timeout time.Duration, path string) (*etcd.Node, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
-	res, err := te.kAPI.Get(ctx, path, &etcd.GetOptions{Quorum: true})
-	if err != nil {
-		return nil, err
-	}
-	return res.Node, nil
-}
-
-func WaitClusterViewMaster(master string, e *etcdm.EtcdManager, timeout time.Duration) error {
+func WaitClusterViewMaster(master string, e *store.StoreManager, timeout time.Duration) error {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
 		cv, _, err := e.GetClusterView()
@@ -646,4 +729,40 @@ func WaitClusterViewMaster(master string, e *etcdm.EtcdManager, timeout time.Dur
 	}
 	return fmt.Errorf("timeout")
 
+}
+
+// Hack to find a free tcp port
+func getFreeTCPPort() (string, string, error) {
+	ln, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		return "", "", err
+	}
+	defer ln.Close()
+
+	listenAddress := ln.Addr().(*net.TCPAddr).IP.String()
+	port := strconv.Itoa(ln.Addr().(*net.TCPAddr).Port)
+	return listenAddress, port, nil
+}
+
+// Hack to find a free tcp and udp port with same number
+func getFreeTCPUDPPort() (string, string, error) {
+	for c := 0; c < 10; c++ {
+		ln, err := net.Listen("tcp", "localhost:0")
+		if err != nil {
+			return "", "", err
+		}
+
+		listenAddress := ln.Addr().(*net.TCPAddr).IP.String()
+		port := strconv.Itoa(ln.Addr().(*net.TCPAddr).Port)
+
+		ln.Close()
+
+		lnudp, err := net.ListenPacket("udp", fmt.Sprintf("%s:%s", listenAddress, port))
+		if err != nil {
+			return "", "", err
+		}
+		lnudp.Close()
+		return listenAddress, port, nil
+	}
+	return "", "", fmt.Errorf("failed to find free tcp and udp port")
 }

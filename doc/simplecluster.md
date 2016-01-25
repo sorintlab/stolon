@@ -2,7 +2,7 @@
 
 These are the steps to setup and test a simple cluster.
 
-This example assumes a running etcd server on localhost
+This example assumes a running etcd or consul server on localhost
 
 Note: under ubuntu the `initdb` command is not provided in the path. You should updated the exported `PATH` env variable or provide the `--pg-bin-path` command line option to the `stolon-keeper` command.
 

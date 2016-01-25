@@ -30,13 +30,13 @@ import (
 
 	"github.com/sorintlab/stolon/common"
 	"github.com/sorintlab/stolon/pkg/cluster"
-	etcdm "github.com/sorintlab/stolon/pkg/etcd"
 	"github.com/sorintlab/stolon/pkg/flagutil"
 	"github.com/sorintlab/stolon/pkg/kubernetes"
+	"github.com/sorintlab/stolon/pkg/store"
 
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/coreos/fleet/pkg/lease"
 	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/coreos/pkg/capnslog"
 	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/davecgh/go-spew/spew"
+	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/docker/swarm/leadership"
 	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/jmoiron/jsonq"
 	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/satori/go.uuid"
 	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/spf13/cobra"
@@ -51,7 +51,8 @@ var cmdSentinel = &cobra.Command{
 }
 
 type config struct {
-	etcdEndpoints           string
+	storeBackend            string
+	storeEndpoints          string
 	clusterName             string
 	listenAddress           string
 	port                    string
@@ -63,7 +64,8 @@ type config struct {
 var cfg config
 
 func init() {
-	cmdSentinel.PersistentFlags().StringVar(&cfg.etcdEndpoints, "etcd-endpoints", common.DefaultEtcdEndpoints, "a comma-delimited list of etcd endpoints")
+	cmdSentinel.PersistentFlags().StringVar(&cfg.storeBackend, "store-backend", "", "store backend type (etcd or consul)")
+	cmdSentinel.PersistentFlags().StringVar(&cfg.storeEndpoints, "store-endpoints", "", "a comma-delimited list of store endpoints (defaults: 127.0.0.1:2379 for etcd, 127.0.0.1:8500 for consul)")
 	cmdSentinel.PersistentFlags().StringVar(&cfg.clusterName, "cluster-name", "", "cluster name")
 	cmdSentinel.PersistentFlags().StringVar(&cfg.listenAddress, "listen-address", "localhost", "sentinel listening address")
 	cmdSentinel.PersistentFlags().StringVar(&cfg.port, "port", "6431", "sentinel listening port")
@@ -76,72 +78,41 @@ func init() {
 	capnslog.SetFormatter(capnslog.NewPrettyFormatter(os.Stderr, true))
 }
 
-func acquireLeadership(lManager lease.Manager, machID string, ver int, ttl time.Duration) lease.Lease {
-	existing, err := lManager.GetLease(common.SentinelLeaseName)
-	if err != nil {
-		log.Errorf("unable to determine current lessee: %v", err)
-		return nil
-	}
-
-	var l lease.Lease
-	if existing == nil {
-		l, err = lManager.AcquireLease(common.SentinelLeaseName, machID, ver, ttl)
+func (s *Sentinel) electionLoop() {
+	for {
+		log.Infof("Trying to acquire sentinels leadership")
+		electedCh, errCh, err := s.candidate.RunForElection()
 		if err != nil {
-			log.Errorf("sentinel leadership acquisition failed: %v", err)
-			return nil
-		} else if l == nil {
-			log.Debugf("unable to acquire sentinel leadership")
-			return nil
+			return
 		}
-		log.Infof("sentinel leadership acquired")
-		return l
+		for {
+			select {
+			case elected := <-electedCh:
+				s.leaderMutex.Lock()
+				if elected {
+					log.Infof("sentinel leadership acquired")
+					s.leader = true
+				} else {
+					if s.leader {
+						log.Infof("sentinel leadership lost")
+					}
+					s.leader = false
+				}
+				s.leaderMutex.Unlock()
+
+			case err := <-errCh:
+				if err != nil {
+					log.Errorf("election loop error: %v", err)
+				}
+				goto end
+			case <-s.stop:
+				log.Debugf("stopping election Loop")
+				return
+			}
+		}
+	end:
+		time.Sleep(10 * time.Second)
 	}
-
-	if existing.Version() >= ver {
-		log.Debugf("lease already held by Machine(%s) operating at acceptable version %d", existing.MachineID(), existing.Version())
-		return existing
-	}
-
-	rem := existing.TimeRemaining()
-	l, err = lManager.StealLease(common.SentinelLeaseName, machID, ver, ttl+rem, existing.Index())
-	if err != nil {
-		log.Errorf("sentinel leadership steal failed: %v", err)
-		return nil
-	} else if l == nil {
-		log.Debugf("unable to steal sentinel leadership")
-		return nil
-	}
-
-	log.Infof("stole sentinel leadership from Machine(%s)", existing.MachineID())
-
-	if rem > 0 {
-		log.Infof("waiting %v for previous lease to expire before continuing reconciliation", rem)
-		<-time.After(rem)
-	}
-
-	return l
-}
-
-func renewLeadership(l lease.Lease, ttl time.Duration) lease.Lease {
-	err := l.Renew(ttl)
-
-	if err != nil {
-		log.Errorf("sentinel leadership lost, renewal failed: %v", err)
-		return nil
-	}
-
-	log.Debugf("sentinel leadership renewed")
-	return l
-}
-
-func isLeader(l lease.Lease, machID string) bool {
-	if l == nil {
-		return false
-	}
-	if l.MachineID() != machID {
-		return false
-	}
-	return true
 }
 
 func getKeeperInfo(ctx context.Context, kdi *cluster.KeeperDiscoveryInfo) (*cluster.KeeperInfo, error) {
@@ -220,21 +191,7 @@ func (s *Sentinel) setSentinelInfo(ttl time.Duration) error {
 	}
 	log.Debugf(spew.Sprintf("sentinelInfo: %#v", sentinelInfo))
 
-	if _, err := s.e.SetSentinelInfo(sentinelInfo, ttl); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (s *Sentinel) setLeaderSentinelInfo(ttl time.Duration) error {
-	sentinelInfo := &cluster.SentinelInfo{
-		ID:            s.id,
-		ListenAddress: s.listenAddress,
-		Port:          s.port,
-	}
-	log.Debugf(spew.Sprintf("sentinelInfo: %#v", sentinelInfo))
-
-	if _, err := s.e.SetLeaderSentinelInfo(sentinelInfo, ttl); err != nil {
+	if err := s.e.SetSentinelInfo(sentinelInfo, ttl); err != nil {
 		return err
 	}
 	return nil
@@ -654,26 +611,30 @@ func (s *Sentinel) isKeeperConverged(keeperState *cluster.KeeperState, cv *clust
 }
 
 type Sentinel struct {
-	id       string
-	e        *etcdm.EtcdManager
-	lManager lease.Manager
-	l        lease.Lease
-	stop     chan bool
-	end      chan bool
+	id string
+	e  *store.StoreManager
+
+	candidate *leadership.Candidate
+	stop      chan bool
+	end       chan bool
 
 	listenAddress string
 	port          string
 
 	clusterConfig *cluster.Config
 	updateMutex   sync.Mutex
+	leader        bool
+	leaderMutex   sync.Mutex
 }
 
 func NewSentinel(id string, cfg config, stop chan bool, end chan bool) (*Sentinel, error) {
-	etcdPath := filepath.Join(common.EtcdBasePath, cfg.clusterName)
-	e, err := etcdm.NewEtcdManager(cfg.etcdEndpoints, etcdPath, common.DefaultEtcdRequestTimeout)
+	storePath := filepath.Join(common.StoreBasePath, cfg.clusterName)
+
+	kvstore, err := store.NewStore(store.Backend(cfg.storeBackend), cfg.storeEndpoints)
 	if err != nil {
-		return nil, fmt.Errorf("cannot create etcd manager: %v", err)
+		return nil, fmt.Errorf("cannot create store: %v", err)
 	}
+	e := store.NewStoreManager(kvstore, storePath)
 
 	cd, _, err := e.GetClusterData()
 	if err != nil {
@@ -694,14 +655,15 @@ func NewSentinel(id string, cfg config, stop chan bool, end chan bool) (*Sentine
 	}
 	log.Debugf(spew.Sprintf("clusterConfig: %#v", clusterConfig))
 
-	lManager := e.NewLeaseManager()
+	candidate := leadership.NewCandidate(kvstore, filepath.Join(storePath, common.SentinelLeaderKey), id, 15*time.Second)
 
 	return &Sentinel{
 		id:            id,
 		e:             e,
 		listenAddress: cfg.listenAddress,
 		port:          cfg.port,
-		lManager:      lManager,
+		candidate:     candidate,
+		leader:        false,
 		clusterConfig: clusterConfig,
 		stop:          stop,
 		end:           end}, nil
@@ -719,11 +681,14 @@ func (s *Sentinel) Start() {
 	ctx, cancel := context.WithCancel(context.Background())
 	timerCh := time.NewTimer(0).C
 
+	go s.electionLoop()
+
 	for true {
 		select {
 		case <-s.stop:
 			log.Debugf("stopping stolon sentinel")
 			cancel()
+			s.candidate.Stop()
 			s.end <- true
 			return
 		case <-timerCh:
@@ -742,19 +707,21 @@ func (s *Sentinel) Start() {
 	}
 }
 
+func (s *Sentinel) isLeader() bool {
+	s.leaderMutex.Lock()
+	defer s.leaderMutex.Unlock()
+	return s.leader
+}
+
 func (s *Sentinel) clusterSentinelCheck(pctx context.Context) {
 	s.updateMutex.Lock()
 	defer s.updateMutex.Unlock()
 	e := s.e
 
-	cd, res, err := e.GetClusterData()
+	cd, prevCDPair, err := e.GetClusterData()
 	if err != nil {
 		log.Errorf("error retrieving cluster data: %v", err)
 		return
-	}
-	var prevCDIndex uint64
-	if res != nil {
-		prevCDIndex = res.Node.ModifiedIndex
 	}
 
 	var cv *cluster.ClusterView
@@ -774,12 +741,9 @@ func (s *Sentinel) clusterSentinelCheck(pctx context.Context) {
 	s.clusterConfig = cv.Config.ToConfig()
 
 	if err := s.setSentinelInfo(2 * s.clusterConfig.SleepInterval); err != nil {
-		log.Errorf("cannot update leader sentinel info: %v", err)
+		log.Errorf("cannot update sentinel info: %v", err)
 		return
 	}
-
-	// TODO(sgotti) better ways to calculate leaseTTL?
-	leaseTTL := s.clusterConfig.SleepInterval + s.clusterConfig.RequestTimeout*4
 
 	ctx, cancel := context.WithTimeout(pctx, s.clusterConfig.RequestTimeout)
 	keepersDiscoveryInfo, err := s.discover(ctx)
@@ -804,29 +768,7 @@ func (s *Sentinel) clusterSentinelCheck(pctx context.Context) {
 	cancel()
 	log.Debugf(spew.Sprintf("keepersPGState: %#v", keepersPGState))
 
-	var l lease.Lease
-	if isLeader(s.l, s.id) {
-		log.Infof("I'm the sentinels leader")
-		l = renewLeadership(s.l, leaseTTL)
-	} else {
-		log.Infof("trying to acquire sentinels leadership")
-		l = acquireLeadership(s.lManager, s.id, 1, leaseTTL)
-	}
-
-	// log all leadership changes
-	if l != nil && s.l == nil && l.MachineID() != s.id {
-		log.Infof("sentinel leader is %s", l.MachineID())
-	} else if l != nil && s.l != nil && l.MachineID() != l.MachineID() {
-		log.Infof("sentinel leadership changed from %s to %s", l.MachineID(), l.MachineID())
-	}
-
-	s.l = l
-
-	if !isLeader(s.l, s.id) {
-		return
-	}
-	if err := s.setLeaderSentinelInfo(leaseTTL); err != nil {
-		log.Errorf("cannot update leader sentinel info: %v", err)
+	if !s.isLeader() {
 		return
 	}
 
@@ -834,8 +776,7 @@ func (s *Sentinel) clusterSentinelCheck(pctx context.Context) {
 		// Cluster first initialization
 		newcv := cluster.NewClusterView()
 		newcv.Version = 1
-		_, err = e.SetClusterData(nil, newcv, 0)
-		if err != nil {
+		if _, err = e.SetClusterData(nil, newcv, nil); err != nil {
 			log.Errorf("error saving clusterdata: %v", err)
 		}
 		return
@@ -854,8 +795,7 @@ func (s *Sentinel) clusterSentinelCheck(pctx context.Context) {
 		log.Debugf("newcv changed from previous cv")
 	}
 
-	_, err = e.SetClusterData(newKeepersState, newcv, prevCDIndex)
-	if err != nil {
+	if _, err := e.SetClusterData(newKeepersState, newcv, prevCDPair); err != nil {
 		log.Errorf("error saving clusterdata: %v", err)
 	}
 }
@@ -879,6 +819,9 @@ func sentinel(cmd *cobra.Command, args []string) {
 	}
 	if cfg.clusterName == "" {
 		log.Fatalf("cluster name required")
+	}
+	if cfg.storeBackend == "" {
+		log.Fatalf("store backend type required")
 	}
 	if kubernetes.OnKubernetes() {
 		if cfg.keeperKubeLabelSelector == "" {

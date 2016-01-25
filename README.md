@@ -9,7 +9,7 @@ stolon is a cloud native PostgreSQL manager for PostgreSQL high availability. It
 
 * Leverages PostgreSQL streaming replication.
 * [kubernetes integration](examples/kubernetes/README.md) letting you achieve postgreSQL high availability.
-* Uses [etcd](https://github.com/coreos/etcd) as an high available data store and for leader election
+* Uses a cluster store like [etcd](https://github.com/coreos/etcd) or [consul](https://www.consul.io) as an high available data store and for leader election
 * Asynchronous (default) and [synchronous](doc/syncrepl.md) replication.
 * Full cluster setup in minutes.
 * Easy [cluster admininistration](doc/stolonctl.md)
@@ -26,12 +26,12 @@ Stolon is composed of 3 main components
 
 ## Project Status
 
-Stolon is under active development and used in different environments. But its on disk format (etcd hierarchy and key contents) is not stable and will change for introducing new features. We hope that at the end of the year (2015) the most breaking changes will be merged and we can commit to a stable on disk format.
+Stolon is under active development and used in different environments. But its on disk format (store hierarchy and key contents) is not stable and will change for introducing new features. We hope that at the end of the year (2015) the most breaking changes will be merged and we can commit to a stable on disk format.
 
 ## Requirements
 
 * PostgreSQL >= 9.4
-* etcd >= 2.0
+* etcd >= 2.0 or consul >=0.6
 
 
 ## build

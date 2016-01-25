@@ -14,17 +14,10 @@
 
 package common
 
-import "time"
-
 const (
-	EtcdBasePath  = "/stolon/cluster"
-	EtcdLeaderKey = "leader"
+	StoreBasePath = "stolon/cluster"
 
-	SentinelLeaseName = "sentinel-leader"
-
-	DefaultEtcdRequestTimeout = 5 * time.Second
-
-	DefaultEtcdEndpoints = "http://127.0.0.1:4001,http://127.0.0.1:2379"
+	SentinelLeaderKey = "sentinel-leader"
 )
 
 type Role uint8

@@ -24,7 +24,7 @@ import (
 
 	"github.com/sorintlab/stolon/common"
 	"github.com/sorintlab/stolon/pkg/cluster"
-	etcdm "github.com/sorintlab/stolon/pkg/etcd"
+	"github.com/sorintlab/stolon/pkg/store"
 
 	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/satori/go.uuid"
 )
@@ -36,41 +36,42 @@ func TestServerParameters(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 
-	te, err := NewTestEtcd(dir)
+	tstore, err := NewTestStore(dir)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	if err := te.Start(); err != nil {
+	if err := tstore.Start(); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	if err := te.WaitUp(10 * time.Second); err != nil {
-		t.Fatalf("error waiting on etcd up: %v", err)
+	if err := tstore.WaitUp(10 * time.Second); err != nil {
+		t.Fatalf("error waiting on store up: %v", err)
 	}
-	etcdEndpoints := fmt.Sprintf("http://%s:%s", te.listenAddress, te.port)
-	defer te.Stop()
+	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
+	defer tstore.Stop()
 
 	clusterName := uuid.NewV4().String()
 
-	etcdPath := filepath.Join(common.EtcdBasePath, clusterName)
-	e, err := etcdm.NewEtcdManager(etcdEndpoints, etcdPath, common.DefaultEtcdRequestTimeout)
-	if err != nil {
-		t.Fatalf("cannot create etcd manager: %v", err)
-	}
+	storePath := filepath.Join(common.StoreBasePath, clusterName)
 
-	res, err := e.SetClusterData(cluster.KeepersState{},
+	kvstore, err := store.NewStore(tstore.storeBackend, storeEndpoints)
+	if err != nil {
+		t.Fatalf("cannot create store: %v", err)
+	}
+	e := store.NewStoreManager(kvstore, storePath)
+
+	pair, err := e.SetClusterData(cluster.KeepersState{},
 		&cluster.ClusterView{
 			Version: 1,
 			Config: &cluster.NilConfig{
 				SleepInterval:      &cluster.Duration{5 * time.Second},
 				KeeperFailInterval: &cluster.Duration{10 * time.Second},
 			},
-		}, 0)
+		}, nil)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	prevCDIndex := res.Node.ModifiedIndex
 
-	tk, err := NewTestKeeper(dir, clusterName, etcdEndpoints)
+	tk, err := NewTestKeeper(dir, clusterName, tstore.storeBackend, storeEndpoints)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -84,7 +85,7 @@ func TestServerParameters(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	res, err = e.SetClusterData(cluster.KeepersState{},
+	pair, err = e.SetClusterData(cluster.KeepersState{},
 		&cluster.ClusterView{
 			Version: 2,
 			Master:  tk.id,
@@ -98,11 +99,10 @@ func TestServerParameters(t *testing.T) {
 					"unexistent_parameter": "value",
 				},
 			},
-		}, prevCDIndex)
+		}, pair)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	prevCDIndex = res.Node.ModifiedIndex
 
 	tk.cmd.Expect("postgres parameters changed, reloading postgres instance")
 
@@ -119,7 +119,7 @@ func TestServerParameters(t *testing.T) {
 	tk.cmd.Expect("failed to start postgres:")
 
 	// Fix wrong parameters
-	res, err = e.SetClusterData(cluster.KeepersState{},
+	pair, err = e.SetClusterData(cluster.KeepersState{},
 		&cluster.ClusterView{
 			Version: 2,
 			Master:  tk.id,
@@ -131,11 +131,10 @@ func TestServerParameters(t *testing.T) {
 				KeeperFailInterval: &cluster.Duration{10 * time.Second},
 				PGParameters:       &map[string]string{},
 			},
-		}, prevCDIndex)
+		}, pair)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	prevCDIndex = res.Node.ModifiedIndex
 
 	if err := tk.WaitDBUp(30 * time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)

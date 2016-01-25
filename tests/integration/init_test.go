@@ -31,22 +31,22 @@ func TestInit(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 
-	te, err := NewTestEtcd(dir)
+	tstore, err := NewTestStore(dir)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	if err := te.Start(); err != nil {
+	if err := tstore.Start(); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	if err := te.WaitUp(10 * time.Second); err != nil {
-		t.Fatalf("error waiting on etcd up: %v", err)
+	if err := tstore.WaitUp(10 * time.Second); err != nil {
+		t.Fatalf("error waiting on store up: %v", err)
 	}
-	etcdEndpoints := fmt.Sprintf("http://%s:%s", te.listenAddress, te.port)
-	defer te.Stop()
+	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
+	defer tstore.Stop()
 
 	clusterName := uuid.NewV4().String()
 
-	ts, err := NewTestSentinel(dir, clusterName, etcdEndpoints)
+	ts, err := NewTestSentinel(dir, clusterName, tstore.storeBackend, storeEndpoints)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -54,7 +54,7 @@ func TestInit(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	defer ts.Stop()
-	tk, err := NewTestKeeper(dir, clusterName, etcdEndpoints)
+	tk, err := NewTestKeeper(dir, clusterName, tstore.storeBackend, storeEndpoints)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -78,25 +78,25 @@ func TestExclusiveLock(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 
-	te, err := NewTestEtcd(dir)
+	tstore, err := NewTestStore(dir)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	if err := te.Start(); err != nil {
+	if err := tstore.Start(); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	if err := te.WaitUp(10 * time.Second); err != nil {
-		t.Fatalf("error waiting on etcd up: %v", err)
+	if err := tstore.WaitUp(10 * time.Second); err != nil {
+		t.Fatalf("error waiting on store up: %v", err)
 	}
-	etcdEndpoints := fmt.Sprintf("http://%s:%s", te.listenAddress, te.port)
-	defer te.Stop()
+	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
+	defer tstore.Stop()
 
 	clusterName := uuid.NewV4().String()
 
 	u := uuid.NewV4()
 	id := fmt.Sprintf("%x", u[:4])
 
-	tk1, err := NewTestKeeperWithID(dir, id, clusterName, etcdEndpoints)
+	tk1, err := NewTestKeeperWithID(dir, id, clusterName, tstore.storeBackend, storeEndpoints)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -110,7 +110,7 @@ func TestExclusiveLock(t *testing.T) {
 		t.Fatalf("expecting tk1 up but it's down")
 	}
 
-	tk2, err := NewTestKeeperWithID(dir, id, clusterName, etcdEndpoints)
+	tk2, err := NewTestKeeperWithID(dir, id, clusterName, tstore.storeBackend, storeEndpoints)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -135,14 +135,14 @@ func TestKeeperPGConfDirBad(t *testing.T) {
 
 	clusterName := uuid.NewV4().String()
 
-	te, err := NewTestEtcd(dir)
+	tstore, err := NewTestStore(dir)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	etcdEndpoints := fmt.Sprintf("http://%s:%s", te.listenAddress, te.port)
+	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
 
 	// Test pgConfDir not absolute path
-	tk, err := NewTestKeeper(dir, clusterName, etcdEndpoints, "--pg-conf-dir=not/absolute/path")
+	tk, err := NewTestKeeper(dir, clusterName, tstore.storeBackend, storeEndpoints, "--pg-conf-dir=not/absolute/path")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -155,7 +155,7 @@ func TestKeeperPGConfDirBad(t *testing.T) {
 	}
 
 	// Test unexistent pgConfDir
-	tk2, err := NewTestKeeper(dir, clusterName, etcdEndpoints, "--pg-conf-dir=/unexistent-configuration-directory")
+	tk2, err := NewTestKeeper(dir, clusterName, tstore.storeBackend, storeEndpoints, "--pg-conf-dir=/unexistent-configuration-directory")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -176,7 +176,7 @@ func TestKeeperPGConfDirBad(t *testing.T) {
 		tmpFile.Close()
 		os.Remove(tmpFile.Name())
 	}()
-	tk3, err := NewTestKeeper(dir, clusterName, etcdEndpoints, fmt.Sprintf("--pg-conf-dir=%s", tmpFile.Name()))
+	tk3, err := NewTestKeeper(dir, clusterName, tstore.storeBackend, storeEndpoints, fmt.Sprintf("--pg-conf-dir=%s", tmpFile.Name()))
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -198,20 +198,20 @@ func TestKeeperPGConfDirGood(t *testing.T) {
 
 	clusterName := uuid.NewV4().String()
 
-	te, err := NewTestEtcd(dir)
+	tstore, err := NewTestStore(dir)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	if err := te.Start(); err != nil {
+	if err := tstore.Start(); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	if err := te.WaitUp(10 * time.Second); err != nil {
-		t.Fatalf("error waiting on etcd up: %v", err)
+	if err := tstore.WaitUp(10 * time.Second); err != nil {
+		t.Fatalf("error waiting on store up: %v", err)
 	}
-	etcdEndpoints := fmt.Sprintf("http://%s:%s", te.listenAddress, te.port)
-	defer te.Stop()
+	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
+	defer tstore.Stop()
 
-	ts, err := NewTestSentinel(dir, clusterName, etcdEndpoints)
+	ts, err := NewTestSentinel(dir, clusterName, tstore.storeBackend, storeEndpoints)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -227,7 +227,7 @@ func TestKeeperPGConfDirGood(t *testing.T) {
 	}
 	defer os.Remove(tmpDir)
 
-	tk, err := NewTestKeeper(dir, clusterName, etcdEndpoints, fmt.Sprintf("--pg-conf-dir=%s", tmpDir))
+	tk, err := NewTestKeeper(dir, clusterName, tstore.storeBackend, storeEndpoints, fmt.Sprintf("--pg-conf-dir=%s", tmpDir))
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}

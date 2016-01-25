@@ -22,7 +22,7 @@ import (
 
 	"github.com/sorintlab/stolon/common"
 	"github.com/sorintlab/stolon/pkg/cluster"
-	etcdm "github.com/sorintlab/stolon/pkg/etcd"
+	"github.com/sorintlab/stolon/pkg/store"
 
 	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/spf13/cobra"
 )
@@ -37,7 +37,7 @@ func init() {
 	cmdConfig.AddCommand(cmdConfigGet)
 }
 
-func getConfig(e *etcdm.EtcdManager) (*cluster.NilConfig, error) {
+func getConfig(e *store.StoreManager) (*cluster.NilConfig, error) {
 	cv, _, err := e.GetClusterView()
 	if err != nil {
 		return nil, fmt.Errorf("cannot get clusterview: %v", err)
@@ -53,11 +53,13 @@ func getConfig(e *etcdm.EtcdManager) (*cluster.NilConfig, error) {
 }
 
 func configGet(cmd *cobra.Command, args []string) {
-	etcdPath := filepath.Join(common.EtcdBasePath, cfg.clusterName)
-	e, err := etcdm.NewEtcdManager(cfg.etcdEndpoints, etcdPath, common.DefaultEtcdRequestTimeout)
+	storePath := filepath.Join(common.StoreBasePath, cfg.clusterName)
+
+	kvstore, err := store.NewStore(store.Backend(cfg.storeBackend), cfg.storeEndpoints)
 	if err != nil {
-		die("error: %v", err)
+		die("cannot create store: %v", err)
 	}
+	e := store.NewStoreManager(kvstore, storePath)
 
 	cfg, err := getConfig(e)
 	if err != nil {

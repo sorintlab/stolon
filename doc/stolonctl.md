@@ -2,13 +2,14 @@
 
 `stolonctl` is the stolon client which controls the stolon cluster(s)
 
-It needs to communicate with the etcd cluster (`--etcd-endpoints`) on which the requested cluster name (`--cluster-name`) is running and for certain commands with an active leader sentinel.
+It needs to communicate with the cluster store (providing `--store-backend` and `--store-endpoints` options) on which the requested cluster name (`--cluster-name`) is running and for certain commands with an active leader sentinel.
 
 To avoid repeating for every command (or inside scripts) all the options you can export them as environment variables. Their name will be the same as the option name converted in uppercase, with `_` replacing `-` and prefixed with `STOLONCTL_`.
 
 Ex.
 ```
-STOLONCTL_ETCD_ENDPOINTS
+STOLONCTL_STORE_BACKEND
+STOLONCTL_STORE_ENDPOINTS
 STOLONCTL_CLUSTER_NAME
 ```
 
@@ -49,7 +50,7 @@ postgres0 (master)
 
 ### list-clusters ###
 
-List all the cluster available under the default etcd base path
+List all the cluster available under the default store base path
 
 ### config ###
 

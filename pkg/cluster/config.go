@@ -45,7 +45,7 @@ type NilConfig struct {
 }
 
 type Config struct {
-	// Time after which any request (to etcd, keepers checks from sentinel etc...) will fail.
+	// Time after which any request (keepers checks from sentinel etc...) will fail.
 	RequestTimeout time.Duration
 	// Interval to wait before next check (for every component: keeper, sentinel, proxy).
 	SleepInterval time.Duration

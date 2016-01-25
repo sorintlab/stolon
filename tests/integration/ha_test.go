@@ -26,30 +26,34 @@ import (
 	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/satori/go.uuid"
 	"github.com/sorintlab/stolon/common"
 	"github.com/sorintlab/stolon/pkg/cluster"
-	etcdm "github.com/sorintlab/stolon/pkg/etcd"
+	"github.com/sorintlab/stolon/pkg/store"
 )
 
-func setupServers(t *testing.T, dir string, numKeepers, numSentinels uint8, syncRepl bool) ([]*TestKeeper, []*TestSentinel, *TestEtcd) {
-	te, err := NewTestEtcd(dir)
+func setupServers(t *testing.T, dir string, numKeepers, numSentinels uint8, syncRepl bool) ([]*TestKeeper, []*TestSentinel, *TestStore) {
+	tstore, err := NewTestStore(dir)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	if err := te.Start(); err != nil {
+	if err := tstore.Start(); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	if err := te.WaitUp(10 * time.Second); err != nil {
-		t.Fatalf("error waiting on etcd up: %v", err)
+	if err := tstore.WaitUp(10 * time.Second); err != nil {
+		t.Fatalf("error waiting on store up: %v", err)
 	}
 
-	etcdEndpoints := fmt.Sprintf("http://%s:%s", te.listenAddress, te.port)
+	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
 
 	clusterName := uuid.NewV4().String()
 
-	etcdPath := filepath.Join(common.EtcdBasePath, clusterName)
-	e, err := etcdm.NewEtcdManager(etcdEndpoints, etcdPath, common.DefaultEtcdRequestTimeout)
+	storePath := filepath.Join(common.StoreBasePath, clusterName)
+
+	kvstore, err := store.NewStore(tstore.storeBackend, storeEndpoints)
 	if err != nil {
-		t.Fatalf("cannot create etcd manager: %v", err)
+		t.Fatalf("cannot create store: %v", err)
 	}
+
+	e := store.NewStoreManager(kvstore, storePath)
+
 	// TODO(sgotti) change this to a call to the sentinel to change the
 	// cluster config (when the sentinel's code is done)
 	e.SetClusterData(cluster.KeepersState{},
@@ -60,12 +64,12 @@ func setupServers(t *testing.T, dir string, numKeepers, numSentinels uint8, sync
 				KeeperFailInterval:     &cluster.Duration{10 * time.Second},
 				SynchronousReplication: cluster.BoolP(syncRepl),
 			},
-		}, 0)
+		}, nil)
 
 	tks := []*TestKeeper{}
 	tss := []*TestSentinel{}
 
-	tk, err := NewTestKeeper(dir, clusterName, etcdEndpoints)
+	tk, err := NewTestKeeper(dir, clusterName, tstore.storeBackend, storeEndpoints)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -75,7 +79,7 @@ func setupServers(t *testing.T, dir string, numKeepers, numSentinels uint8, sync
 
 	// Start sentinels
 	for i := uint8(0); i < numSentinels; i++ {
-		ts, err := NewTestSentinel(dir, clusterName, etcdEndpoints)
+		ts, err := NewTestSentinel(dir, clusterName, tstore.storeBackend, storeEndpoints)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -100,7 +104,7 @@ func setupServers(t *testing.T, dir string, numKeepers, numSentinels uint8, sync
 
 	// Start standbys
 	for i := uint8(1); i < numKeepers; i++ {
-		tk, err := NewTestKeeper(dir, clusterName, etcdEndpoints)
+		tk, err := NewTestKeeper(dir, clusterName, tstore.storeBackend, storeEndpoints)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -115,7 +119,7 @@ func setupServers(t *testing.T, dir string, numKeepers, numSentinels uint8, sync
 		}
 		tks = append(tks, tk)
 	}
-	return tks, tss, te
+	return tks, tss, tstore
 }
 
 func populate(t *testing.T, tk *TestKeeper) error {
@@ -158,7 +162,7 @@ func waitLines(t *testing.T, tk *TestKeeper, num int, timeout time.Duration) err
 
 }
 
-func shutdown(tks []*TestKeeper, tss []*TestSentinel, te *TestEtcd) {
+func shutdown(tks []*TestKeeper, tss []*TestSentinel, tstore *TestStore) {
 	for _, ts := range tss {
 		if ts.cmd != nil {
 			ts.Stop()
@@ -169,8 +173,8 @@ func shutdown(tks []*TestKeeper, tss []*TestSentinel, te *TestEtcd) {
 			tk.Stop()
 		}
 	}
-	if te.cmd != nil {
-		te.Kill()
+	if tstore.cmd != nil {
+		tstore.Kill()
 	}
 }
 

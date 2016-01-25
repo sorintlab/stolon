@@ -22,8 +22,10 @@ spec:
           - name: STPROXY_CLUSTER_NAME
           # TODO(sgotti) Get cluster name from "stoloncluster" label using a downward volume api instead of duplicating the name here
             value: "kube-stolon"
-          - name: STPROXY_ETCD_ENDPOINTS
-            value: "http://10.245.1.1:4001"
+          - name: STSENTINEL_STORE_BACKEND
+            value: "etcd" # Or consul
+          - name: STSENTINEL_STORE_ENDPOINTS
+            value: "10.245.1.1:2379"
             # Enable debugging
           - name: STPROXY_DEBUG
             value: "true"

@@ -5,12 +5,12 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 	"os"
 	"os/exec"
 
-	"database/sql"
 	_ "github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/lib/pq"
 )
 

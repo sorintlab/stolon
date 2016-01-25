@@ -7,23 +7,18 @@
 	"Deps": [
 		{
 			"ImportPath": "github.com/coreos/etcd/client",
-			"Comment": "v2.2.0-80-g06180be",
-			"Rev": "06180be154083d0c15378e4703def03afac21bdc"
+			"Comment": "v2.3.0-alpha.0-430-g374b14e",
+			"Rev": "374b14e47189c249c069c9b3376cf5c36f286fa6"
 		},
 		{
 			"ImportPath": "github.com/coreos/etcd/pkg/pathutil",
-			"Comment": "v2.2.0-80-g06180be",
-			"Rev": "06180be154083d0c15378e4703def03afac21bdc"
+			"Comment": "v2.3.0-alpha.0-430-g374b14e",
+			"Rev": "374b14e47189c249c069c9b3376cf5c36f286fa6"
 		},
 		{
 			"ImportPath": "github.com/coreos/etcd/pkg/types",
-			"Comment": "v2.2.0-80-g06180be",
-			"Rev": "06180be154083d0c15378e4703def03afac21bdc"
-		},
-		{
-			"ImportPath": "github.com/coreos/fleet/pkg/lease",
-			"Comment": "v0.10.1-99-g187dd79",
-			"Rev": "187dd799b8a53647064c53dc3df0e8e67b881da8"
+			"Comment": "v2.3.0-alpha.0-430-g374b14e",
+			"Rev": "374b14e47189c249c069c9b3376cf5c36f286fa6"
 		},
 		{
 			"ImportPath": "github.com/coreos/go-systemd/journal",
@@ -44,12 +39,36 @@
 			"Rev": "1aaf839fb07e099361e445273993ccd9adc21b07"
 		},
 		{
+			"ImportPath": "github.com/docker/libkv",
+			"Comment": "v0.1.0-10-ga7db351",
+			"Rev": "a7db3510533ae4be25daaf61c49c90b1ea3b339c"
+		},
+		{
+			"ImportPath": "github.com/docker/swarm/leadership",
+			"Comment": "v1.1.0-rc2-10-gcc4eea8",
+			"Rev": "cc4eea83da48a83d3f6f757b3858c7dde3f5e666"
+		},
+		{
 			"ImportPath": "github.com/gorilla/context",
 			"Rev": "1c83b3eabd45b6d76072b66b746c20815fb2872d"
 		},
 		{
 			"ImportPath": "github.com/gorilla/mux",
 			"Rev": "ad4d7a5882b961e07e2626045eb995c022ac6664"
+		},
+		{
+			"ImportPath": "github.com/hashicorp/consul/api",
+			"Comment": "v0.6.3-21-g35adb39",
+			"Rev": "35adb391a27cf90fea06d3b676103bc5be3c144c"
+		},
+		{
+			"ImportPath": "github.com/hashicorp/go-cleanhttp",
+			"Rev": "ce617e79981a8fff618bb643d155133a8f38db96"
+		},
+		{
+			"ImportPath": "github.com/hashicorp/serf/coordinate",
+			"Comment": "v0.7.0-10-g64d10e9",
+			"Rev": "64d10e9428bd70dbcd831ad087573b66731c014b"
 		},
 		{
 			"ImportPath": "github.com/inconshreveable/mousetrap",
@@ -70,11 +89,12 @@
 		},
 		{
 			"ImportPath": "github.com/lib/pq",
-			"Rev": "7175accbed18058468c07811f76440d6e8d7cf19"
+			"Comment": "go1.0-cutoff-63-g11fc39a",
+			"Rev": "11fc39a580a008f1f39bb3d11d984fb34ed778d9"
 		},
 		{
 			"ImportPath": "github.com/satori/go.uuid",
-			"Rev": "46e1db27972f44c7722f23195ba6a8d2c2f3a0a3"
+			"Rev": "d41af8bb6a7704f00bc3b7cba9355ae6a5a80048"
 		},
 		{
 			"ImportPath": "github.com/sgotti/gexpect",
@@ -94,11 +114,11 @@
 		},
 		{
 			"ImportPath": "github.com/ugorji/go/codec",
-			"Rev": "5abd4e96a45c386928ed2ca2a7ef63e2533e18ec"
+			"Rev": "646ae4a518c1c3be0739df898118d9bccf993858"
 		},
 		{
 			"ImportPath": "golang.org/x/net/context",
-			"Rev": "1dfe7915deaf3f80b962c163b918868d8a6d8974"
+			"Rev": "5df5483e0518a11a6ef1e894c70236eb3f639557"
 		},
 		{
 			"ImportPath": "k8s.io/kubernetes/pkg/util/strategicpatch",

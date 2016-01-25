@@ -25,7 +25,7 @@ import (
 
 	"github.com/sorintlab/stolon/common"
 	"github.com/sorintlab/stolon/pkg/cluster"
-	etcdm "github.com/sorintlab/stolon/pkg/etcd"
+	"github.com/sorintlab/stolon/pkg/store"
 
 	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/satori/go.uuid"
 )
@@ -39,13 +39,13 @@ func TestProxyListening(t *testing.T) {
 
 	clusterName := uuid.NewV4().String()
 
-	te, err := NewTestEtcd(dir)
+	tstore, err := NewTestStore(dir)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	etcdEndpoints := fmt.Sprintf("http://%s:%s", te.listenAddress, te.port)
+	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
 
-	tp, err := NewTestProxy(dir, clusterName, etcdEndpoints)
+	tp, err := NewTestProxy(dir, clusterName, tstore.storeBackend, storeEndpoints)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -54,33 +54,36 @@ func TestProxyListening(t *testing.T) {
 	}
 	defer tp.Stop()
 
-	log.Printf("test proxy start with etcd down. Should not listen")
-	// tp should not listen because it cannot talk with etcd
+	log.Printf("test proxy start with store down. Should not listen")
+	// tp should not listen because it cannot talk with store
 	if err := tp.WaitNotListening(10 * time.Second); err != nil {
-		t.Fatalf("expecting tp not listening due to failed etcd communication, but it's listening.")
+		t.Fatalf("expecting tp not listening due to failed store communication, but it's listening.")
 	}
 
 	tp.Stop()
 
-	if err := te.Start(); err != nil {
+	if err := tstore.Start(); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	if err := te.WaitUp(10 * time.Second); err != nil {
-		t.Fatalf("error waiting on etcd up: %v", err)
+	if err := tstore.WaitUp(10 * time.Second); err != nil {
+		t.Fatalf("error waiting on store up: %v", err)
 	}
 	defer func() {
-		if te.cmd != nil {
-			te.Stop()
+		if tstore.cmd != nil {
+			tstore.Stop()
 		}
 	}()
 
-	etcdPath := filepath.Join(common.EtcdBasePath, clusterName)
-	e, err := etcdm.NewEtcdManager(etcdEndpoints, etcdPath, common.DefaultEtcdRequestTimeout)
+	storePath := filepath.Join(common.StoreBasePath, clusterName)
+
+	kvstore, err := store.NewStore(tstore.storeBackend, storeEndpoints)
 	if err != nil {
-		t.Fatalf("cannot create etcd manager: %v", err)
+		t.Fatalf("cannot create store: %v", err)
 	}
 
-	res, err := e.SetClusterData(cluster.KeepersState{},
+	e := store.NewStoreManager(kvstore, storePath)
+
+	pair, err := e.SetClusterData(cluster.KeepersState{},
 		&cluster.ClusterView{
 			Version: 1,
 			Config: &cluster.NilConfig{
@@ -92,14 +95,13 @@ func TestProxyListening(t *testing.T) {
 				Host: "localhost",
 				Port: "5432",
 			},
-		}, 0)
+		}, nil)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	prevCDIndex := res.Node.ModifiedIndex
 
-	// test etcd start with etcd up
-	log.Printf("test proxy start with etcd up. Should listen")
+	// test proxy start with the store up
+	log.Printf("test proxy start with the store up. Should listen")
 	if err := tp.Start(); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -109,25 +111,25 @@ func TestProxyListening(t *testing.T) {
 		t.Fatalf("expecting tp listening, but it's not listening.")
 	}
 
-	log.Printf("test proxy error communicating with etcd. Should stop listening")
-	// Stop etcd
-	te.Stop()
-	if err := te.WaitDown(10 * time.Second); err != nil {
-		t.Fatalf("error waiting on etcd down: %v", err)
+	log.Printf("test proxy error communicating with store. Should stop listening")
+	// Stop store
+	tstore.Stop()
+	if err := tstore.WaitDown(10 * time.Second); err != nil {
+		t.Fatalf("error waiting on store down: %v", err)
 	}
 
-	// tp should not listen because it cannot talk with etcd
+	// tp should not listen because it cannot talk with the store
 	if err := tp.WaitNotListening(10 * time.Second); err != nil {
-		t.Fatalf("expecting tp not listening due to failed etcd communication, but it's listening.")
+		t.Fatalf("expecting tp not listening due to failed store communication, but it's listening.")
 	}
 
-	log.Printf("test proxy communication with etcd restored. Should start listening")
-	// Start etcd
-	if err := te.Start(); err != nil {
+	log.Printf("test proxy communication with store restored. Should start listening")
+	// Start store
+	if err := tstore.Start(); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	if err := te.WaitUp(10 * time.Second); err != nil {
-		t.Fatalf("error waiting on etcd up: %v", err)
+	if err := tstore.WaitUp(10 * time.Second); err != nil {
+		t.Fatalf("error waiting on store up: %v", err)
 	}
 	// tp should listen
 	if err := tp.WaitListening(10 * time.Second); err != nil {
@@ -136,7 +138,7 @@ func TestProxyListening(t *testing.T) {
 
 	log.Printf("test proxyConf removed. Should continue listening")
 	// remove proxyConf
-	res, err = e.SetClusterData(cluster.KeepersState{},
+	pair, err = e.SetClusterData(cluster.KeepersState{},
 		&cluster.ClusterView{
 			Version: 1,
 			Config: &cluster.NilConfig{
@@ -144,11 +146,10 @@ func TestProxyListening(t *testing.T) {
 				KeeperFailInterval: &cluster.Duration{10 * time.Second},
 			},
 			ProxyConf: nil,
-		}, prevCDIndex)
+		}, pair)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	prevCDIndex = res.Node.ModifiedIndex
 
 	// tp should listen
 	if err := tp.WaitListening(10 * time.Second); err != nil {
@@ -157,7 +158,7 @@ func TestProxyListening(t *testing.T) {
 
 	log.Printf("test proxyConf restored. Should continue listening")
 	// Set proxyConf again
-	res, err = e.SetClusterData(cluster.KeepersState{},
+	pair, err = e.SetClusterData(cluster.KeepersState{},
 		&cluster.ClusterView{
 			Version: 1,
 			Config: &cluster.NilConfig{
@@ -169,11 +170,10 @@ func TestProxyListening(t *testing.T) {
 				Host: "localhost",
 				Port: "5432",
 			},
-		}, prevCDIndex)
+		}, pair)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	prevCDIndex = res.Node.ModifiedIndex
 
 	// tp should listen
 	if err := tp.WaitListening(10 * time.Second); err != nil {
@@ -182,7 +182,7 @@ func TestProxyListening(t *testing.T) {
 
 	log.Printf("test clusterView removed. Should continue listening")
 	// remove whole clusterview
-	_, err = e.SetClusterData(cluster.KeepersState{}, nil, prevCDIndex)
+	_, err = e.SetClusterData(cluster.KeepersState{}, nil, pair)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
