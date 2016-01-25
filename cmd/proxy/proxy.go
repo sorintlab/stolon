@@ -23,8 +23,8 @@ import (
 
 	"github.com/sorintlab/stolon/common"
 	"github.com/sorintlab/stolon/pkg/cluster"
-	etcdm "github.com/sorintlab/stolon/pkg/etcd"
 	"github.com/sorintlab/stolon/pkg/flagutil"
+	"github.com/sorintlab/stolon/pkg/store"
 
 	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/coreos/pkg/capnslog"
 	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/davecgh/go-spew/spew"
@@ -46,18 +46,20 @@ var cmdProxy = &cobra.Command{
 }
 
 type config struct {
-	etcdEndpoints string
-	clusterName   string
-	listenAddress string
-	port          string
-	stopListening bool
-	debug         bool
+	storeBackend   string
+	storeEndpoints string
+	clusterName    string
+	listenAddress  string
+	port           string
+	stopListening  bool
+	debug          bool
 }
 
 var cfg config
 
 func init() {
-	cmdProxy.PersistentFlags().StringVar(&cfg.etcdEndpoints, "etcd-endpoints", common.DefaultEtcdEndpoints, "a comma-delimited list of etcd endpoints")
+	cmdProxy.PersistentFlags().StringVar(&cfg.storeBackend, "store-backend", "", "store backend type (etcd or consul)")
+	cmdProxy.PersistentFlags().StringVar(&cfg.storeEndpoints, "store-endpoints", "", "a comma-delimited list of store endpoints (defaults: 127.0.0.1:2379 for etcd, 127.0.0.1:8500 for consul)")
 	cmdProxy.PersistentFlags().StringVar(&cfg.clusterName, "cluster-name", "", "cluster name")
 	cmdProxy.PersistentFlags().StringVar(&cfg.listenAddress, "listen-address", "127.0.0.1", "proxy listening address")
 	cmdProxy.PersistentFlags().StringVar(&cfg.port, "port", "5432", "proxy listening port")
@@ -74,16 +76,18 @@ type ClusterChecker struct {
 
 	listener         *net.TCPListener
 	pp               *pollon.Proxy
-	e                *etcdm.EtcdManager
+	e                *store.StoreManager
 	endPollonProxyCh chan error
 }
 
 func NewClusterChecker(id string, cfg config) (*ClusterChecker, error) {
-	etcdPath := filepath.Join(common.EtcdBasePath, cfg.clusterName)
-	e, err := etcdm.NewEtcdManager(cfg.etcdEndpoints, etcdPath, common.DefaultEtcdRequestTimeout)
+	storePath := filepath.Join(common.StoreBasePath, cfg.clusterName)
+
+	kvstore, err := store.NewStore(store.Backend(cfg.storeBackend), cfg.storeEndpoints)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("cannot create store: %v", err)
 	}
+	e := store.NewStoreManager(kvstore, storePath)
 
 	return &ClusterChecker{
 		id:               id,
@@ -141,7 +145,7 @@ func (c *ClusterChecker) sendPollonConfData(confData pollon.ConfData) {
 	}
 }
 
-func (c *ClusterChecker) SetProxyInfo(e *etcdm.EtcdManager, cvVersion int, ttl time.Duration) error {
+func (c *ClusterChecker) SetProxyInfo(e *store.StoreManager, cvVersion int, ttl time.Duration) error {
 	proxyInfo := &cluster.ProxyInfo{
 		ID:                 c.id,
 		ListenAddress:      c.listenAddress,
@@ -150,7 +154,7 @@ func (c *ClusterChecker) SetProxyInfo(e *etcdm.EtcdManager, cvVersion int, ttl t
 	}
 	log.Debugf(spew.Sprintf("proxyInfo: %#v", proxyInfo))
 
-	if _, err := c.e.SetProxyInfo(proxyInfo, ttl); err != nil {
+	if err := c.e.SetProxyInfo(proxyInfo, ttl); err != nil {
 		return err
 	}
 	return nil
@@ -241,6 +245,9 @@ func proxy(cmd *cobra.Command, args []string) {
 	}
 	if cfg.clusterName == "" {
 		log.Fatalf("cluster name required")
+	}
+	if cfg.storeBackend == "" {
+		log.Fatalf("store backend type required")
 	}
 
 	u := uuid.NewV4()

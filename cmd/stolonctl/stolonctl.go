@@ -19,7 +19,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/sorintlab/stolon/common"
 	"github.com/sorintlab/stolon/pkg/flagutil"
 
 	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/spf13/cobra"
@@ -28,17 +27,27 @@ import (
 var cmdStolonCtl = &cobra.Command{
 	Use:   "stolonctl",
 	Short: "stolon command line client",
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		if cfg.clusterName == "" {
+			die("cluster name required")
+		}
+		if cfg.storeBackend == "" {
+			die("store backend type required")
+		}
+	},
 }
 
 type config struct {
-	etcdEndpoints string
-	clusterName   string
+	storeBackend   string
+	storeEndpoints string
+	clusterName    string
 }
 
 var cfg config
 
 func init() {
-	cmdStolonCtl.PersistentFlags().StringVar(&cfg.etcdEndpoints, "etcd-endpoints", common.DefaultEtcdEndpoints, "a comma-delimited list of etcd endpoints")
+	cmdStolonCtl.PersistentFlags().StringVar(&cfg.storeBackend, "store-backend", "", "store backend type (etcd or consul)")
+	cmdStolonCtl.PersistentFlags().StringVar(&cfg.storeEndpoints, "store-endpoints", "", "a comma-delimited list of store endpoints (defaults: 127.0.0.1:2379 for etcd, 127.0.0.1:8500 for consul)")
 	cmdStolonCtl.PersistentFlags().StringVar(&cfg.clusterName, "cluster-name", "", "cluster name")
 }
 

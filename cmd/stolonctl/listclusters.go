@@ -15,17 +15,15 @@
 package main
 
 import (
-	"net/http"
+	"fmt"
 	"path/filepath"
 	"sort"
-	"strings"
 
 	"github.com/sorintlab/stolon/common"
-	etcdm "github.com/sorintlab/stolon/pkg/etcd"
+	"github.com/sorintlab/stolon/pkg/store"
 
-	etcd "github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/coreos/etcd/client"
+	libkvstore "github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/docker/libkv/store"
 	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/spf13/cobra"
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/golang.org/x/net/context"
 )
 
 var cmdListClusters = &cobra.Command{
@@ -37,32 +35,29 @@ func init() {
 	cmdStolonCtl.AddCommand(cmdListClusters)
 }
 
-func getClusters(etcdBasePath string) ([]string, error) {
-	eCfg := etcd.Config{
-		Transport: &http.Transport{},
-		Endpoints: strings.Split(cfg.etcdEndpoints, ","),
-	}
-	eClient, err := etcd.New(eCfg)
+func getClusters(storeBasePath string) ([]string, error) {
+	kvstore, err := store.NewStore(store.Backend(cfg.storeBackend), cfg.storeEndpoints)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("cannot create store: %v", err)
 	}
-	kAPI := etcd.NewKeysAPI(eClient)
 
 	clusters := []string{}
-	res, err := kAPI.Get(context.Background(), etcdBasePath, &etcd.GetOptions{Recursive: true, Quorum: true})
-	if err != nil && !etcdm.IsEtcdNotFound(err) {
-		return nil, err
-	} else if !etcdm.IsEtcdNotFound(err) {
-		for _, node := range res.Node.Nodes {
-			clusters = append(clusters, filepath.Base(node.Key))
+	pairs, err := kvstore.List(storeBasePath)
+	if err != nil {
+		if err != libkvstore.ErrKeyNotFound {
+			return nil, err
 		}
+		return clusters, nil
+	}
+	for _, pair := range pairs {
+		clusters = append(clusters, filepath.Base(pair.Key))
 	}
 	sort.Strings(clusters)
 	return clusters, nil
 }
 
 func listClusters(cmd *cobra.Command, args []string) {
-	clusters, err := getClusters(common.EtcdBasePath)
+	clusters, err := getClusters(common.StoreBasePath)
 	if err != nil {
 		die("cannot get clusters: %v", err)
 	}

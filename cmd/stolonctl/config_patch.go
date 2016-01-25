@@ -23,7 +23,7 @@ import (
 
 	"github.com/sorintlab/stolon/common"
 	"github.com/sorintlab/stolon/pkg/cluster"
-	etcdm "github.com/sorintlab/stolon/pkg/etcd"
+	"github.com/sorintlab/stolon/pkg/store"
 
 	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/spf13/cobra"
 	"github.com/sorintlab/stolon/Godeps/_workspace/src/k8s.io/kubernetes/pkg/util/strategicpatch"
@@ -47,7 +47,7 @@ func init() {
 	cmdConfig.AddCommand(cmdConfigPatch)
 }
 
-func patchConfig(e *etcdm.EtcdManager, ncj []byte) error {
+func patchConfig(e *store.StoreManager, ncj []byte) error {
 	curnc, err := getConfig(e)
 	if err != nil {
 		return fmt.Errorf("cannot get config: %v", err)
@@ -97,11 +97,12 @@ func configPatch(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	etcdPath := filepath.Join(common.EtcdBasePath, cfg.clusterName)
-	e, err := etcdm.NewEtcdManager(cfg.etcdEndpoints, etcdPath, common.DefaultEtcdRequestTimeout)
+	storePath := filepath.Join(common.StoreBasePath, cfg.clusterName)
+	kvstore, err := store.NewStore(store.Backend(cfg.storeBackend), cfg.storeEndpoints)
 	if err != nil {
-		die("error: %v", err)
+		die("cannot create store: %v", err)
 	}
+	e := store.NewStoreManager(kvstore, storePath)
 
 	if err = patchConfig(e, config); err != nil {
 		die("failed to patch config: %v", err)

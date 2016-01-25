@@ -23,7 +23,7 @@ import (
 
 	"github.com/sorintlab/stolon/common"
 	"github.com/sorintlab/stolon/pkg/cluster"
-	etcdm "github.com/sorintlab/stolon/pkg/etcd"
+	"github.com/sorintlab/stolon/pkg/store"
 
 	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/spf13/cobra"
 )
@@ -82,18 +82,20 @@ func status(cmd *cobra.Command, args []string) {
 	if cfg.clusterName == "" {
 		die("cluster name required")
 	}
-	etcdPath := filepath.Join(common.EtcdBasePath, cfg.clusterName)
-	e, err := etcdm.NewEtcdManager(cfg.etcdEndpoints, etcdPath, common.DefaultEtcdRequestTimeout)
+	storePath := filepath.Join(common.StoreBasePath, cfg.clusterName)
+
+	kvstore, err := store.NewStore(store.Backend(cfg.storeBackend), cfg.storeEndpoints)
 	if err != nil {
-		die("cannot create etcd manager: %v", err)
+		die("cannot create store: %v", err)
 	}
+	e := store.NewStoreManager(kvstore, storePath)
 
 	sentinelsInfo, err := e.GetSentinelsInfo()
 	if err != nil {
 		die("cannot get sentinels info: %v", err)
 	}
 
-	lsi, _, err := e.GetLeaderSentinelInfo()
+	lsid, err := e.GetLeaderSentinelId()
 	if err != nil {
 		die("cannot get leader sentinel info")
 	}
@@ -107,8 +109,8 @@ func status(cmd *cobra.Command, args []string) {
 		fmt.Fprintf(tabOut, "ID\tLISTENADDRESS\tLEADER\n")
 		for _, si := range sentinelsInfo {
 			leader := false
-			if lsi != nil {
-				if si.ID == lsi.ID {
+			if lsid != "" {
+				if si.ID == lsid {
 					leader = true
 				}
 			}

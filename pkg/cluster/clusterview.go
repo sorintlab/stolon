@@ -219,8 +219,7 @@ func (cv *ClusterView) GetFollowersIDs(id string) []string {
 	return followersIDs
 }
 
-// A struct contain the KeepersState and the ClusterView, needed to commit them togheter as etcd 2 doesn't supports multi key transactions
-// TODO(sgotti) rework it when using etcd supports transactions.
+// A struct containing the KeepersState and the ClusterView since they need to be in sync
 type ClusterData struct {
 	KeepersState KeepersState
 	ClusterView  *ClusterView

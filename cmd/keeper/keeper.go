@@ -29,11 +29,11 @@ import (
 
 	"github.com/sorintlab/stolon/common"
 	"github.com/sorintlab/stolon/pkg/cluster"
-	etcdm "github.com/sorintlab/stolon/pkg/etcd"
 	"github.com/sorintlab/stolon/pkg/flagutil"
 	"github.com/sorintlab/stolon/pkg/kubernetes"
 	"github.com/sorintlab/stolon/pkg/postgresql"
 	pg "github.com/sorintlab/stolon/pkg/postgresql"
+	"github.com/sorintlab/stolon/pkg/store"
 	"github.com/sorintlab/stolon/pkg/util"
 
 	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/coreos/pkg/capnslog"
@@ -58,7 +58,8 @@ var cmdKeeper = &cobra.Command{
 
 type config struct {
 	id              string
-	etcdEndpoints   string
+	storeBackend    string
+	storeEndpoints  string
 	dataDir         string
 	clusterName     string
 	listenAddress   string
@@ -74,7 +75,8 @@ var cfg config
 
 func init() {
 	cmdKeeper.PersistentFlags().StringVar(&cfg.id, "id", "", "keeper id (must be unique in the cluster and can contain only lower-case letters, numbers and the underscore character). If not provided a random id will be generated.")
-	cmdKeeper.PersistentFlags().StringVar(&cfg.etcdEndpoints, "etcd-endpoints", common.DefaultEtcdEndpoints, "a comma-delimited list of etcd endpoints")
+	cmdKeeper.PersistentFlags().StringVar(&cfg.storeBackend, "store-backend", "", "store backend type (etcd or consul)")
+	cmdKeeper.PersistentFlags().StringVar(&cfg.storeEndpoints, "store-endpoints", "", "a comma-delimited list of store endpoints (defaults: 127.0.0.1:2379 for etcd, 127.0.0.1:8500 for consul)")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.dataDir, "data-dir", "", "data directory")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.clusterName, "cluster-name", "", "cluster name")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.listenAddress, "listen-address", "localhost", "keeper listening address")
@@ -132,7 +134,7 @@ func (p *PostgresKeeper) createPGParameters(followersIDs []string) pg.Parameters
 type PostgresKeeper struct {
 	id      string
 	dataDir string
-	e       *etcdm.EtcdManager
+	e       *store.StoreManager
 	pgm     *postgresql.Manager
 	stop    chan bool
 	end     chan error
@@ -152,11 +154,13 @@ type PostgresKeeper struct {
 }
 
 func NewPostgresKeeper(id string, cfg config, stop chan bool, end chan error) (*PostgresKeeper, error) {
-	etcdPath := filepath.Join(common.EtcdBasePath, cfg.clusterName)
-	e, err := etcdm.NewEtcdManager(cfg.etcdEndpoints, etcdPath, common.DefaultEtcdRequestTimeout)
+	storePath := filepath.Join(common.StoreBasePath, cfg.clusterName)
+
+	kvstore, err := store.NewStore(store.Backend(cfg.storeBackend), cfg.storeEndpoints)
 	if err != nil {
-		return nil, fmt.Errorf("cannot create etcd manager: %v", err)
+		return nil, fmt.Errorf("cannot create store: %v", err)
 	}
+	e := store.NewStoreManager(kvstore, storePath)
 
 	cd, _, err := e.GetClusterData()
 	if err != nil {
@@ -198,7 +202,7 @@ func NewPostgresKeeper(id string, cfg config, stop chan bool, end chan error) (*
 
 func (p *PostgresKeeper) publish() error {
 	if kubernetes.OnKubernetes() {
-		log.Infof("running under kubernetes. Not publishing ourself to etcd")
+		log.Infof("running under kubernetes. Not using store discovery")
 		return nil
 	}
 	discoveryInfo := &cluster.KeeperDiscoveryInfo{
@@ -207,7 +211,7 @@ func (p *PostgresKeeper) publish() error {
 	}
 	log.Debugf(spew.Sprintf("discoveryInfo: %#v", discoveryInfo))
 
-	if _, err := p.e.SetKeeperDiscoveryInfo(p.id, discoveryInfo); err != nil {
+	if err := p.e.SetKeeperDiscoveryInfo(p.id, discoveryInfo); err != nil {
 		return err
 	}
 	return nil
@@ -717,6 +721,9 @@ func keeper(cmd *cobra.Command, args []string) {
 
 	if cfg.clusterName == "" {
 		log.Fatalf("cluster name required")
+	}
+	if cfg.storeBackend == "" {
+		log.Fatalf("store backend type required")
 	}
 
 	if err := os.MkdirAll(cfg.dataDir, 0700); err != nil {
