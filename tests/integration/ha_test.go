@@ -29,7 +29,7 @@ import (
 	"github.com/sorintlab/stolon/pkg/store"
 )
 
-func setupServers(t *testing.T, dir string, numKeepers, numSentinels uint8, syncRepl bool) ([]*TestKeeper, []*TestSentinel, *TestStore) {
+func setupStore(t *testing.T, dir string) *TestStore {
 	tstore, err := NewTestStore(dir)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -40,6 +40,83 @@ func setupServers(t *testing.T, dir string, numKeepers, numSentinels uint8, sync
 	if err := tstore.WaitUp(10 * time.Second); err != nil {
 		t.Fatalf("error waiting on store up: %v", err)
 	}
+	return tstore
+}
+
+func TestInitWithMultipleKeepers(t *testing.T) {
+	dir, err := ioutil.TempDir("", "stolon")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer os.RemoveAll(dir)
+
+	tstore := setupStore(t, dir)
+
+	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
+
+	clusterName := uuid.NewV4().String()
+
+	storePath := filepath.Join(common.StoreBasePath, clusterName)
+
+	kvstore, err := store.NewStore(tstore.storeBackend, storeEndpoints)
+	if err != nil {
+		t.Fatalf("cannot create store: %v", err)
+	}
+
+	e := store.NewStoreManager(kvstore, storePath)
+
+	// TODO(sgotti) change this to a call to the sentinel to change the
+	// cluster config (when the sentinel's code is done)
+	e.SetClusterData(cluster.KeepersState{},
+		&cluster.ClusterView{
+			Version: 1,
+			Config: &cluster.NilConfig{
+				SleepInterval:           &cluster.Duration{5 * time.Second},
+				KeeperFailInterval:      &cluster.Duration{10 * time.Second},
+				InitWithMultipleKeepers: cluster.BoolP(true),
+			},
+		}, nil)
+
+	tks := []*TestKeeper{}
+	tss := []*TestSentinel{}
+
+	defer shutdown(tks, tss, tstore)
+
+	// Start 3 keepers
+	for i := uint8(0); i < 3; i++ {
+		tk, err := NewTestKeeper(dir, clusterName, tstore.storeBackend, storeEndpoints)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if err := tk.Start(); err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if err := tk.WaitDBUp(60 * time.Second); err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		tks = append(tks, tk)
+	}
+
+	// Start 2 sentinels
+	for i := uint8(0); i < 2; i++ {
+		ts, err := NewTestSentinel(dir, clusterName, tstore.storeBackend, storeEndpoints)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if err := ts.Start(); err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		tss = append(tss, ts)
+	}
+
+	// Wait for clusterView containing a master
+	if err := WaitClusterViewWithMaster(e, 30*time.Second); err != nil {
+		t.Fatal("expected a master in cluster view")
+	}
+}
+
+func setupServers(t *testing.T, dir string, numKeepers, numSentinels uint8, syncRepl bool) ([]*TestKeeper, []*TestSentinel, *TestStore) {
+	tstore := setupStore(t, dir)
 
 	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
 
@@ -88,6 +165,8 @@ func setupServers(t *testing.T, dir string, numKeepers, numSentinels uint8, sync
 		}
 		tss = append(tss, ts)
 	}
+
+	// Start first keeper
 	if err := tk.Start(); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -102,7 +181,7 @@ func setupServers(t *testing.T, dir string, numKeepers, numSentinels uint8, sync
 		t.Fatalf("expected master %q in cluster view", tk.id)
 	}
 
-	// Start standbys
+	// Start other keepers
 	for i := uint8(1); i < numKeepers; i++ {
 		tk, err := NewTestKeeper(dir, clusterName, tstore.storeBackend, storeEndpoints)
 		if err != nil {
@@ -114,6 +193,7 @@ func setupServers(t *testing.T, dir string, numKeepers, numSentinels uint8, sync
 		if err := tk.WaitDBUp(60 * time.Second); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
+		// Wait for clusterView containing tk as standby
 		if err := tk.WaitRole(common.StandbyRole, 30*time.Second); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}

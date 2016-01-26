@@ -24,24 +24,26 @@ import (
 const (
 	DefaultProxyCheckInterval = 5 * time.Second
 
-	DefaultRequestTimeout         = 10 * time.Second
-	DefaultSleepInterval          = 5 * time.Second
-	DefaultKeeperFailInterval     = 20 * time.Second
-	DefaultPGReplUser             = "repluser"
-	DefaultPGReplPassword         = "replpassword"
-	DefaultMaxStandbysPerSender   = 3
-	DefaultSynchronousReplication = false
+	DefaultRequestTimeout          = 10 * time.Second
+	DefaultSleepInterval           = 5 * time.Second
+	DefaultKeeperFailInterval      = 20 * time.Second
+	DefaultPGReplUser              = "repluser"
+	DefaultPGReplPassword          = "replpassword"
+	DefaultMaxStandbysPerSender    = 3
+	DefaultSynchronousReplication  = false
+	DefaultInitWithMultipleKeepers = false
 )
 
 type NilConfig struct {
-	RequestTimeout         *Duration          `json:"request_timeout,omitempty"`
-	SleepInterval          *Duration          `json:"sleep_interval,omitempty"`
-	KeeperFailInterval     *Duration          `json:"keeper_fail_interval,omitempty"`
-	PGReplUser             *string            `json:"pg_repl_user,omitempty"`
-	PGReplPassword         *string            `json:"pg_repl_password,omitempty"`
-	MaxStandbysPerSender   *uint              `json:"max_standbys_per_sender,omitempty"`
-	SynchronousReplication *bool              `json:"synchronous_replication,omitempty"`
-	PGParameters           *map[string]string `json:"pg_parameters,omitempty"`
+	RequestTimeout          *Duration          `json:"request_timeout,omitempty"`
+	SleepInterval           *Duration          `json:"sleep_interval,omitempty"`
+	KeeperFailInterval      *Duration          `json:"keeper_fail_interval,omitempty"`
+	PGReplUser              *string            `json:"pg_repl_user,omitempty"`
+	PGReplPassword          *string            `json:"pg_repl_password,omitempty"`
+	MaxStandbysPerSender    *uint              `json:"max_standbys_per_sender,omitempty"`
+	SynchronousReplication  *bool              `json:"synchronous_replication,omitempty"`
+	InitWithMultipleKeepers *bool              `json:"init_with_multiple_keepers,omitempty"`
+	PGParameters            *map[string]string `json:"pg_parameters,omitempty"`
 }
 
 type Config struct {
@@ -60,6 +62,8 @@ type Config struct {
 	MaxStandbysPerSender uint
 	// Use Synchronous replication between master and its standbys
 	SynchronousReplication bool
+	// Choose a random initial master when multiple keeper are registered
+	InitWithMultipleKeepers bool
 	// Map of postgres parameters
 	PGParameters map[string]string
 }
@@ -127,6 +131,9 @@ func (c *NilConfig) Copy() *NilConfig {
 	}
 	if c.SynchronousReplication != nil {
 		nc.SynchronousReplication = BoolP(*c.SynchronousReplication)
+	}
+	if c.InitWithMultipleKeepers != nil {
+		nc.InitWithMultipleKeepers = BoolP(*c.InitWithMultipleKeepers)
 	}
 	if c.PGParameters != nil {
 		nc.PGParameters = MapStringP(*c.PGParameters)
@@ -206,6 +213,9 @@ func (c *NilConfig) MergeDefaults() {
 	if c.SynchronousReplication == nil {
 		c.SynchronousReplication = BoolP(DefaultSynchronousReplication)
 	}
+	if c.InitWithMultipleKeepers == nil {
+		c.InitWithMultipleKeepers = BoolP(DefaultInitWithMultipleKeepers)
+	}
 	if c.PGParameters == nil {
 		c.PGParameters = &map[string]string{}
 	}
@@ -215,14 +225,15 @@ func (c *NilConfig) ToConfig() *Config {
 	nc := c.Copy()
 	nc.MergeDefaults()
 	return &Config{
-		RequestTimeout:         (*nc.RequestTimeout).Duration,
-		SleepInterval:          (*nc.SleepInterval).Duration,
-		KeeperFailInterval:     (*nc.KeeperFailInterval).Duration,
-		PGReplUser:             *nc.PGReplUser,
-		PGReplPassword:         *nc.PGReplPassword,
-		MaxStandbysPerSender:   *nc.MaxStandbysPerSender,
-		SynchronousReplication: *nc.SynchronousReplication,
-		PGParameters:           *nc.PGParameters,
+		RequestTimeout:          (*nc.RequestTimeout).Duration,
+		SleepInterval:           (*nc.SleepInterval).Duration,
+		KeeperFailInterval:      (*nc.KeeperFailInterval).Duration,
+		PGReplUser:              *nc.PGReplUser,
+		PGReplPassword:          *nc.PGReplPassword,
+		MaxStandbysPerSender:    *nc.MaxStandbysPerSender,
+		SynchronousReplication:  *nc.SynchronousReplication,
+		InitWithMultipleKeepers: *nc.InitWithMultipleKeepers,
+		PGParameters:            *nc.PGParameters,
 	}
 }
 
