@@ -58,6 +58,7 @@ type config struct {
 	port                    string
 	keeperPort              string
 	keeperKubeLabelSelector string
+	initialClusterConfig    string
 	debug                   bool
 }
 
@@ -71,6 +72,7 @@ func init() {
 	cmdSentinel.PersistentFlags().StringVar(&cfg.port, "port", "6431", "sentinel listening port")
 	cmdSentinel.PersistentFlags().StringVar(&cfg.keeperKubeLabelSelector, "keeper-kube-label-selector", "", "label selector for discoverying stolon-keeper(s) under kubernetes")
 	cmdSentinel.PersistentFlags().StringVar(&cfg.keeperPort, "keeper-port", "5431", "stolon-keeper(s) listening port (used by kubernetes discovery)")
+	cmdSentinel.PersistentFlags().StringVar(&cfg.initialClusterConfig, "initial-cluster-config", "", "a file providing the initial cluster config, used only at cluster initialization, ignored if cluster is already initialized")
 	cmdSentinel.PersistentFlags().BoolVar(&cfg.debug, "debug", false, "enable debug logging")
 }
 
@@ -625,15 +627,27 @@ type Sentinel struct {
 	listenAddress string
 	port          string
 
-	clusterConfig *cluster.Config
-	updateMutex   sync.Mutex
-	leader        bool
-	leaderMutex   sync.Mutex
+	clusterConfig           *cluster.Config
+	initialClusterNilConfig *cluster.NilConfig
+
+	updateMutex sync.Mutex
+	leader      bool
+	leaderMutex sync.Mutex
 }
 
 func NewSentinel(id string, cfg config, stop chan bool, end chan bool) (*Sentinel, error) {
-	storePath := filepath.Join(common.StoreBasePath, cfg.clusterName)
+	var initialClusterNilConfig *cluster.NilConfig
+	if cfg.initialClusterConfig != "" {
+		configData, err := ioutil.ReadFile(cfg.initialClusterConfig)
+		if err != nil {
+			return nil, fmt.Errorf("cannot read provided initial cluster config file: %v", err)
+		}
+		if err := json.Unmarshal(configData, &initialClusterNilConfig); err != nil {
+			return nil, fmt.Errorf("cannot parse provided initial cluster config: %v", err)
+		}
+	}
 
+	storePath := filepath.Join(common.StoreBasePath, cfg.clusterName)
 	kvstore, err := store.NewStore(store.Backend(cfg.storeBackend), cfg.storeEndpoints)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create store: %v", err)
@@ -643,14 +657,15 @@ func NewSentinel(id string, cfg config, stop chan bool, end chan bool) (*Sentine
 	candidate := leadership.NewCandidate(kvstore, filepath.Join(storePath, common.SentinelLeaderKey), id, 15*time.Second)
 
 	return &Sentinel{
-		id:            id,
-		e:             e,
-		listenAddress: cfg.listenAddress,
-		port:          cfg.port,
-		candidate:     candidate,
-		leader:        false,
-		stop:          stop,
-		end:           end}, nil
+		id:                      id,
+		e:                       e,
+		listenAddress:           cfg.listenAddress,
+		port:                    cfg.port,
+		candidate:               candidate,
+		leader:                  false,
+		initialClusterNilConfig: initialClusterNilConfig,
+		stop: stop,
+		end:  end}, nil
 }
 
 func (s *Sentinel) Start() {
@@ -763,9 +778,14 @@ func (s *Sentinel) clusterSentinelCheck(pctx context.Context) {
 	}
 
 	if cv.Version == 0 {
+		log.Infof("Initializing cluster")
 		// Cluster first initialization
 		newcv := cluster.NewClusterView()
 		newcv.Version = 1
+		if s.initialClusterNilConfig != nil {
+			newcv.Config = s.initialClusterNilConfig
+		}
+		log.Debugf(spew.Sprintf("new clusterView: %#v", newcv))
 		if _, err = e.SetClusterData(nil, newcv, nil); err != nil {
 			log.Errorf("error saving clusterdata: %v", err)
 		}

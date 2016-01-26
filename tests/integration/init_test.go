@@ -18,8 +18,12 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/sorintlab/stolon/common"
+	"github.com/sorintlab/stolon/pkg/store"
 
 	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/satori/go.uuid"
 )
@@ -69,6 +73,66 @@ func TestInit(t *testing.T) {
 	}
 	t.Logf("database is up")
 
+}
+
+func TestInitialClusterConfig(t *testing.T) {
+	dir, err := ioutil.TempDir("", "")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer os.RemoveAll(dir)
+
+	tstore, err := NewTestStore(dir)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := tstore.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := tstore.WaitUp(10 * time.Second); err != nil {
+		t.Fatalf("error waiting on store up: %v", err)
+	}
+	defer tstore.Stop()
+
+	clusterName := uuid.NewV4().String()
+
+	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
+	storePath := filepath.Join(common.StoreBasePath, clusterName)
+
+	kvstore, err := store.NewStore(tstore.storeBackend, storeEndpoints)
+	if err != nil {
+		t.Fatalf("cannot create store: %v", err)
+	}
+
+	e := store.NewStoreManager(kvstore, storePath)
+
+	tmpFile, err := ioutil.TempFile(dir, "initial-cluster-config.json")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer tmpFile.Close()
+	tmpFile.WriteString(`{ "synchronous_replication": true }`)
+
+	ts, err := NewTestSentinel(dir, clusterName, tstore.storeBackend, storeEndpoints, fmt.Sprintf("--initial-cluster-config=%s", tmpFile.Name()))
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := ts.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer ts.Stop()
+
+	if err := WaitClusterInitialized(e, 30*time.Second); err != nil {
+		t.Fatal("expected cluster initialized")
+	}
+
+	cv, _, err := e.GetClusterView()
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if !*cv.Config.SynchronousReplication {
+		t.Fatal("expected cluster config with InitWithMultipleKeepers enabled")
+	}
 }
 
 func TestExclusiveLock(t *testing.T) {
