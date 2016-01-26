@@ -75,7 +75,7 @@ func (s Parameters) Equals(is Parameters) bool {
 	return reflect.DeepEqual(s, is)
 }
 
-func NewManager(name string, pgBinPath string, dataDir string, confDir string, parameters Parameters, connString, replConnString, replUser, replPassword string, requestTimeout time.Duration) (*Manager, error) {
+func NewManager(name string, pgBinPath string, dataDir string, confDir string, parameters Parameters, connString, replConnString, replUser, replPassword string, requestTimeout time.Duration) *Manager {
 	return &Manager{
 		name:           name,
 		dataDir:        filepath.Join(dataDir, "postgres"),
@@ -87,7 +87,7 @@ func NewManager(name string, pgBinPath string, dataDir string, confDir string, p
 		requestTimeout: requestTimeout,
 		parameters:     parameters,
 		confDir:        confDir,
-	}, nil
+	}
 }
 
 func (p *Manager) SetParameters(parameters Parameters) {
@@ -104,7 +104,7 @@ func (p *Manager) Init() error {
 	if err != nil {
 		return fmt.Errorf("error: %v, output: %s", err, out)
 	}
-	// Move current (initdb generated) postgresql.conf ot postgresql-base.conf
+	// Move current (initdb generated) postgresql.conf to postgresql-base.conf
 	if err := os.Rename(filepath.Join(p.dataDir, "postgresql.conf"), filepath.Join(p.dataDir, "postgresql-base.conf")); err != nil {
 		return fmt.Errorf("error moving postgresql.conf file to postgresql-base.conf: %v", err)
 	}

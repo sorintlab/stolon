@@ -162,22 +162,6 @@ func NewPostgresKeeper(id string, cfg config, stop chan bool, end chan error) (*
 	}
 	e := store.NewStoreManager(kvstore, storePath)
 
-	cd, _, err := e.GetClusterData()
-	if err != nil {
-		return nil, fmt.Errorf("error retrieving cluster data: %v", err)
-	}
-
-	var cv *cluster.ClusterView
-	if cd == nil {
-		cv = cluster.NewClusterView()
-	} else {
-		cv = cd.ClusterView
-	}
-	log.Debugf(spew.Sprintf("clusterView: %#v", cv))
-
-	clusterConfig := cv.Config.ToConfig()
-	log.Debugf(spew.Sprintf("clusterConfig: %#v", clusterConfig))
-
 	p := &PostgresKeeper{id: id,
 		dataDir:         cfg.dataDir,
 		e:               e,
@@ -185,18 +169,10 @@ func NewPostgresKeeper(id string, cfg config, stop chan bool, end chan error) (*
 		port:            cfg.port,
 		pgListenAddress: cfg.pgListenAddress,
 		pgPort:          cfg.pgPort,
-		clusterConfig:   clusterConfig,
 		stop:            stop,
 		end:             end,
 	}
 
-	followersIDs := cv.GetFollowersIDs(p.id)
-	pgParameters := p.createPGParameters(followersIDs)
-	pgm, err := postgresql.NewManager(id, cfg.pgBinPath, cfg.dataDir, cfg.pgConfDir, pgParameters, p.getOurConnString(), p.getOurReplConnString(), clusterConfig.PGReplUser, clusterConfig.PGReplPassword, clusterConfig.RequestTimeout)
-	if err != nil {
-		return nil, fmt.Errorf("cannot create postgres manager: %v", err)
-	}
-	p.pgm = pgm
 	return p, nil
 }
 
@@ -325,11 +301,42 @@ func (p *PostgresKeeper) Start() {
 	endPgStatecheckerCh := make(chan struct{})
 	endApiCh := make(chan error)
 
-	err := p.loadCVVersion()
-	if err != nil {
-		p.end <- err
+	var err error
+	var cd *cluster.ClusterData
+	// TODO(sgotti) make the postgres manager stateless and instantiate a
+	// new one at every check loop, this will avoid the need to loop here
+	// to get the clusterconfig
+	for {
+		cd, _, err = p.e.GetClusterData()
+		if err == nil {
+			break
+		}
+		log.Errorf("error retrieving cluster data: %v", err)
+		time.Sleep(cluster.DefaultSleepInterval)
+	}
+
+	var cv *cluster.ClusterView
+	if cd == nil {
+		cv = cluster.NewClusterView()
+	} else {
+		cv = cd.ClusterView
+	}
+	log.Debugf(spew.Sprintf("clusterView: %#v", cv))
+
+	p.clusterConfig = cv.Config.ToConfig()
+	log.Debugf(spew.Sprintf("clusterConfig: %#v", p.clusterConfig))
+
+	if err := p.loadCVVersion(); err != nil {
+		p.end <- fmt.Errorf("failed to load cluster version file: %v", err)
 		return
 	}
+
+	// TODO(sgotti) reconfigure the various configurations options (PGRepl*
+	// and RequestTimeout) after a changed cluster config
+	followersIDs := cv.GetFollowersIDs(p.id)
+	pgParameters := p.createPGParameters(followersIDs)
+	pgm := postgresql.NewManager(p.id, cfg.pgBinPath, cfg.dataDir, cfg.pgConfDir, pgParameters, p.getOurConnString(), p.getOurReplConnString(), p.clusterConfig.PGReplUser, p.clusterConfig.PGReplPassword, p.clusterConfig.RequestTimeout)
+	p.pgm = pgm
 
 	p.pgm.Stop(true)
 
@@ -430,7 +437,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 
 	cv, _, err := e.GetClusterView()
 	if err != nil {
-		log.Errorf("err: %v", err)
+		log.Errorf("error retrieving cluster view: %v", err)
 		return
 	}
 	log.Debugf(spew.Sprintf("clusterView: %#v", cv))
