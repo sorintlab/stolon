@@ -636,25 +636,6 @@ func NewSentinel(id string, cfg config, stop chan bool, end chan bool) (*Sentine
 	}
 	e := store.NewStoreManager(kvstore, storePath)
 
-	cd, _, err := e.GetClusterData()
-	if err != nil {
-		return nil, fmt.Errorf("error retrieving cluster data: %v", err)
-	}
-
-	var cv *cluster.ClusterView
-	if cd == nil {
-		cv = cluster.NewClusterView()
-	} else {
-		cv = cd.ClusterView
-	}
-	log.Debugf(spew.Sprintf("clusterView: %#v", cv))
-
-	clusterConfig := cv.Config.ToConfig()
-	if err != nil {
-		return nil, fmt.Errorf("cannot get cluster config: %v", err)
-	}
-	log.Debugf(spew.Sprintf("clusterConfig: %#v", clusterConfig))
-
 	candidate := leadership.NewCandidate(kvstore, filepath.Join(storePath, common.SentinelLeaderKey), id, 15*time.Second)
 
 	return &Sentinel{
@@ -664,7 +645,6 @@ func NewSentinel(id string, cfg config, stop chan bool, end chan bool) (*Sentine
 		port:          cfg.port,
 		candidate:     candidate,
 		leader:        false,
-		clusterConfig: clusterConfig,
 		stop:          stop,
 		end:           end}, nil
 }
@@ -697,7 +677,13 @@ func (s *Sentinel) Start() {
 				endCh <- struct{}{}
 			}()
 		case <-endCh:
-			timerCh = time.NewTimer(s.clusterConfig.SleepInterval).C
+			var sleepInterval time.Duration
+			if s.clusterConfig == nil {
+				sleepInterval = cluster.DefaultSleepInterval
+			} else {
+				sleepInterval = s.clusterConfig.SleepInterval
+			}
+			timerCh = time.NewTimer(sleepInterval).C
 		case err := <-endApiCh:
 			if err != nil {
 				log.Fatal("ListenAndServe: ", err)
