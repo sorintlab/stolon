@@ -83,19 +83,20 @@ func TestParseConfig(t *testing.T) {
 		},
 		// All options defined
 		{
-			in: `{ "request_timeout": "10s", "sleep_interval": "10s", "keeper_fail_interval": "100s", "pg_repl_user": "username", "pg_repl_password": "password", "max_standbys_per_sender": 5, "synchronous_replication": true,
+			in: `{ "request_timeout": "10s", "sleep_interval": "10s", "keeper_fail_interval": "100s", "pg_repl_user": "username", "pg_repl_password": "password", "max_standbys_per_sender": 5, "synchronous_replication": true, "init_with_multiple_keepers": true,
 			       "pg_parameters": {
 			         "param01": "value01"
 				}
 			     }`,
 			cfg: mergeDefaults(&NilConfig{
-				RequestTimeout:         &Duration{10 * time.Second},
-				SleepInterval:          &Duration{10 * time.Second},
-				KeeperFailInterval:     &Duration{100 * time.Second},
-				PGReplUser:             StringP("username"),
-				PGReplPassword:         StringP("password"),
-				MaxStandbysPerSender:   UintP(5),
-				SynchronousReplication: BoolP(true),
+				RequestTimeout:          &Duration{10 * time.Second},
+				SleepInterval:           &Duration{10 * time.Second},
+				KeeperFailInterval:      &Duration{100 * time.Second},
+				PGReplUser:              StringP("username"),
+				PGReplPassword:          StringP("password"),
+				MaxStandbysPerSender:    UintP(5),
+				SynchronousReplication:  BoolP(true),
+				InitWithMultipleKeepers: BoolP(true),
 				PGParameters: &map[string]string{
 					"param01": "value01",
 				},

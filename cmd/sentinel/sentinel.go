@@ -462,13 +462,17 @@ func (s *Sentinel) updateKeepersState(keepersState cluster.KeepersState, keepers
 func (s *Sentinel) updateClusterView(cv *cluster.ClusterView, keepersState cluster.KeepersState) (*cluster.ClusterView, error) {
 	var wantedMasterID string
 	if cv.Master == "" {
+		if cv.Version != 1 {
+			return nil, fmt.Errorf("cluster view at version %d without a defined master. This shouldn't happen!", cv.Version)
+		}
+
 		log.Debugf("trying to find initial master")
 		// Check for an initial master
 		if len(keepersState) < 1 {
-			return nil, fmt.Errorf("cannot init cluster, no keepers registered")
+			return nil, fmt.Errorf("cannot choose initial master, no keepers registered")
 		}
-		if len(keepersState) > 1 {
-			return nil, fmt.Errorf("cannot init cluster, more than 1 keeper registered")
+		if len(keepersState) > 1 && !s.clusterConfig.InitWithMultipleKeepers {
+			return nil, fmt.Errorf("cannot choose initial master, more than 1 keeper registered")
 		}
 		for id, k := range keepersState {
 			if k.PGState == nil {

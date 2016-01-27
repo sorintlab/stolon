@@ -34,33 +34,74 @@ func TestUpdateClusterView(t *testing.T) {
 			cv:           cluster.NewClusterView(),
 			keepersState: nil,
 			outCV:        cluster.NewClusterView(),
-			err:          fmt.Errorf("cannot init cluster, no keepers registered"),
+			err:          fmt.Errorf("cluster view at version 0 without a defined master. This shouldn't happen!"),
+		},
+		{
+			cv: &cluster.ClusterView{
+				Version:     1,
+				KeepersRole: cluster.KeepersRole{},
+			},
+			keepersState: nil,
+			outCV: &cluster.ClusterView{
+				Version:     1,
+				KeepersRole: cluster.KeepersRole{},
+			},
+			err: fmt.Errorf("cannot choose initial master, no keepers registered"),
 		},
 		// cluster initialization, one keeper
 		{
-			cv: cluster.NewClusterView(),
+			cv: &cluster.ClusterView{
+				Version:     1,
+				KeepersRole: cluster.KeepersRole{},
+			},
 			keepersState: cluster.KeepersState{
 				"01": &cluster.KeeperState{PGState: &cluster.PostgresState{Initialized: true}},
 			},
 			outCV: &cluster.ClusterView{
-				Version: 1,
+				Version: 2,
 				Master:  "01",
 				KeepersRole: cluster.KeepersRole{
 					"01": &cluster.KeeperRole{ID: "01", Follow: ""},
 				},
-				Config: &cluster.NilConfig{},
 			},
 		},
 		// cluster initialization, too many keepers
 		{
-			cv: cluster.NewClusterView(),
+			cv: &cluster.ClusterView{
+				Version:     1,
+				KeepersRole: cluster.KeepersRole{},
+			},
 			keepersState: cluster.KeepersState{
 				"01": &cluster.KeeperState{},
 				"02": &cluster.KeeperState{},
 			},
-			outCV: cluster.NewClusterView(),
-			err:   fmt.Errorf("cannot init cluster, more than 1 keeper registered"),
+			outCV: &cluster.ClusterView{
+				Version:     1,
+				KeepersRole: cluster.KeepersRole{},
+			},
+			err: fmt.Errorf("cannot choose initial master, more than 1 keeper registered"),
 		},
+		// cluster initialization, more then one keeper but InitWithMultipleKeepers == true
+		{
+			cv: &cluster.ClusterView{
+				Version:     1,
+				KeepersRole: cluster.KeepersRole{},
+				Config:      &cluster.NilConfig{InitWithMultipleKeepers: cluster.BoolP(true)},
+			},
+			keepersState: cluster.KeepersState{
+				"01": &cluster.KeeperState{PGState: &cluster.PostgresState{Initialized: true}},
+				"02": &cluster.KeeperState{PGState: &cluster.PostgresState{Initialized: true}},
+			},
+			outCV: &cluster.ClusterView{
+				Version: 2,
+				KeepersRole: cluster.KeepersRole{
+					"01": &cluster.KeeperRole{ID: "01", Follow: ""},
+					"02": &cluster.KeeperRole{ID: "02", Follow: ""},
+				},
+				Config: &cluster.NilConfig{InitWithMultipleKeepers: cluster.BoolP(true)},
+			},
+		},
+
 		// One master and one standby, both healthy: no change from previous cv
 		{
 			cv: &cluster.ClusterView{
@@ -281,8 +322,13 @@ func TestUpdateClusterView(t *testing.T) {
 		},
 	}
 
-	s := &Sentinel{id: "id", clusterConfig: cluster.NewDefaultConfig()}
 	for i, tt := range tests {
+		var s *Sentinel
+		if tt.cv.Config == nil {
+			s = &Sentinel{id: "id", clusterConfig: cluster.NewDefaultConfig()}
+		} else {
+			s = &Sentinel{id: "id", clusterConfig: tt.cv.Config.ToConfig()}
+		}
 		outCV, err := s.updateClusterView(tt.cv, tt.keepersState)
 		t.Logf("test #%d", i)
 		t.Logf(spew.Sprintf("outCV: %#v", outCV))

@@ -712,6 +712,24 @@ func (te *TestStore) WaitDown(timeout time.Duration) error {
 	return fmt.Errorf("timeout")
 }
 
+func WaitClusterViewWithMaster(e *store.StoreManager, timeout time.Duration) error {
+	start := time.Now()
+	for time.Now().Add(-timeout).Before(start) {
+		cv, _, err := e.GetClusterView()
+		if err != nil {
+			goto end
+		}
+		if cv != nil {
+			if cv.Master != "" {
+				return nil
+			}
+		}
+	end:
+		time.Sleep(2 * time.Second)
+	}
+	return fmt.Errorf("timeout")
+}
+
 func WaitClusterViewMaster(master string, e *store.StoreManager, timeout time.Duration) error {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
@@ -728,7 +746,6 @@ func WaitClusterViewMaster(master string, e *store.StoreManager, timeout time.Du
 		time.Sleep(2 * time.Second)
 	}
 	return fmt.Errorf("timeout")
-
 }
 
 // Hack to find a free tcp port
