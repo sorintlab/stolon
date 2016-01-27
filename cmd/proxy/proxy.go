@@ -63,7 +63,7 @@ func init() {
 	cmdProxy.PersistentFlags().StringVar(&cfg.clusterName, "cluster-name", "", "cluster name")
 	cmdProxy.PersistentFlags().StringVar(&cfg.listenAddress, "listen-address", "127.0.0.1", "proxy listening address")
 	cmdProxy.PersistentFlags().StringVar(&cfg.port, "port", "5432", "proxy listening port")
-	cmdProxy.PersistentFlags().BoolVar(&cfg.stopListening, "stop-listening", true, "stop listening on etcd error")
+	cmdProxy.PersistentFlags().BoolVar(&cfg.stopListening, "stop-listening", true, "stop listening on store error")
 	cmdProxy.PersistentFlags().BoolVar(&cfg.debug, "debug", false, "enable debug logging")
 }
 
@@ -173,7 +173,10 @@ func (c *ClusterChecker) Check() error {
 	log.Debugf(spew.Sprintf("clusterview: %#v", cv))
 
 	// Start pollon if not active
-	c.startPollonProxy()
+	if err := c.startPollonProxy(); err != nil {
+		log.Errorf("failed to start proxy: %v", err)
+		return nil
+	}
 
 	if cv == nil {
 		log.Infof("no clusterview available, closing connections to previous master")
