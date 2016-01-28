@@ -413,7 +413,7 @@ type TestSentinel struct {
 	port          string
 }
 
-func NewTestSentinel(dir string, clusterName string, storeBackend store.Backend, storeEndpoints string) (*TestSentinel, error) {
+func NewTestSentinel(dir string, clusterName string, storeBackend store.Backend, storeEndpoints string, a ...string) (*TestSentinel, error) {
 	u := uuid.NewV4()
 	id := fmt.Sprintf("%x", u[:4])
 
@@ -433,6 +433,7 @@ func NewTestSentinel(dir string, clusterName string, storeBackend store.Backend,
 	args = append(args, fmt.Sprintf("--store-backend=%s", storeBackend))
 	args = append(args, fmt.Sprintf("--store-endpoints=%s", storeEndpoints))
 	args = append(args, "--debug")
+	args = append(args, a...)
 
 	bin := os.Getenv("STSENTINEL_BIN")
 	if bin == "" {
@@ -739,6 +740,24 @@ func WaitClusterViewMaster(master string, e *store.StoreManager, timeout time.Du
 		}
 		if cv != nil {
 			if cv.Master == master {
+				return nil
+			}
+		}
+	end:
+		time.Sleep(2 * time.Second)
+	}
+	return fmt.Errorf("timeout")
+}
+
+func WaitClusterInitialized(e *store.StoreManager, timeout time.Duration) error {
+	start := time.Now()
+	for time.Now().Add(-timeout).Before(start) {
+		cv, _, err := e.GetClusterView()
+		if err != nil {
+			goto end
+		}
+		if cv != nil {
+			if cv.Version > 0 {
 				return nil
 			}
 		}
