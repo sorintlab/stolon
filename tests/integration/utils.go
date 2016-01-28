@@ -776,7 +776,7 @@ func getFreeTCPUDPPort() (string, string, error) {
 
 		lnudp, err := net.ListenPacket("udp", fmt.Sprintf("%s:%s", listenAddress, port))
 		if err != nil {
-			return "", "", err
+			continue
 		}
 		lnudp.Close()
 		return listenAddress, port, nil
