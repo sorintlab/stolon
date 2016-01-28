@@ -80,8 +80,6 @@ func TestInitWithMultipleKeepers(t *testing.T) {
 	tks := []*TestKeeper{}
 	tss := []*TestSentinel{}
 
-	defer shutdown(tks, tss, tstore)
-
 	// Start 3 keepers
 	for i := uint8(0); i < 3; i++ {
 		tk, err := NewTestKeeper(dir, clusterName, tstore.storeBackend, storeEndpoints)
@@ -91,10 +89,10 @@ func TestInitWithMultipleKeepers(t *testing.T) {
 		if err := tk.Start(); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
+		tks = append(tks, tk)
 		if err := tk.WaitDBUp(60 * time.Second); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
-		tks = append(tks, tk)
 	}
 
 	// Start 2 sentinels
@@ -108,6 +106,8 @@ func TestInitWithMultipleKeepers(t *testing.T) {
 		}
 		tss = append(tss, ts)
 	}
+
+	defer shutdown(tks, tss, tstore)
 
 	// Wait for clusterView containing a master
 	if err := WaitClusterViewWithMaster(e, 30*time.Second); err != nil {
