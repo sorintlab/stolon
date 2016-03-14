@@ -36,7 +36,7 @@ func TestServerParameters(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 
-	tstore, err := NewTestStore(dir)
+	tstore, err := NewTestStore(t, dir)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -71,7 +71,7 @@ func TestServerParameters(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	tk, err := NewTestKeeper(dir, clusterName, tstore.storeBackend, storeEndpoints)
+	tk, err := NewTestKeeper(t, dir, clusterName, tstore.storeBackend, storeEndpoints)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}

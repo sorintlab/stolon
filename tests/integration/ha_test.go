@@ -30,7 +30,7 @@ import (
 )
 
 func setupStore(t *testing.T, dir string) *TestStore {
-	tstore, err := NewTestStore(dir)
+	tstore, err := NewTestStore(t, dir)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -44,6 +44,7 @@ func setupStore(t *testing.T, dir string) *TestStore {
 }
 
 func TestInitWithMultipleKeepers(t *testing.T) {
+	t.Parallel()
 	dir, err := ioutil.TempDir("", "stolon")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -82,7 +83,7 @@ func TestInitWithMultipleKeepers(t *testing.T) {
 
 	// Start 3 keepers
 	for i := uint8(0); i < 3; i++ {
-		tk, err := NewTestKeeper(dir, clusterName, tstore.storeBackend, storeEndpoints)
+		tk, err := NewTestKeeper(t, dir, clusterName, tstore.storeBackend, storeEndpoints)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -97,7 +98,7 @@ func TestInitWithMultipleKeepers(t *testing.T) {
 
 	// Start 2 sentinels
 	for i := uint8(0); i < 2; i++ {
-		ts, err := NewTestSentinel(dir, clusterName, tstore.storeBackend, storeEndpoints)
+		ts, err := NewTestSentinel(t, dir, clusterName, tstore.storeBackend, storeEndpoints)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -146,17 +147,17 @@ func setupServers(t *testing.T, dir string, numKeepers, numSentinels uint8, sync
 	tks := []*TestKeeper{}
 	tss := []*TestSentinel{}
 
-	tk, err := NewTestKeeper(dir, clusterName, tstore.storeBackend, storeEndpoints)
+	tk, err := NewTestKeeper(t, dir, clusterName, tstore.storeBackend, storeEndpoints)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	tks = append(tks, tk)
 
-	fmt.Printf("tk: %v\n", tk)
+	t.Logf("tk: %v\n", tk)
 
 	// Start sentinels
 	for i := uint8(0); i < numSentinels; i++ {
-		ts, err := NewTestSentinel(dir, clusterName, tstore.storeBackend, storeEndpoints)
+		ts, err := NewTestSentinel(t, dir, clusterName, tstore.storeBackend, storeEndpoints)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -183,7 +184,7 @@ func setupServers(t *testing.T, dir string, numKeepers, numSentinels uint8, sync
 
 	// Start other keepers
 	for i := uint8(1); i < numKeepers; i++ {
-		tk, err := NewTestKeeper(dir, clusterName, tstore.storeBackend, storeEndpoints)
+		tk, err := NewTestKeeper(t, dir, clusterName, tstore.storeBackend, storeEndpoints)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -314,10 +315,12 @@ func testMasterStandby(t *testing.T, syncRepl bool) {
 }
 
 func TestMasterStandby(t *testing.T) {
+	t.Parallel()
 	testMasterStandby(t, false)
 }
 
 func TestMasterStandbySyncRepl(t *testing.T) {
+	t.Parallel()
 	testMasterStandby(t, true)
 }
 
@@ -344,7 +347,7 @@ func testFailover(t *testing.T, syncRepl bool) {
 	}
 
 	// Stop the keeper process on master, should also stop the database
-	fmt.Printf("Stopping current master keeper: %s\n", master.id)
+	t.Logf("Stopping current master keeper: %s\n", master.id)
 	master.Stop()
 
 	if err := standbys[0].WaitRole(common.MasterRole, 30*time.Second); err != nil {
@@ -361,9 +364,11 @@ func testFailover(t *testing.T, syncRepl bool) {
 }
 
 func TestFailover(t *testing.T) {
+	t.Parallel()
 	testFailover(t, false)
 }
 func TestFailoverSyncRepl(t *testing.T) {
+	t.Parallel()
 	testFailover(t, true)
 }
 
@@ -390,7 +395,7 @@ func testOldMasterRestart(t *testing.T, syncRepl bool) {
 	}
 
 	// Stop the keeper process on master, should also stop the database
-	fmt.Printf("Stopping current master keeper: %s\n", master.id)
+	t.Logf("Stopping current master keeper: %s\n", master.id)
 	master.Stop()
 
 	if err := standbys[0].WaitRole(common.MasterRole, 30*time.Second); err != nil {
@@ -410,7 +415,7 @@ func testOldMasterRestart(t *testing.T, syncRepl bool) {
 	}
 
 	// Restart the old master
-	fmt.Printf("Restarting old master keeper: %s\n", master.id)
+	t.Logf("Restarting old master keeper: %s\n", master.id)
 	if err := master.Start(); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -427,10 +432,12 @@ func testOldMasterRestart(t *testing.T, syncRepl bool) {
 }
 
 func TestOldMasterRestart(t *testing.T) {
+	t.Parallel()
 	testOldMasterRestart(t, false)
 }
 
 func TestOldMasterRestartSyncRepl(t *testing.T) {
+	t.Parallel()
 	testOldMasterRestart(t, true)
 }
 
@@ -457,11 +464,11 @@ func testPartition1(t *testing.T, syncRepl bool) {
 	}
 
 	// Freeze the keeper and postgres processes on the master
-	fmt.Printf("SIGSTOPping current master keeper: %s\n", master.id)
+	t.Logf("SIGSTOPping current master keeper: %s\n", master.id)
 	if err := master.Signal(syscall.SIGSTOP); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	fmt.Printf("SIGSTOPping current master postgres: %s\n", master.id)
+	t.Logf("SIGSTOPping current master postgres: %s\n", master.id)
 	if err := master.SignalPG(syscall.SIGSTOP); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -482,11 +489,11 @@ func testPartition1(t *testing.T, syncRepl bool) {
 	}
 
 	// Make the master come back
-	fmt.Printf("Resuming old master keeper: %s\n", master.id)
+	t.Logf("Resuming old master keeper: %s\n", master.id)
 	if err := master.Signal(syscall.SIGCONT); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	fmt.Printf("Resuming old master postgres: %s\n", master.id)
+	t.Logf("Resuming old master postgres: %s\n", master.id)
 	if err := master.SignalPG(syscall.SIGCONT); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -503,10 +510,12 @@ func testPartition1(t *testing.T, syncRepl bool) {
 }
 
 func TestPartition1(t *testing.T) {
+	t.Parallel()
 	testPartition1(t, false)
 }
 
 func TestPartition1SyncRepl(t *testing.T) {
+	t.Parallel()
 	testPartition1(t, true)
 }
 
@@ -533,7 +542,7 @@ func testTimelineFork(t *testing.T, syncRepl bool) {
 	}
 
 	// Stop one standby
-	fmt.Printf("Stopping standby[0]: %s\n", master.id)
+	t.Logf("Stopping standby[0]: %s\n", master.id)
 	standbys[0].Stop()
 	if err := standbys[0].WaitDBDown(60 * time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -566,7 +575,7 @@ func testTimelineFork(t *testing.T, syncRepl bool) {
 	}
 
 	// Start standby[0]. It will be elected as master but it'll be behind (having only one line).
-	fmt.Printf("Starting standby[0]: %s\n", standbys[0].id)
+	t.Logf("Starting standby[0]: %s\n", standbys[0].id)
 	standbys[0].Start()
 	if err := standbys[0].WaitDBUp(60 * time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -583,7 +592,7 @@ func testTimelineFork(t *testing.T, syncRepl bool) {
 	}
 
 	// Start the other stadby, it should be ahead of current on previous timeline and should full resync himself
-	fmt.Printf("Starting standby[1]: %s\n", standbys[1].id)
+	t.Logf("Starting standby[1]: %s\n", standbys[1].id)
 	standbys[1].Start()
 	// Standby[1] will start, then it'll detect it's in another timelinehistory,
 	// will stop, full resync and start. We have to avoid detecting it up
@@ -598,9 +607,11 @@ func testTimelineFork(t *testing.T, syncRepl bool) {
 }
 
 func TestTimelineFork(t *testing.T) {
+	t.Parallel()
 	testTimelineFork(t, false)
 }
 
 func TestTimelineForkSyncRepl(t *testing.T) {
+	t.Parallel()
 	testTimelineFork(t, true)
 }
