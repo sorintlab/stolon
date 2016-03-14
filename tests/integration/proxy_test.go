@@ -17,7 +17,6 @@ package integration
 import (
 	"fmt"
 	"io/ioutil"
-	"log"
 	"os"
 	"path/filepath"
 	"testing"
@@ -31,6 +30,8 @@ import (
 )
 
 func TestProxyListening(t *testing.T) {
+	t.Parallel()
+
 	dir, err := ioutil.TempDir("", "")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -39,13 +40,13 @@ func TestProxyListening(t *testing.T) {
 
 	clusterName := uuid.NewV4().String()
 
-	tstore, err := NewTestStore(dir)
+	tstore, err := NewTestStore(t, dir)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
 
-	tp, err := NewTestProxy(dir, clusterName, tstore.storeBackend, storeEndpoints)
+	tp, err := NewTestProxy(t, dir, clusterName, tstore.storeBackend, storeEndpoints)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -54,7 +55,7 @@ func TestProxyListening(t *testing.T) {
 	}
 	defer tp.Stop()
 
-	log.Printf("test proxy start with store down. Should not listen")
+	t.Logf("test proxy start with store down. Should not listen")
 	// tp should not listen because it cannot talk with store
 	if err := tp.WaitNotListening(10 * time.Second); err != nil {
 		t.Fatalf("expecting tp not listening due to failed store communication, but it's listening.")
@@ -101,7 +102,7 @@ func TestProxyListening(t *testing.T) {
 	}
 
 	// test proxy start with the store up
-	log.Printf("test proxy start with the store up. Should listen")
+	t.Logf("test proxy start with the store up. Should listen")
 	if err := tp.Start(); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -111,7 +112,7 @@ func TestProxyListening(t *testing.T) {
 		t.Fatalf("expecting tp listening, but it's not listening.")
 	}
 
-	log.Printf("test proxy error communicating with store. Should stop listening")
+	t.Logf("test proxy error communicating with store. Should stop listening")
 	// Stop store
 	tstore.Stop()
 	if err := tstore.WaitDown(10 * time.Second); err != nil {
@@ -123,7 +124,7 @@ func TestProxyListening(t *testing.T) {
 		t.Fatalf("expecting tp not listening due to failed store communication, but it's listening.")
 	}
 
-	log.Printf("test proxy communication with store restored. Should start listening")
+	t.Logf("test proxy communication with store restored. Should start listening")
 	// Start store
 	if err := tstore.Start(); err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -136,7 +137,7 @@ func TestProxyListening(t *testing.T) {
 		t.Fatalf("expecting tp listening, but it's not listening.")
 	}
 
-	log.Printf("test proxyConf removed. Should continue listening")
+	t.Logf("test proxyConf removed. Should continue listening")
 	// remove proxyConf
 	pair, err = e.SetClusterData(cluster.KeepersState{},
 		&cluster.ClusterView{
@@ -156,7 +157,7 @@ func TestProxyListening(t *testing.T) {
 		t.Fatalf("expecting tp listening, but it's not listening.")
 	}
 
-	log.Printf("test proxyConf restored. Should continue listening")
+	t.Logf("test proxyConf restored. Should continue listening")
 	// Set proxyConf again
 	pair, err = e.SetClusterData(cluster.KeepersState{},
 		&cluster.ClusterView{
@@ -180,7 +181,7 @@ func TestProxyListening(t *testing.T) {
 		t.Fatalf("expecting tp listening, but it's not listening.")
 	}
 
-	log.Printf("test clusterView removed. Should continue listening")
+	t.Logf("test clusterView removed. Should continue listening")
 	// remove whole clusterview
 	_, err = e.SetClusterData(cluster.KeepersState{}, nil, pair)
 	if err != nil {

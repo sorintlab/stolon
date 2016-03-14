@@ -27,6 +27,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"testing"
 	"time"
 
 	"github.com/sorintlab/stolon/common"
@@ -41,6 +42,7 @@ import (
 )
 
 type Process struct {
+	t    *testing.T
 	id   string
 	name string
 	args []string
@@ -64,7 +66,7 @@ func (p *Process) start() error {
 	go func() {
 		scanner := bufio.NewScanner(pr)
 		for scanner.Scan() {
-			fmt.Printf("[%s]: %s\n", p.id, scanner.Text())
+			p.t.Logf("[%s]: %s\n", p.id, scanner.Text())
 		}
 	}()
 
@@ -84,7 +86,7 @@ func (p *Process) StartExpect() error {
 }
 
 func (p *Process) Signal(sig os.Signal) error {
-	fmt.Printf("signalling %s %s with %s\n", p.name, p.id, sig)
+	p.t.Logf("signalling %s %s with %s\n", p.name, p.id, sig)
 	if p.cmd == nil {
 		panic(fmt.Errorf("p: %s, cmd is empty", p.id))
 	}
@@ -92,7 +94,7 @@ func (p *Process) Signal(sig os.Signal) error {
 }
 
 func (p *Process) Kill() {
-	fmt.Printf("killing %s %s\n", p.name, p.id)
+	p.t.Logf("killing %s %s\n", p.name, p.id)
 	if p.cmd == nil {
 		panic(fmt.Errorf("p: %s, cmd is empty", p.id))
 	}
@@ -102,7 +104,7 @@ func (p *Process) Kill() {
 }
 
 func (p *Process) Stop() {
-	fmt.Printf("stopping %s %s\n", p.name, p.id)
+	p.t.Logf("stopping %s %s\n", p.name, p.id)
 	if p.cmd == nil {
 		panic(fmt.Errorf("p: %s, cmd is empty", p.id))
 	}
@@ -128,6 +130,7 @@ func (p *Process) Wait(timeout time.Duration) error {
 }
 
 type TestKeeper struct {
+	t *testing.T
 	Process
 	dataDir         string
 	listenAddress   string
@@ -137,7 +140,7 @@ type TestKeeper struct {
 	db              *sql.DB
 }
 
-func NewTestKeeperWithID(dir string, id string, clusterName string, storeBackend store.Backend, storeEndpoints string, a ...string) (*TestKeeper, error) {
+func NewTestKeeperWithID(t *testing.T, dir string, id string, clusterName string, storeBackend store.Backend, storeEndpoints string, a ...string) (*TestKeeper, error) {
 	args := []string{}
 
 	dataDir := filepath.Join(dir, fmt.Sprintf("st%s", id))
@@ -180,7 +183,9 @@ func NewTestKeeperWithID(dir string, id string, clusterName string, storeBackend
 		return nil, fmt.Errorf("missing STKEEPER_BIN env")
 	}
 	tk := &TestKeeper{
+		t: t,
 		Process: Process{
+			t:    t,
 			id:   id,
 			name: "keeper",
 			bin:  bin,
@@ -196,11 +201,11 @@ func NewTestKeeperWithID(dir string, id string, clusterName string, storeBackend
 	return tk, nil
 }
 
-func NewTestKeeper(dir string, clusterName string, storeBackend store.Backend, storeEndpoints string, a ...string) (*TestKeeper, error) {
+func NewTestKeeper(t *testing.T, dir string, clusterName string, storeBackend store.Backend, storeEndpoints string, a ...string) (*TestKeeper, error) {
 	u := uuid.NewV4()
 	id := fmt.Sprintf("%x", u[:4])
 
-	return NewTestKeeperWithID(dir, id, clusterName, storeBackend, storeEndpoints, a...)
+	return NewTestKeeperWithID(t, dir, id, clusterName, storeBackend, storeEndpoints, a...)
 }
 
 func (tk *TestKeeper) Exec(query string, args ...interface{}) (sql.Result, error) {
@@ -228,7 +233,7 @@ func (tk *TestKeeper) WaitDBUp(timeout time.Duration) error {
 		if err == nil {
 			return nil
 		}
-		fmt.Printf("tk: %v, error: %v\n", tk.id, err)
+		tk.t.Logf("tk: %v, error: %v\n", tk.id, err)
 		time.Sleep(2 * time.Second)
 	}
 
@@ -255,7 +260,7 @@ func (tk *TestKeeper) WaitUp(timeout time.Duration) error {
 		if err == nil {
 			return nil
 		}
-		fmt.Printf("tk: %v, error: %v\n", tk.id, err)
+		tk.t.Logf("tk: %v, error: %v\n", tk.id, err)
 		time.Sleep(1 * time.Second)
 	}
 
@@ -407,13 +412,13 @@ func waitChecks(timeout time.Duration, fns ...CheckFunc) error {
 }
 
 type TestSentinel struct {
+	t *testing.T
 	Process
-
 	listenAddress string
 	port          string
 }
 
-func NewTestSentinel(dir string, clusterName string, storeBackend store.Backend, storeEndpoints string, a ...string) (*TestSentinel, error) {
+func NewTestSentinel(t *testing.T, dir string, clusterName string, storeBackend store.Backend, storeEndpoints string, a ...string) (*TestSentinel, error) {
 	u := uuid.NewV4()
 	id := fmt.Sprintf("%x", u[:4])
 
@@ -440,7 +445,9 @@ func NewTestSentinel(dir string, clusterName string, storeBackend store.Backend,
 		return nil, fmt.Errorf("missing STSENTINEL_BIN env")
 	}
 	ts := &TestSentinel{
+		t: t,
 		Process: Process{
+			t:    t,
 			id:   id,
 			name: "sentinel",
 			bin:  bin,
@@ -453,13 +460,13 @@ func NewTestSentinel(dir string, clusterName string, storeBackend store.Backend,
 }
 
 type TestProxy struct {
+	t *testing.T
 	Process
-
 	listenAddress string
 	port          string
 }
 
-func NewTestProxy(dir string, clusterName string, storeBackend store.Backend, storeEndpoints string, a ...string) (*TestProxy, error) {
+func NewTestProxy(t *testing.T, dir string, clusterName string, storeBackend store.Backend, storeEndpoints string, a ...string) (*TestProxy, error) {
 	u := uuid.NewV4()
 	id := fmt.Sprintf("%x", u[:4])
 
@@ -486,7 +493,9 @@ func NewTestProxy(dir string, clusterName string, storeBackend store.Backend, st
 		return nil, fmt.Errorf("missing STPROXY_BIN env")
 	}
 	tp := &TestProxy{
+		t: t,
 		Process: Process{
+			t:    t,
 			id:   id,
 			name: "proxy",
 			bin:  bin,
@@ -505,7 +514,7 @@ func (tp *TestProxy) WaitListening(timeout time.Duration) error {
 		if err == nil {
 			return nil
 		}
-		fmt.Printf("tp: %v, error: %v\n", tp.id, err)
+		tp.t.Logf("tp: %v, error: %v\n", tp.id, err)
 		time.Sleep(2 * time.Second)
 	}
 	return fmt.Errorf("timeout")
@@ -518,33 +527,33 @@ func (tp *TestProxy) WaitNotListening(timeout time.Duration) error {
 		if err != nil {
 			return nil
 		}
-		fmt.Printf("tp: %v, error: %v\n", tp.id, err)
+		tp.t.Logf("tp: %v, error: %v\n", tp.id, err)
 		time.Sleep(2 * time.Second)
 	}
 	return fmt.Errorf("timeout")
 }
 
 type TestStore struct {
+	t *testing.T
 	Process
-
 	listenAddress string
 	port          string
 	store         kvstore.Store
 	storeBackend  store.Backend
 }
 
-func NewTestStore(dir string, a ...string) (*TestStore, error) {
+func NewTestStore(t *testing.T, dir string, a ...string) (*TestStore, error) {
 	storeBackend := store.Backend(os.Getenv("STOLON_TEST_STORE_BACKEND"))
 	switch storeBackend {
 	case store.CONSUL:
-		return NewTestConsul(dir, a...)
+		return NewTestConsul(t, dir, a...)
 	case store.ETCD:
-		return NewTestEtcd(dir, a...)
+		return NewTestEtcd(t, dir, a...)
 	}
 	return nil, fmt.Errorf("wrong store backend")
 }
 
-func NewTestEtcd(dir string, a ...string) (*TestStore, error) {
+func NewTestEtcd(t *testing.T, dir string, a ...string) (*TestStore, error) {
 	u := uuid.NewV4()
 	id := fmt.Sprintf("%x", u[:4])
 
@@ -589,7 +598,9 @@ func NewTestEtcd(dir string, a ...string) (*TestStore, error) {
 		return nil, fmt.Errorf("missing ETCD_BIN env")
 	}
 	te := &TestStore{
+		t: t,
 		Process: Process{
+			t:    t,
 			id:   id,
 			name: "etcd",
 			bin:  bin,
@@ -603,7 +614,7 @@ func NewTestEtcd(dir string, a ...string) (*TestStore, error) {
 	return te, nil
 }
 
-func NewTestConsul(dir string, a ...string) (*TestStore, error) {
+func NewTestConsul(t *testing.T, dir string, a ...string) (*TestStore, error) {
 	u := uuid.NewV4()
 	id := fmt.Sprintf("%x", u[:4])
 
@@ -668,8 +679,10 @@ func NewTestConsul(dir string, a ...string) (*TestStore, error) {
 	if bin == "" {
 		return nil, fmt.Errorf("missing CONSUL_BIN env")
 	}
-	te := &TestStore{
+	ts := &TestStore{
+		t: t,
 		Process: Process{
+			t:    t,
 			id:   id,
 			name: "consul",
 			bin:  bin,
@@ -680,14 +693,14 @@ func NewTestConsul(dir string, a ...string) (*TestStore, error) {
 		store:         kvstore,
 		storeBackend:  store.CONSUL,
 	}
-	return te, nil
+	return ts, nil
 }
 
-func (te *TestStore) WaitUp(timeout time.Duration) error {
+func (ts *TestStore) WaitUp(timeout time.Duration) error {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
-		_, err := te.store.Get("anykey")
-		fmt.Printf("err: %v\n", err)
+		_, err := ts.store.Get("anykey")
+		ts.t.Logf("err: %v\n", err)
 		if err != nil && err == kvstore.ErrKeyNotFound {
 			return nil
 		}
@@ -700,10 +713,10 @@ func (te *TestStore) WaitUp(timeout time.Duration) error {
 	return fmt.Errorf("timeout")
 }
 
-func (te *TestStore) WaitDown(timeout time.Duration) error {
+func (ts *TestStore) WaitDown(timeout time.Duration) error {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
-		_, err := te.store.Get("anykey")
+		_, err := ts.store.Get("anykey")
 		if err != nil && err != kvstore.ErrKeyNotFound {
 			return nil
 		}
