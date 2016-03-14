@@ -305,7 +305,7 @@ func (s *Sentinel) getKubernetesPodsIPs(ctx context.Context) ([]string, error) {
 		}
 		// Not using kubernetes apis packages since they import tons of other packages
 		var data map[string]interface{}
-		if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		if err = json.NewDecoder(resp.Body).Decode(&data); err != nil {
 			return err
 		}
 
@@ -745,7 +745,7 @@ func (s *Sentinel) clusterSentinelCheck(pctx context.Context) {
 	// This shouldn't need a lock
 	s.clusterConfig = cv.Config.ToConfig()
 
-	if err := s.setSentinelInfo(2 * s.clusterConfig.SleepInterval); err != nil {
+	if err = s.setSentinelInfo(2 * s.clusterConfig.SleepInterval); err != nil {
 		log.Errorf("cannot update sentinel info: %v", err)
 		return
 	}
