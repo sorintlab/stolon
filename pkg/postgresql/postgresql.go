@@ -105,27 +105,27 @@ func (p *Manager) Init() error {
 		return fmt.Errorf("error: %v, output: %s", err, out)
 	}
 	// Move current (initdb generated) postgresql.conf to postgresql-base.conf
-	if err := os.Rename(filepath.Join(p.dataDir, "postgresql.conf"), filepath.Join(p.dataDir, "postgresql-base.conf")); err != nil {
+	if err = os.Rename(filepath.Join(p.dataDir, "postgresql.conf"), filepath.Join(p.dataDir, "postgresql-base.conf")); err != nil {
 		return fmt.Errorf("error moving postgresql.conf file to postgresql-base.conf: %v", err)
 	}
 	// Create default confDir
-	if err := os.Mkdir(filepath.Join(p.dataDir, "conf.d"), 0700); err != nil {
+	if err = os.Mkdir(filepath.Join(p.dataDir, "conf.d"), 0700); err != nil {
 		return fmt.Errorf("error creating conf.d inside dataDir: %v", err)
 	}
-	if err := p.WriteConf(); err != nil {
+	if err = p.WriteConf(); err != nil {
 		return fmt.Errorf("error writing postgresql.conf file: %v", err)
 	}
 
 	log.Infof("Setting required accesses to pg_hba.conf")
-	if err := p.writePgHba(); err != nil {
+	if err = p.writePgHba(); err != nil {
 		return fmt.Errorf("error setting requires accesses to pg_hba.conf: %v", err)
 	}
 
-	if err := p.Start(); err != nil {
+	if err = p.Start(); err != nil {
 		return fmt.Errorf("error starting instance: %v", err)
 	}
 	log.Infof("Creating replication role")
-	if err := p.CreateReplRole(); err != nil {
+	if err = p.CreateReplRole(); err != nil {
 		return fmt.Errorf("error creating replication role: %v", err)
 	}
 	err = p.Stop(true)
@@ -349,7 +349,7 @@ func (p *Manager) WriteConf() error {
 			return err
 		}
 	}
-	if err := f.Sync(); err != nil {
+	if err = f.Sync(); err != nil {
 		return err
 	}
 	if err = os.Rename(f.Name(), filepath.Join(p.dataDir, "postgresql.conf")); err != nil {
@@ -379,7 +379,7 @@ func (p *Manager) WriteRecoveryConf(masterconnString string) error {
 		}
 		f.WriteString(fmt.Sprintf("primary_conninfo = '%s'", cp.ConnString()))
 	}
-	if err := f.Sync(); err != nil {
+	if err = f.Sync(); err != nil {
 		return err
 	}
 

@@ -237,7 +237,7 @@ func GetPGState(ctx context.Context, replConnString string) (*cluster.PostgresSt
 		var pgState cluster.PostgresState
 		var xLogPosLsn string
 		var unused *string
-		if err := rows.Scan(&pgState.SystemID, &pgState.TimelineID, &xLogPosLsn, &unused); err != nil {
+		if err = rows.Scan(&pgState.SystemID, &pgState.TimelineID, &xLogPosLsn, &unused); err != nil {
 			return nil, err
 		}
 		pgState.XLogPos, err = PGLSNToInt(xLogPosLsn)

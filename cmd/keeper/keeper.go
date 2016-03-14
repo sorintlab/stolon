@@ -531,7 +531,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 	}
 
 	// publish ourself for discovery
-	if err := p.publish(); err != nil {
+	if err = p.publish(); err != nil {
 		log.Errorf("failed to publish ourself to the cluster: %v", err)
 		return
 	}
@@ -557,7 +557,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 		log.Infof("our cluster requested state is master")
 		if role != common.MasterRole {
 			log.Infof("promoting to master")
-			err := pgm.Promote()
+			err = pgm.Promote()
 			if err != nil {
 				log.Errorf("err: %v", err)
 				return
@@ -632,7 +632,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 			}
 			mPGState := master.PGState
 			if p.isDifferentTimelineBranch(mPGState, pgState) {
-				if err := p.fullResync(master, initialized, started); err != nil {
+				if err = p.fullResync(master, initialized, started); err != nil {
 					log.Errorf("failed to full resync from master: %v", err)
 					return
 				}
@@ -778,7 +778,7 @@ func keeper(cmd *cobra.Command, args []string) {
 			}
 			log.Infof("generated id: %s", id)
 		}
-		if err := saveIDToFile(cfg, id); err != nil {
+		if err = saveIDToFile(cfg, id); err != nil {
 			log.Fatalf("error: %v", err)
 		}
 	}

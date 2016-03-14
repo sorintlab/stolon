@@ -173,7 +173,7 @@ func (c *ClusterChecker) Check() error {
 	log.Debugf(spew.Sprintf("clusterview: %#v", cv))
 
 	// Start pollon if not active
-	if err := c.startPollonProxy(); err != nil {
+	if err = c.startPollonProxy(); err != nil {
 		log.Errorf("failed to start proxy: %v", err)
 		return nil
 	}
@@ -187,7 +187,7 @@ func (c *ClusterChecker) Check() error {
 	if pc == nil {
 		log.Infof("no proxyconf available, closing connections to previous master")
 		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
-		if err := c.SetProxyInfo(c.e, cv.Version, 2*cluster.DefaultProxyCheckInterval); err != nil {
+		if err = c.SetProxyInfo(c.e, cv.Version, 2*cluster.DefaultProxyCheckInterval); err != nil {
 			log.Errorf("failed to update proxyInfo: %v", err)
 		}
 		return nil
