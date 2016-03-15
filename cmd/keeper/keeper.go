@@ -249,14 +249,10 @@ func (p *PostgresKeeper) updatePGState(pctx context.Context) {
 	p.pgStateMutex.Lock()
 	pgState := &cluster.PostgresState{}
 
-	defer func() {
-		p.lastPGState = pgState
-		p.pgStateMutex.Unlock()
-	}()
+	defer p.pgStateMutex.Unlock()
 
 	initialized, err := p.pgm.IsInitialized()
 	if err != nil {
-		pgState = nil
 		return
 	}
 	if !initialized {
@@ -268,7 +264,6 @@ func (p *PostgresKeeper) updatePGState(pctx context.Context) {
 		cancel()
 		if err != nil {
 			log.Errorf("error getting pg state: %v", err)
-			pgState = nil
 			return
 		}
 		pgState.Initialized = true
@@ -281,12 +276,13 @@ func (p *PostgresKeeper) updatePGState(pctx context.Context) {
 			cancel()
 			if err != nil {
 				log.Errorf("error getting timeline history: %v", err)
-				pgState = nil
 				return
 			}
 			pgState.TimelinesHistory = tlsh
 		}
 	}
+
+	p.lastPGState = pgState
 }
 
 func (p *PostgresKeeper) getLastPGState() *cluster.PostgresState {
