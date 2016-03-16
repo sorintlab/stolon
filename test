@@ -67,7 +67,7 @@ if [ -n "${vetRes}" ]; then
 	exit 255
 fi
 
-echo "Checking govet -shadow..."
+echo "Checking govet -shadow ..."
 for path in $FMT; do
 	vetRes=$(go tool vet -shadow ${path})
 	if [ -n "${vetRes}" ]; then

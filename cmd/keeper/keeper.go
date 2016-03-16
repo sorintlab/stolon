@@ -379,31 +379,22 @@ func (p *PostgresKeeper) Start() {
 func (p *PostgresKeeper) fullResync(master *cluster.KeeperState, initialized, started bool) error {
 	pgm := p.pgm
 	if initialized && started {
-		err := pgm.Stop(true)
-		if err != nil {
+		if err := pgm.Stop(true); err != nil {
 			return fmt.Errorf("failed to stop pg instance: %v", err)
 		}
 	}
-	err := pgm.RemoveAll()
-	if err != nil {
+	if err := pgm.RemoveAll(); err != nil {
 		return fmt.Errorf("failed to remove the postgres data dir: %v", err)
 	}
 	replConnString := p.getReplConnString(master)
 	log.Infof("syncing from master %q with connection url %q", master.ID, replConnString)
-	err = pgm.SyncFromMaster(replConnString)
-	if err != nil {
+	if err := pgm.SyncFromMaster(replConnString); err != nil {
 		return fmt.Errorf("error: %v", err)
 	}
 	log.Infof("sync from master %q successfully finished", master.ID)
 
-	err = pgm.BecomeStandby(replConnString)
-	if err != nil {
+	if err := pgm.WriteRecoveryConf(replConnString); err != nil {
 		return fmt.Errorf("err: %v", err)
-	}
-
-	err = pgm.Start()
-	if err != nil {
-		return fmt.Errorf("failed to start postgres: %v", err)
 	}
 	return nil
 }
@@ -479,9 +470,8 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 	if len(cv.KeepersRole) == 0 {
 		if !initialized {
 			log.Infof("Initializing database")
-			err = pgm.Init()
-			if err != nil {
-				log.Errorf("failed to initialized postgres instance: %v", err)
+			if err = pgm.Init(); err != nil {
+				log.Errorf("failed to initialize postgres instance: %v", err)
 				return
 			}
 			initialized = true
@@ -494,24 +484,11 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 		started, err = pgm.IsStarted()
 		if err != nil {
 			log.Errorf("failed to retrieve instance status: %v", err)
-		} else if !started {
-			err = pgm.Start()
-			if err != nil {
-				log.Errorf("failed to start postgres: %v", err)
-			} else {
-				started = true
-			}
 		}
 	}
 
-	if cv != nil {
-		if !started && p.id == cv.Master {
-			// If the clusterView says we are master but we cannot get
-			// instance status or start then stop here, if we are standby then we can
-			// recover
-			return
-		}
-	}
+	log.Debugf("initialized: %t", initialized)
+	log.Debugf("started: %t", started)
 
 	role, err := pgm.GetRole()
 	if err != nil {
@@ -532,12 +509,6 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 		return
 	}
 
-	if cv == nil {
-		return
-	}
-
-	// cv != nil
-
 	masterID := cv.Master
 	log.Debugf("masterID: %q", masterID)
 
@@ -546,15 +517,37 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 
 	keeperRole, ok := cv.KeepersRole[p.id]
 	if !ok {
+		// No information about our role
 		log.Infof("our keeper requested role is not available")
+		if initialized && !started {
+			if err = pgm.Start(); err != nil {
+				log.Errorf("failed to start postgres: %v", err)
+				return
+			} else {
+				started = true
+			}
+		}
 		return
 	}
-	if keeperRole.Follow == "" {
+	if p.id == masterID {
+		// We are the elected master
 		log.Infof("our cluster requested state is master")
+		if !initialized {
+			log.Errorf("database is not initialized. This shouldn't happen!")
+			return
+		}
+		if !started {
+			if err = pgm.Start(); err != nil {
+				log.Errorf("failed to start postgres: %v", err)
+				return
+			} else {
+				started = true
+			}
+		}
+
 		if role != common.MasterRole {
 			log.Infof("promoting to master")
-			err = pgm.Promote()
-			if err != nil {
+			if err = pgm.Promote(); err != nil {
 				log.Errorf("err: %v", err)
 				return
 			}
@@ -571,8 +564,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 			for _, slotName := range replSlots {
 				if !util.StringInSlice(followersIDs, slotName) {
 					log.Infof("dropping replication slot for keeper %q not marked as follower", slotName)
-					err := pgm.DropReplicationSlot(slotName)
-					if err != nil {
+					if err = pgm.DropReplicationSlot(slotName); err != nil {
 						log.Errorf("err: %v", err)
 					}
 				}
@@ -583,8 +575,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 					continue
 				}
 				if !util.StringInSlice(replSlots, followerID) {
-					err := pgm.CreateReplicationSlot(followerID)
-					if err != nil {
+					if err = pgm.CreateReplicationSlot(followerID); err != nil {
 						log.Errorf("err: %v", err)
 					}
 				}
@@ -592,28 +583,85 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 
 		}
 	} else {
+		// We are a standby
 		log.Infof("our cluster requested state is standby following %q", keeperRole.Follow)
 		if isMaster {
-			if err := p.fullResync(master, initialized, started); err != nil {
-				log.Errorf("failed to full resync from master: %v", err)
-				return
+			if initialized {
+				// There can be the possibility that this
+				// database is on the same branch of the
+				// current master
+				// So we try to put it in recovery and then
+				// check if it's on the same branch or force a
+				// resync
+				replConnString := p.getReplConnString(master)
+				if err = pgm.WriteRecoveryConf(replConnString); err != nil {
+					log.Errorf("err: %v", err)
+					return
+				}
+				if !started {
+					if err = pgm.Start(); err != nil {
+						log.Errorf("err: %v", err)
+						return
+					} else {
+						started = true
+					}
+				} else {
+					if err = pgm.Restart(true); err != nil {
+						log.Errorf("err: %v", err)
+						return
+					}
+				}
+
+				// Check timeline history
+				// We need to update our pgState to avoid dealing with
+				// an old pgState not reflecting the real state
+				p.updatePGState(pctx)
+				pgState := p.getLastPGState()
+				if pgState == nil {
+					log.Errorf("our pgstate is unknown: %v", err)
+					return
+				}
+				mPGState := master.PGState
+
+				// Check if we are on another branch
+				if p.isDifferentTimelineBranch(mPGState, pgState) {
+					if err = p.fullResync(master, initialized, started); err != nil {
+						log.Errorf("failed to full resync from master: %v", err)
+						return
+					}
+					if err = pgm.Start(); err != nil {
+						log.Errorf("err: %v", err)
+						return
+					} else {
+						started = true
+					}
+				}
+			} else {
+				if err = p.fullResync(master, initialized, started); err != nil {
+					log.Errorf("failed to full resync from master: %v", err)
+					return
+				}
+				if err = pgm.Start(); err != nil {
+					log.Errorf("err: %v", err)
+					return
+				} else {
+					started = true
+				}
 			}
 		} else {
 			log.Infof("already standby")
-			curConnParams, err := pgm.GetPrimaryConninfo()
-			if err != nil {
-				log.Errorf("err: %v", err)
+			if !initialized {
+				log.Errorf("database is not initialized. This shouldn't happen!")
 				return
 			}
-			log.Debugf(spew.Sprintf("curConnParams: %v", curConnParams))
-
-			replConnString := p.getReplConnString(master)
-			newConnParams, err := pg.URLToConnParams(replConnString)
-			if err != nil {
-				log.Errorf("cannot get conn params: %v", err)
-				return
+			if !started {
+				if err = pgm.Start(); err != nil {
+					log.Errorf("failed to start postgres: %v", err)
+					return
+				} else {
+					started = true
+				}
 			}
-			log.Debugf(spew.Sprintf("newConnParams: %v", newConnParams))
 
 			// Check that we can sync with master
 
@@ -632,21 +680,40 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 					log.Errorf("failed to full resync from master: %v", err)
 					return
 				}
+				if err = pgm.Start(); err != nil {
+					log.Errorf("err: %v", err)
+					return
+				} else {
+					started = true
+				}
 			}
 
 			// TODO(sgotti) Check that the master has all the needed WAL segments
 
 			// Update our primary_conninfo if replConnString changed
+			curConnParams, err := pgm.GetPrimaryConninfo()
+			if err != nil {
+				log.Errorf("err: %v", err)
+				return
+			}
+			log.Debugf(spew.Sprintf("curConnParams: %v", curConnParams))
+
+			replConnString := p.getReplConnString(master)
+			newConnParams, err := pg.URLToConnParams(replConnString)
+			if err != nil {
+				log.Errorf("cannot get conn params: %v", err)
+				return
+			}
+			log.Debugf(spew.Sprintf("newConnParams: %v", newConnParams))
+
 			if !curConnParams.Equals(newConnParams) {
 				log.Infof("master connection parameters changed. Reconfiguring...")
 				log.Infof("following %s with connection url %s", keeperRole.Follow, replConnString)
-				err = pgm.BecomeStandby(replConnString)
-				if err != nil {
+				if err = pgm.WriteRecoveryConf(replConnString); err != nil {
 					log.Errorf("err: %v", err)
 					return
 				}
-				err = pgm.Restart(true)
-				if err != nil {
+				if err = pgm.Restart(true); err != nil {
 					log.Errorf("err: %v", err)
 					return
 				}

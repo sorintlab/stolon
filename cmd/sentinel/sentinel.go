@@ -548,6 +548,7 @@ func (s *Sentinel) updateClusterView(cv *cluster.ClusterView, keepersState clust
 	if cv.Master == wantedMasterID {
 		// wanted master is the previous one
 		masterState := keepersState[wantedMasterID]
+		// Set standbys to follow master only if it's healthy and converged to the current cv
 		if masterState.Healthy && s.isKeeperConverged(masterState, cv) {
 			for id, _ := range newKeepersRole {
 				if id == wantedMasterID {
