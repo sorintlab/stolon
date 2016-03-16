@@ -104,10 +104,10 @@ func TestServerParameters(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	tk.cmd.Expect("postgres parameters changed, reloading postgres instance")
+	tk.cmd.ExpectTimeout("postgres parameters changed, reloading postgres instance", 30*time.Second)
 
 	// On the next keeper check they shouldn't be changed
-	tk.cmd.Expect("postgres parameters not changed")
+	tk.cmd.ExpectTimeout("postgres parameters not changed", 30*time.Second)
 
 	tk.Stop()
 
@@ -116,7 +116,7 @@ func TestServerParameters(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	tk.cmd.Expect("failed to start postgres:")
+	tk.cmd.ExpectTimeout("failed to start postgres:", 30*time.Second)
 
 	// Fix wrong parameters
 	pair, err = e.SetClusterData(cluster.KeepersState{},

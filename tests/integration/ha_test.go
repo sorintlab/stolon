@@ -239,8 +239,7 @@ func waitLines(t *testing.T, tk *TestKeeper, num int, timeout time.Duration) err
 	end:
 		time.Sleep(2 * time.Second)
 	}
-	return fmt.Errorf("timeout with wrong number of lines: %d", c)
-
+	return fmt.Errorf("timeout waiting for %d lines, got: %d", num, c)
 }
 
 func shutdown(tks []*TestKeeper, tss []*TestSentinel, tstore *TestStore) {
@@ -302,16 +301,9 @@ func testMasterStandby(t *testing.T, syncRepl bool) {
 	if c != 1 {
 		t.Fatalf("wrong number of lines, want: %d, got: %d", 1, c)
 	}
-	// TODO(sgotti) do not sleep but make a loop
-	time.Sleep(1 * time.Second)
-	c, err = getLines(t, standbys[0])
-	if err != nil {
+	if err := waitLines(t, standbys[0], 1, 10*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	if c != 1 {
-		t.Fatalf("wrong number of lines, want: %d, got: %d", 1, c)
-	}
-
 }
 
 func TestMasterStandby(t *testing.T) {
@@ -419,15 +411,12 @@ func testOldMasterRestart(t *testing.T, syncRepl bool) {
 	if err := master.Start(); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
+	// Wait old master synced with standby
+	if err := waitLines(t, master, 2, 30*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
 	if err := master.WaitRole(common.StandbyRole, 30*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
-	}
-	c, err = getLines(t, master)
-	if err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
-	if c != 2 {
-		t.Fatalf("wrong number of lines, want: %d, got: %d", 2, c)
 	}
 }
 
@@ -497,15 +486,12 @@ func testPartition1(t *testing.T, syncRepl bool) {
 	if err := master.SignalPG(syscall.SIGCONT); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
+	// Wait replicated data to old master
+	if err := waitLines(t, master, 2, 60*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
 	if err := master.WaitRole(common.StandbyRole, 60*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
-	}
-	c, err = getLines(t, master)
-	if err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
-	if c != 2 {
-		t.Fatalf("wrong number of lines, want: %d, got: %d", 2, c)
 	}
 }
 
@@ -541,6 +527,11 @@ func testTimelineFork(t *testing.T, syncRepl bool) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
+	// Wait replicated data to standby
+	if err := waitLines(t, standbys[0], 1, 10*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
 	// Stop one standby
 	t.Logf("Stopping standby[0]: %s\n", master.id)
 	standbys[0].Stop()
@@ -553,19 +544,15 @@ func testTimelineFork(t *testing.T, syncRepl bool) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	// Wait replicated data to standby
-	// TODO(sgotti) do not sleep but make a loop
-	time.Sleep(1 * time.Second)
-	c, err := getLines(t, standbys[1])
-	if err != nil {
+	// Wait replicated data to standby[1]
+	if err := waitLines(t, standbys[1], 2, 10*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	if c != 2 {
-		t.Fatalf("wrong number of lines, want: %d, got: %d", 1, c)
-	}
 
-	// Stop the master and remaining standby
+	// Stop the master and remaining standby[1]
+	t.Logf("Stopping master: %s\n", master.id)
 	master.Stop()
+	t.Logf("Stopping standby[1]: %s\n", standbys[1].id)
 	standbys[1].Stop()
 	if err := master.WaitDBDown(60 * time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -583,7 +570,7 @@ func testTimelineFork(t *testing.T, syncRepl bool) {
 	if err := standbys[0].WaitRole(common.MasterRole, 60*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	c, err = getLines(t, standbys[0])
+	c, err := getLines(t, standbys[0])
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -591,13 +578,12 @@ func testTimelineFork(t *testing.T, syncRepl bool) {
 		t.Fatalf("wrong number of lines, want: %d, got: %d", 1, c)
 	}
 
-	// Start the other stadby, it should be ahead of current on previous timeline and should full resync himself
+	// Start the other standby, it should be ahead of current on previous timeline and should full resync himself
 	t.Logf("Starting standby[1]: %s\n", standbys[1].id)
 	standbys[1].Start()
 	// Standby[1] will start, then it'll detect it's in another timelinehistory,
 	// will stop, full resync and start. We have to avoid detecting it up
-	// at the first start.
-	// Wait for the number of expected lines.
+	// at the first start. Do this waiting for the number of expected lines.
 	if err := waitLines(t, standbys[1], 1, 60*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}

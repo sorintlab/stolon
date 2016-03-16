@@ -231,10 +231,6 @@ func (p *Manager) Promote() error {
 	return nil
 }
 
-func (p *Manager) BecomeStandby(masterconnString string) error {
-	return p.WriteRecoveryConf(masterconnString)
-}
-
 func (p *Manager) CreateReplRole() error {
 	ctx, cancel := context.WithTimeout(context.Background(), p.requestTimeout)
 	defer cancel()
