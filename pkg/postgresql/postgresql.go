@@ -102,34 +102,47 @@ func (p *Manager) Init() error {
 	name := filepath.Join(p.pgBinPath, "initdb")
 	out, err := exec.Command(name, "-D", p.dataDir).CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("error: %v, output: %s", err, out)
+		err = fmt.Errorf("error: %v, output: %s", err, out)
+		goto out
 	}
 	// Move current (initdb generated) postgresql.conf to postgresql-base.conf
 	if err = os.Rename(filepath.Join(p.dataDir, "postgresql.conf"), filepath.Join(p.dataDir, "postgresql-base.conf")); err != nil {
-		return fmt.Errorf("error moving postgresql.conf file to postgresql-base.conf: %v", err)
+		err = fmt.Errorf("error moving postgresql.conf file to postgresql-base.conf: %v", err)
+		goto out
 	}
 	// Create default confDir
 	if err = os.Mkdir(filepath.Join(p.dataDir, "conf.d"), 0700); err != nil {
-		return fmt.Errorf("error creating conf.d inside dataDir: %v", err)
+		err = fmt.Errorf("error creating conf.d inside dataDir: %v", err)
+		goto out
 	}
 	if err = p.WriteConf(); err != nil {
-		return fmt.Errorf("error writing postgresql.conf file: %v", err)
+		err = fmt.Errorf("error writing postgresql.conf file: %v", err)
+		goto out
 	}
 
 	log.Infof("Setting required accesses to pg_hba.conf")
 	if err = p.writePgHba(); err != nil {
-		return fmt.Errorf("error setting requires accesses to pg_hba.conf: %v", err)
+		err = fmt.Errorf("error setting requires accesses to pg_hba.conf: %v", err)
+		goto out
 	}
 
 	if err = p.Start(); err != nil {
-		return fmt.Errorf("error starting instance: %v", err)
+		err = fmt.Errorf("error starting instance: %v", err)
+		goto out
 	}
 	log.Infof("Creating replication role")
 	if err = p.CreateReplRole(); err != nil {
-		return fmt.Errorf("error creating replication role: %v", err)
+		err = fmt.Errorf("error creating replication role: %v", err)
+		goto out
 	}
-	err = p.Stop(true)
+	if err = p.Stop(true); err != nil {
+		err = fmt.Errorf("error stopping instance: %v", err)
+		goto out
+	}
+	// On every error remove the dataDir, so we don't end with an half initialized database
+out:
 	if err != nil {
+		os.RemoveAll(p.dataDir)
 		return err
 	}
 	return nil
