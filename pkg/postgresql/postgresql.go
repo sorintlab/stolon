@@ -291,7 +291,7 @@ func (p *Manager) GetRole() (common.Role, error) {
 	return common.StandbyRole, nil
 }
 
-func (p *Manager) GetPrimaryConninfo() (connParams, error) {
+func (p *Manager) GetPrimaryConninfo() (ConnParams, error) {
 	regex, err := regexp.Compile(`\s*primary_conninfo\s*=\s*'(.*)'$`)
 	if err != nil {
 		return nil, err
@@ -369,7 +369,7 @@ func (p *Manager) WriteConf() error {
 	return nil
 }
 
-func (p *Manager) WriteRecoveryConf(masterconnString string) error {
+func (p *Manager) WriteRecoveryConf(followedConnString string) error {
 	f, err := ioutil.TempFile(p.dataDir, "recovery.conf")
 	if err != nil {
 		return err
@@ -380,9 +380,9 @@ func (p *Manager) WriteRecoveryConf(masterconnString string) error {
 	f.WriteString(fmt.Sprintf("primary_slot_name = '%s'\n", p.name))
 	f.WriteString("recovery_target_timeline = 'latest'\n")
 
-	if masterconnString != "" {
-		var cp connParams
-		cp, err = URLToConnParams(masterconnString)
+	if followedConnString != "" {
+		var cp ConnParams
+		cp, err = URLToConnParams(followedConnString)
 		if err != nil {
 			return err
 		}
@@ -415,8 +415,8 @@ func (p *Manager) writePgHba() error {
 	return nil
 }
 
-func (p *Manager) SyncFromMaster(masterconnString string) error {
-	cp, err := URLToConnParams(masterconnString)
+func (p *Manager) SyncFromFollowed(followedConnString string) error {
+	cp, err := URLToConnParams(followedConnString)
 	if err != nil {
 		return err
 	}

@@ -412,7 +412,7 @@ func testOldMasterRestart(t *testing.T, syncRepl bool) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	// Wait old master synced with standby
-	if err := waitLines(t, master, 2, 30*time.Second); err != nil {
+	if err := waitLines(t, master, 2, 60*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	if err := master.WaitRole(common.StandbyRole, 30*time.Second); err != nil {
