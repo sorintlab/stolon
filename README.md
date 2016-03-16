@@ -8,6 +8,7 @@ stolon is a cloud native PostgreSQL manager for PostgreSQL high availability. It
 ## Features
 
 * Leverages PostgreSQL streaming replication.
+* Resilient to any kind of partitioning. While trying to keep the maximum availability, it prefers consistency over availability.
 * [kubernetes integration](examples/kubernetes/README.md) letting you achieve postgreSQL high availability.
 * Uses a cluster store like [etcd](https://github.com/coreos/etcd) or [consul](https://www.consul.io) as an high available data store and for leader election
 * Asynchronous (default) and [synchronous](doc/syncrepl.md) replication.
@@ -26,7 +27,9 @@ Stolon is composed of 3 main components
 
 ## Project Status
 
-Stolon is under active development and used in different environments. But its on disk format (store hierarchy and key contents) is not stable and will change for introducing new features. We hope that at the end of the year (2015) the most breaking changes will be merged and we can commit to a stable on disk format.
+Stolon is under active development and used in different environments. Probably its on disk format (store hierarchy and key contents) will change in future to support new features. If a breaking change is needed it'll be documented in the release notes and an upgrade path will be provided.
+
+Anyway it's quite easy to reset a cluster from scratch keeping the current master instance working and without losing any data.
 
 ## Requirements
 
@@ -52,9 +55,21 @@ Stolon is under active development and used in different environments. But its o
 
 ## High availability
 
-Stolon tries to be resilent to any partitioning problem. The cluster view is computed by the leader sentinel and is useful to avoid data loss (one example over all avoid that old dead masters coming back are elected as the new master).
+Stolon tries to be resilient to any partitioning problem. The cluster view is computed by the leader sentinel and is useful to avoid data loss (one example over all avoid that old dead masters coming back are elected as the new master).
 
 There can be tons of different partitioning cases. The primary ones are covered (and in future more will be added) by various [integration tests](tests/integration)
+
+## FAQ
+
+### Why clients should use the stolon proxy?
+
+Since stolon by default leverages consistency over availability, there's the need for the clients to be connected to the current cluster elected master and be disconnected to unelected ones. For example, if you are connected to the current elected master and subsequently the cluster (for any valid reason, like network partitioning) elects a new master, to achieve consistency, the client needs to be disconnected from the old master (or it'll write data to it that will be lost when it resyncs). This is the purpose of the stolon proxy.
+
+### Why didn't you use an already existing proxy like haproxy?
+
+For our need to forcibly close connections to unelected masters and handle keepers/sentinel that can come and go and change their addresses we implemented a dedicated proxy that's directly reading it's state from the store. Thanks to go goroutines it's very fast.
+
+We are open to alternative solutions (PRs are welcome) like using haproxy if they can met the above requirements. For example, an hypothetical haproxy based proxy needs a way to work with changing ip addresses, get the current cluster information and being able to forcibly close a connection when an haproxy backend is marked as failed (as a note, to achieve the latter, a possible solution that needs testing will be to use the [on-marked-down shutdown-sessions](https://cbonte.github.io/haproxy-dconv/configuration-1.6.html#5.2-on-marked-down) haproxy server option).
 
 ## Contributing to stolon
 
