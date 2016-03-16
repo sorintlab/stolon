@@ -32,6 +32,7 @@ const (
 	DefaultMaxStandbysPerSender    = 3
 	DefaultSynchronousReplication  = false
 	DefaultInitWithMultipleKeepers = false
+	DefaultUsePGRewind             = false
 )
 
 type NilConfig struct {
@@ -43,6 +44,7 @@ type NilConfig struct {
 	MaxStandbysPerSender    *uint              `json:"max_standbys_per_sender,omitempty"`
 	SynchronousReplication  *bool              `json:"synchronous_replication,omitempty"`
 	InitWithMultipleKeepers *bool              `json:"init_with_multiple_keepers,omitempty"`
+	UsePGRewind             *bool              `json:"use_pg_rewind,omitempty"`
 	PGParameters            *map[string]string `json:"pg_parameters,omitempty"`
 }
 
@@ -64,6 +66,8 @@ type Config struct {
 	SynchronousReplication bool
 	// Choose a random initial master when multiple keeper are registered
 	InitWithMultipleKeepers bool
+	// Whether to use pg_rewind
+	UsePGRewind bool
 	// Map of postgres parameters
 	PGParameters map[string]string
 }
@@ -134,6 +138,9 @@ func (c *NilConfig) Copy() *NilConfig {
 	}
 	if c.InitWithMultipleKeepers != nil {
 		nc.InitWithMultipleKeepers = BoolP(*c.InitWithMultipleKeepers)
+	}
+	if c.UsePGRewind != nil {
+		nc.UsePGRewind = BoolP(*c.UsePGRewind)
 	}
 	if c.PGParameters != nil {
 		nc.PGParameters = MapStringP(*c.PGParameters)
@@ -216,6 +223,9 @@ func (c *NilConfig) MergeDefaults() {
 	if c.InitWithMultipleKeepers == nil {
 		c.InitWithMultipleKeepers = BoolP(DefaultInitWithMultipleKeepers)
 	}
+	if c.UsePGRewind == nil {
+		c.UsePGRewind = BoolP(DefaultUsePGRewind)
+	}
 	if c.PGParameters == nil {
 		c.PGParameters = &map[string]string{}
 	}
@@ -233,6 +243,7 @@ func (c *NilConfig) ToConfig() *Config {
 		MaxStandbysPerSender:    *nc.MaxStandbysPerSender,
 		SynchronousReplication:  *nc.SynchronousReplication,
 		InitWithMultipleKeepers: *nc.InitWithMultipleKeepers,
+		UsePGRewind:             *nc.UsePGRewind,
 		PGParameters:            *nc.PGParameters,
 	}
 }

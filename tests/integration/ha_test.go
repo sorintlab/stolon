@@ -29,6 +29,11 @@ import (
 	"github.com/sorintlab/stolon/pkg/store"
 )
 
+const (
+	PGSUUsername = "stolon_superuser"
+	PGSUPassword = "stolon_superuser"
+)
+
 func setupStore(t *testing.T, dir string) *TestStore {
 	tstore, err := NewTestStore(t, dir)
 	if err != nil {
@@ -45,6 +50,7 @@ func setupStore(t *testing.T, dir string) *TestStore {
 
 func TestInitWithMultipleKeepers(t *testing.T) {
 	t.Parallel()
+
 	dir, err := ioutil.TempDir("", "stolon")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -116,7 +122,7 @@ func TestInitWithMultipleKeepers(t *testing.T) {
 	}
 }
 
-func setupServers(t *testing.T, clusterName, dir string, numKeepers, numSentinels uint8, syncRepl bool) ([]*TestKeeper, []*TestSentinel, *TestStore) {
+func setupServers(t *testing.T, clusterName, dir string, numKeepers, numSentinels uint8, syncRepl bool, usePGRewind bool) ([]*TestKeeper, []*TestSentinel, *TestStore) {
 	tstore := setupStore(t, dir)
 
 	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
@@ -139,13 +145,14 @@ func setupServers(t *testing.T, clusterName, dir string, numKeepers, numSentinel
 				SleepInterval:          &cluster.Duration{5 * time.Second},
 				KeeperFailInterval:     &cluster.Duration{10 * time.Second},
 				SynchronousReplication: cluster.BoolP(syncRepl),
+				UsePGRewind:            cluster.BoolP(usePGRewind),
 			},
 		}, nil)
 
 	tks := []*TestKeeper{}
 	tss := []*TestSentinel{}
 
-	tk, err := NewTestKeeper(t, dir, clusterName, tstore.storeBackend, storeEndpoints)
+	tk, err := NewTestKeeper(t, dir, clusterName, tstore.storeBackend, storeEndpoints, "--pg-su-username="+PGSUUsername, "--pg-su-password="+PGSUPassword)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -180,9 +187,14 @@ func setupServers(t *testing.T, clusterName, dir string, numKeepers, numSentinel
 		t.Fatalf("expected master %q in cluster view", tk.id)
 	}
 
+	// Create superuser (needed for pg_rewind)
+	if err := tk.CreateSuperUser(PGSUUsername, PGSUPassword); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
 	// Start other keepers
 	for i := uint8(1); i < numKeepers; i++ {
-		tk, err := NewTestKeeper(t, dir, clusterName, tstore.storeBackend, storeEndpoints)
+		tk, err := NewTestKeeper(t, dir, clusterName, tstore.storeBackend, storeEndpoints, "--pg-su-username="+PGSUUsername, "--pg-su-password="+PGSUPassword)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -280,7 +292,7 @@ func testMasterStandby(t *testing.T, syncRepl bool) {
 
 	clusterName := uuid.NewV4().String()
 
-	tks, tss, te := setupServers(t, clusterName, dir, 2, 1, syncRepl)
+	tks, tss, te := setupServers(t, clusterName, dir, 2, 1, syncRepl, false)
 	defer shutdown(tks, tss, te)
 
 	master, standbys, err := getRoles(t, tks)
@@ -325,7 +337,7 @@ func testFailover(t *testing.T, syncRepl bool) {
 
 	clusterName := uuid.NewV4().String()
 
-	tks, tss, te := setupServers(t, clusterName, dir, 2, 1, syncRepl)
+	tks, tss, te := setupServers(t, clusterName, dir, 2, 1, syncRepl, false)
 	defer shutdown(tks, tss, te)
 
 	master, standbys, err := getRoles(t, tks)
@@ -366,7 +378,7 @@ func TestFailoverSyncRepl(t *testing.T) {
 	testFailover(t, true)
 }
 
-func testOldMasterRestart(t *testing.T, syncRepl bool) {
+func testOldMasterRestart(t *testing.T, syncRepl, usePGRewind bool) {
 	dir, err := ioutil.TempDir("", "stolon")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -375,7 +387,7 @@ func testOldMasterRestart(t *testing.T, syncRepl bool) {
 
 	clusterName := uuid.NewV4().String()
 
-	tks, tss, te := setupServers(t, clusterName, dir, 2, 1, syncRepl)
+	tks, tss, te := setupServers(t, clusterName, dir, 2, 1, syncRepl, usePGRewind)
 	defer shutdown(tks, tss, te)
 
 	master, standbys, err := getRoles(t, tks)
@@ -426,15 +438,25 @@ func testOldMasterRestart(t *testing.T, syncRepl bool) {
 
 func TestOldMasterRestart(t *testing.T) {
 	t.Parallel()
-	testOldMasterRestart(t, false)
+	testOldMasterRestart(t, false, false)
 }
 
 func TestOldMasterRestartSyncRepl(t *testing.T) {
 	t.Parallel()
-	testOldMasterRestart(t, true)
+	testOldMasterRestart(t, true, false)
 }
 
-func testPartition1(t *testing.T, syncRepl bool) {
+func TestOldMasterRestartPGRewind(t *testing.T) {
+	t.Parallel()
+	testOldMasterRestart(t, false, true)
+}
+
+func TestOldMasterRestartSyncReplPGRewind(t *testing.T) {
+	t.Parallel()
+	testOldMasterRestart(t, true, true)
+}
+
+func testPartition1(t *testing.T, syncRepl, usePGRewind bool) {
 	dir, err := ioutil.TempDir("", "stolon")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -443,7 +465,7 @@ func testPartition1(t *testing.T, syncRepl bool) {
 
 	clusterName := uuid.NewV4().String()
 
-	tks, tss, te := setupServers(t, clusterName, dir, 2, 1, syncRepl)
+	tks, tss, te := setupServers(t, clusterName, dir, 2, 1, syncRepl, usePGRewind)
 	defer shutdown(tks, tss, te)
 
 	master, standbys, err := getRoles(t, tks)
@@ -503,15 +525,25 @@ func testPartition1(t *testing.T, syncRepl bool) {
 
 func TestPartition1(t *testing.T) {
 	t.Parallel()
-	testPartition1(t, false)
+	testPartition1(t, false, false)
 }
 
 func TestPartition1SyncRepl(t *testing.T) {
 	t.Parallel()
-	testPartition1(t, true)
+	testPartition1(t, true, false)
 }
 
-func testTimelineFork(t *testing.T, syncRepl bool) {
+func TestPartition1PGRewind(t *testing.T) {
+	t.Parallel()
+	testPartition1(t, false, true)
+}
+
+func TestPartition1SyncReplPGRewind(t *testing.T) {
+	t.Parallel()
+	testPartition1(t, true, true)
+}
+
+func testTimelineFork(t *testing.T, syncRepl, usePGRewind bool) {
 	dir, err := ioutil.TempDir("", "stolon")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -520,7 +552,7 @@ func testTimelineFork(t *testing.T, syncRepl bool) {
 
 	clusterName := uuid.NewV4().String()
 
-	tks, tss, te := setupServers(t, clusterName, dir, 3, 1, syncRepl)
+	tks, tss, te := setupServers(t, clusterName, dir, 3, 1, syncRepl, usePGRewind)
 	defer shutdown(tks, tss, te)
 
 	master, standbys, err := getRoles(t, tks)
@@ -602,18 +634,30 @@ func testTimelineFork(t *testing.T, syncRepl bool) {
 
 func TestTimelineFork(t *testing.T) {
 	t.Parallel()
-	testTimelineFork(t, false)
+	testTimelineFork(t, false, false)
 }
 
 func TestTimelineForkSyncRepl(t *testing.T) {
 	t.Parallel()
-	testTimelineFork(t, true)
+	testTimelineFork(t, true, false)
+}
+
+func TestTimelineForkPGRewind(t *testing.T) {
+	t.Parallel()
+	testTimelineFork(t, false, true)
+}
+
+func TestTimelineForkSyncReplPGRewind(t *testing.T) {
+	t.Parallel()
+	testTimelineFork(t, true, true)
 }
 
 // tests that a master restart with changed address for both keeper and
 // postgres (without triggering failover since it restart before being marked
 // ad failed) make the slave continue to sync using the new address
 func TestMasterChangedAddress(t *testing.T) {
+	t.Parallel()
+
 	dir, err := ioutil.TempDir("", "stolon")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -622,7 +666,7 @@ func TestMasterChangedAddress(t *testing.T) {
 
 	clusterName := uuid.NewV4().String()
 
-	tks, tss, tstore := setupServers(t, clusterName, dir, 2, 1, false)
+	tks, tss, tstore := setupServers(t, clusterName, dir, 2, 1, false, false)
 	defer shutdown(tks, tss, tstore)
 
 	master, standbys, err := getRoles(t, tks)

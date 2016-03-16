@@ -68,10 +68,16 @@ type config struct {
 	pgPort          string
 	pgBinPath       string
 	pgConfDir       string
+	pgSUUsername    string
+	pgSUPassword    string
 	debug           bool
 }
 
 var cfg config
+
+func (c *config) hasPGRewindRequiredOptions() bool {
+	return c.pgSUUsername != "" && c.pgSUPassword != ""
+}
 
 func init() {
 	cmdKeeper.PersistentFlags().StringVar(&cfg.id, "id", "", "keeper id (must be unique in the cluster and can contain only lower-case letters, numbers and the underscore character). If not provided a random id will be generated.")
@@ -85,6 +91,8 @@ func init() {
 	cmdKeeper.PersistentFlags().StringVar(&cfg.pgPort, "pg-port", "5432", "postgresql instance listening port")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.pgBinPath, "pg-bin-path", "", "absolute path to postgresql binaries. If empty they will be searched in the current PATH")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.pgConfDir, "pg-conf-dir", "", "absolute path to user provided postgres configuration. If empty a default dir under $dataDir/postgres/conf.d will be used")
+	cmdKeeper.PersistentFlags().StringVar(&cfg.pgSUUsername, "pg-su-username", "", "postgres superuser user name (required by pg_rewind)")
+	cmdKeeper.PersistentFlags().StringVar(&cfg.pgSUPassword, "pg-su-password", "", "postgres superuser password (required by pg_rewind)")
 	cmdKeeper.PersistentFlags().BoolVar(&cfg.debug, "debug", false, "enable debug logging")
 }
 
@@ -93,6 +101,22 @@ var defaultPGParameters = pg.Parameters{
 	"wal_level":               "hot_standby",
 	"wal_keep_segments":       "8",
 	"hot_standby":             "on",
+}
+
+func (p *PostgresKeeper) getSUConnParams(keeperState *cluster.KeeperState, setPassword bool) pg.ConnParams {
+	cp := pg.ConnParams{
+		"user":             p.cfg.pgSUUsername,
+		"password":         p.cfg.pgSUPassword,
+		"host":             keeperState.PGListenAddress,
+		"port":             keeperState.PGPort,
+		"application_name": p.id,
+		"dbname":           "postgres",
+		"sslmode":          "disable",
+	}
+	if setPassword {
+		cp["password"] = p.cfg.pgSUPassword
+	}
+	return cp
 }
 
 func (p *PostgresKeeper) getReplConnParams(keeperState *cluster.KeeperState) pg.ConnParams {
@@ -138,6 +162,12 @@ func (p *PostgresKeeper) createPGParameters(followersIDs []string) pg.Parameters
 	pgParameters["max_replication_slots"] = strconv.FormatUint(uint64(p.clusterConfig.MaxStandbysPerSender), 10)
 	// Add some more wal senders, since also the keeper will use them
 	pgParameters["max_wal_senders"] = strconv.FormatUint(uint64(p.clusterConfig.MaxStandbysPerSender+2), 10)
+
+	// required by pg_rewind
+	// if database has data checksum enabled it's ignored
+	if p.clusterConfig.UsePGRewind {
+		pgParameters["wal_log_hints"] = "on"
+	}
 
 	// Setup synchronous replication
 	if p.clusterConfig.SynchronousReplication {
@@ -387,17 +417,37 @@ func (p *PostgresKeeper) Start() {
 	}
 }
 
-func (p *PostgresKeeper) fullResync(followed *cluster.KeeperState, initialized, started bool) error {
+func (p *PostgresKeeper) Resync(followed *cluster.KeeperState, initialized, started bool) error {
 	pgm := p.pgm
 	if initialized && started {
 		if err := pgm.Stop(true); err != nil {
 			return fmt.Errorf("failed to stop pg instance: %v", err)
 		}
 	}
+	replConnParams := p.getReplConnParams(followed)
+
+	// TODO(sgotti) Actually we don't check if pg_rewind is installed or if
+	// postgresql version is > 9.5 since someone can also use an externally
+	// installed pg_rewind for postgres 9.4. If a pg_rewind executable
+	// doesn't exists pgm.SyncFromFollowedPGRewind will return an error and
+	// fallback to pg_basebackup
+	if initialized && p.clusterConfig.UsePGRewind && p.cfg.hasPGRewindRequiredOptions() {
+		connParams := p.getSUConnParams(followed, false)
+		log.Infof("syncing using pg_rewind from followed instance %q", followed.ID)
+		if err := pgm.SyncFromFollowedPGRewind(connParams, p.cfg.pgSUPassword); err != nil {
+			// log pg_rewind error and fallback to pg_basebackup
+			log.Errorf("error syncing with pg_rewind: %v", err)
+		} else {
+			if err := pgm.WriteRecoveryConf(replConnParams); err != nil {
+				return fmt.Errorf("err: %v", err)
+			}
+			return nil
+		}
+	}
+
 	if err := pgm.RemoveAll(); err != nil {
 		return fmt.Errorf("failed to remove the postgres data dir: %v", err)
 	}
-	replConnParams := p.getReplConnParams(followed)
 	log.Infof("syncing from followed instance %q with connection params: %v", followed.ID, replConnParams)
 	if err := pgm.SyncFromFollowed(replConnParams); err != nil {
 		return fmt.Errorf("error: %v", err)
@@ -412,7 +462,7 @@ func (p *PostgresKeeper) fullResync(followed *cluster.KeeperState, initialized, 
 
 func (p *PostgresKeeper) isDifferentTimelineBranch(fPGState *cluster.PostgresState, pgState *cluster.PostgresState) bool {
 	if fPGState.TimelineID < pgState.TimelineID {
-		log.Infof("followed instance timeline %d < then out timeline %d", fPGState.TimelineID, pgState.TimelineID)
+		log.Infof("followed instance timeline %d < than our timeline %d", fPGState.TimelineID, pgState.TimelineID)
 		return true
 	}
 	if fPGState.TimelineID == pgState.TimelineID {
@@ -639,7 +689,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 
 				// Check if we are on another branch
 				if p.isDifferentTimelineBranch(fPGState, pgState) {
-					if err = p.fullResync(followed, initialized, started); err != nil {
+					if err = p.Resync(followed, initialized, started); err != nil {
 						log.Errorf("failed to full resync from followed instance: %v", err)
 						return
 					}
@@ -651,7 +701,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 					}
 				}
 			} else {
-				if err = p.fullResync(followed, initialized, started); err != nil {
+				if err = p.Resync(followed, initialized, started); err != nil {
 					log.Errorf("failed to full resync from followed instance: %v", err)
 					return
 				}
@@ -690,7 +740,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 			}
 			fPGState := followed.PGState
 			if p.isDifferentTimelineBranch(fPGState, pgState) {
-				if err = p.fullResync(followed, initialized, started); err != nil {
+				if err = p.Resync(followed, initialized, started); err != nil {
 					log.Errorf("failed to full resync from followed instance: %v", err)
 					return
 				}
@@ -783,6 +833,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 func getIDFilePath(conf config) string {
 	return filepath.Join(conf.dataDir, "pgid")
 }
+
 func getIDFromFile(conf config) (string, error) {
 	id, err := ioutil.ReadFile(getIDFilePath(conf))
 	if err != nil {
@@ -841,6 +892,10 @@ func keeper(cmd *cobra.Command, args []string) {
 		if !fi.IsDir() {
 			log.Fatalf("pg-conf-dir is not a directory")
 		}
+	}
+
+	if !cfg.hasPGRewindRequiredOptions() {
+		log.Warning("both --pg-su-username and --pg-su-password needs to be defined to use pg_rewind")
 	}
 
 	// Take an exclusive lock on dataDir
