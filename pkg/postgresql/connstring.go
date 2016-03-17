@@ -24,22 +24,22 @@ import (
 
 // This is based on github.com/lib/pq
 
-type connParams map[string]string
+type ConnParams map[string]string
 
-func (p connParams) Set(k, v string) {
+func (p ConnParams) Set(k, v string) {
 	p[k] = v
 }
 
-func (p connParams) Get(k string) (v string) {
+func (p ConnParams) Get(k string) (v string) {
 	return p[k]
 }
 
-func (p connParams) Isset(k string) bool {
+func (p ConnParams) Isset(k string) bool {
 	_, ok := p[k]
 	return ok
 }
 
-func (p connParams) Equals(cp connParams) bool {
+func (p ConnParams) Equals(cp ConnParams) bool {
 	return reflect.DeepEqual(p, cp)
 }
 
@@ -78,8 +78,8 @@ func (s *scanner) SkipSpaces() (rune, bool) {
 // ParseConnString parses the options from name and adds them to the values.
 //
 // The parsing code is based on conninfo_parse from libpq's fe-connect.c
-func ParseConnString(name string) (connParams, error) {
-	p := make(connParams)
+func ParseConnString(name string) (ConnParams, error) {
+	p := make(ConnParams)
 	s := newScanner(name)
 
 	for {
@@ -156,8 +156,8 @@ func ParseConnString(name string) (connParams, error) {
 }
 
 // URLToConnParams creates the connParams from the url.
-func URLToConnParams(urlStr string) (connParams, error) {
-	p := make(connParams)
+func URLToConnParams(urlStr string) (ConnParams, error) {
+	p := make(ConnParams)
 	u, err := url.Parse(urlStr)
 	if err != nil {
 		return nil, err
@@ -194,7 +194,7 @@ func URLToConnParams(urlStr string) (connParams, error) {
 	return p, nil
 }
 
-func (p connParams) ConnString() string {
+func (p ConnParams) ConnString() string {
 	var kvs []string
 	escaper := strings.NewReplacer(` `, `\ `, `'`, `\'`, `\`, `\\`)
 	for k, v := range p {
