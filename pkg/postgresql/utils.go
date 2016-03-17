@@ -18,7 +18,6 @@ import (
 	"bufio"
 	"database/sql"
 	"fmt"
-	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -212,17 +211,10 @@ func PGLSNToInt(lsn string) (uint64, error) {
 	return v, nil
 }
 
-func GetPGState(ctx context.Context, replConnString string) (*cluster.PostgresState, error) {
+func GetPGState(ctx context.Context, replConnParams ConnParams) (*cluster.PostgresState, error) {
 	// Add "replication=1" connection option
-	u, err := url.Parse(replConnString)
-	if err != nil {
-		return nil, err
-	}
-	v := u.Query()
-	v.Add("replication", "1")
-	u.RawQuery = v.Encode()
-	replConnString = u.String()
-	db, err := sql.Open("postgres", replConnString)
+	replConnParams["replication"] = "1"
+	db, err := sql.Open("postgres", replConnParams.ConnString())
 	if err != nil {
 		return nil, err
 	}
@@ -276,17 +268,10 @@ func parseTimeLinesHistory(contents string) (cluster.PostgresTimeLinesHistory, e
 	return tlsh, err
 }
 
-func GetTimelinesHistory(ctx context.Context, timeline uint64, replConnString string) (cluster.PostgresTimeLinesHistory, error) {
+func GetTimelinesHistory(ctx context.Context, timeline uint64, replConnParams ConnParams) (cluster.PostgresTimeLinesHistory, error) {
 	// Add "replication=1" connection option
-	u, err := url.Parse(replConnString)
-	if err != nil {
-		return nil, err
-	}
-	v := u.Query()
-	v.Add("replication", "1")
-	u.RawQuery = v.Encode()
-	replConnString = u.String()
-	db, err := sql.Open("postgres", replConnString)
+	replConnParams["replication"] = "1"
+	db, err := sql.Open("postgres", replConnParams.ConnString())
 	if err != nil {
 		return nil, err
 	}

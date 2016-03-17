@@ -369,7 +369,7 @@ func (p *Manager) WriteConf() error {
 	return nil
 }
 
-func (p *Manager) WriteRecoveryConf(followedConnString string) error {
+func (p *Manager) WriteRecoveryConf(followedConnParams ConnParams) error {
 	f, err := ioutil.TempFile(p.dataDir, "recovery.conf")
 	if err != nil {
 		return err
@@ -380,13 +380,8 @@ func (p *Manager) WriteRecoveryConf(followedConnString string) error {
 	f.WriteString(fmt.Sprintf("primary_slot_name = '%s'\n", p.name))
 	f.WriteString("recovery_target_timeline = 'latest'\n")
 
-	if followedConnString != "" {
-		var cp ConnParams
-		cp, err = URLToConnParams(followedConnString)
-		if err != nil {
-			return err
-		}
-		f.WriteString(fmt.Sprintf("primary_conninfo = '%s'", cp.ConnString()))
+	if followedConnParams != nil {
+		f.WriteString(fmt.Sprintf("primary_conninfo = '%s'", followedConnParams.ConnString()))
 	}
 	if err = f.Sync(); err != nil {
 		return err
@@ -415,12 +410,7 @@ func (p *Manager) writePgHba() error {
 	return nil
 }
 
-func (p *Manager) SyncFromFollowed(followedConnString string) error {
-	cp, err := URLToConnParams(followedConnString)
-	if err != nil {
-		return err
-	}
-
+func (p *Manager) SyncFromFollowed(followedConnParams ConnParams) error {
 	pgpass, err := ioutil.TempFile("", "pgpass")
 	if err != nil {
 		return err
@@ -428,10 +418,10 @@ func (p *Manager) SyncFromFollowed(followedConnString string) error {
 	defer os.Remove(pgpass.Name())
 	defer pgpass.Close()
 
-	host := cp.Get("host")
-	port := cp.Get("port")
-	user := cp.Get("user")
-	password := cp.Get("password")
+	host := followedConnParams.Get("host")
+	port := followedConnParams.Get("port")
+	user := followedConnParams.Get("user")
+	password := followedConnParams.Get("password")
 	pgpass.WriteString(fmt.Sprintf("%s:%s:*:%s:%s\n", host, port, user, password))
 
 	log.Infof("Running pg_basebackup")
