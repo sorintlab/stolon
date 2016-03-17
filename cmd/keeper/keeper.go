@@ -95,16 +95,34 @@ var defaultPGParameters = pg.Parameters{
 	"hot_standby":             "on",
 }
 
-func (p *PostgresKeeper) getReplConnString(keeperState *cluster.KeeperState) string {
-	return fmt.Sprintf("postgres://%s:%s@%s:%s?sslmode=disable&application_name=%s", p.clusterConfig.PGReplUser, p.clusterConfig.PGReplPassword, keeperState.PGListenAddress, keeperState.PGPort, p.id)
+func (p *PostgresKeeper) getReplConnParams(keeperState *cluster.KeeperState) pg.ConnParams {
+	return pg.ConnParams{
+		"user":             p.clusterConfig.PGReplUser,
+		"password":         p.clusterConfig.PGReplPassword,
+		"host":             keeperState.PGListenAddress,
+		"port":             keeperState.PGPort,
+		"application_name": p.id,
+		"sslmode":          "disable",
+	}
 }
 
-func (p *PostgresKeeper) getOurConnString() string {
-	return fmt.Sprintf("postgres://%s:%s/postgres?sslmode=disable", "localhost", p.pgPort)
+func (p *PostgresKeeper) getOurConnParams() pg.ConnParams {
+	return pg.ConnParams{
+		"host":    "localhost",
+		"port":    p.pgPort,
+		"dbname":  "postgres",
+		"sslmode": "disable",
+	}
 }
 
-func (p *PostgresKeeper) getOurReplConnString() string {
-	return fmt.Sprintf("postgres://%s:%s@%s:%s?sslmode=disable", p.clusterConfig.PGReplUser, p.clusterConfig.PGReplPassword, p.pgListenAddress, p.pgPort)
+func (p *PostgresKeeper) getOurReplConnParams() pg.ConnParams {
+	return pg.ConnParams{
+		"user":     p.clusterConfig.PGReplUser,
+		"password": p.clusterConfig.PGReplPassword,
+		"host":     p.pgListenAddress,
+		"port":     p.pgPort,
+		"sslmode":  "disable",
+	}
 }
 
 func (p *PostgresKeeper) createPGParameters(followersIDs []string) pg.Parameters {
@@ -259,7 +277,7 @@ func (p *PostgresKeeper) updatePGState(pctx context.Context) {
 		pgState.Initialized = false
 	} else {
 		ctx, cancel := context.WithTimeout(pctx, p.clusterConfig.RequestTimeout)
-		pgState, err = pg.GetPGState(ctx, p.getOurReplConnString())
+		pgState, err = pg.GetPGState(ctx, p.getOurReplConnParams())
 		cancel()
 		if err != nil {
 			log.Errorf("error getting pg state: %v", err)
@@ -271,7 +289,7 @@ func (p *PostgresKeeper) updatePGState(pctx context.Context) {
 		pgState.TimelinesHistory = cluster.PostgresTimeLinesHistory{}
 		if pgState.TimelineID > 1 {
 			ctx, cancel = context.WithTimeout(pctx, p.clusterConfig.RequestTimeout)
-			tlsh, err := pg.GetTimelinesHistory(ctx, pgState.TimelineID, p.getOurReplConnString())
+			tlsh, err := pg.GetTimelinesHistory(ctx, pgState.TimelineID, p.getOurReplConnParams())
 			cancel()
 			if err != nil {
 				log.Errorf("error getting timeline history: %v", err)
@@ -330,7 +348,7 @@ func (p *PostgresKeeper) Start() {
 	// and RequestTimeout) after a changed cluster config
 	followersIDs := cv.GetFollowersIDs(p.id)
 	pgParameters := p.createPGParameters(followersIDs)
-	pgm := postgresql.NewManager(p.id, cfg.pgBinPath, cfg.dataDir, cfg.pgConfDir, pgParameters, p.getOurConnString(), p.getOurReplConnString(), p.clusterConfig.PGReplUser, p.clusterConfig.PGReplPassword, p.clusterConfig.RequestTimeout)
+	pgm := postgresql.NewManager(p.id, cfg.pgBinPath, cfg.dataDir, cfg.pgConfDir, pgParameters, p.getOurConnParams().ConnString(), p.getOurReplConnParams().ConnString(), p.clusterConfig.PGReplUser, p.clusterConfig.PGReplPassword, p.clusterConfig.RequestTimeout)
 	p.pgm = pgm
 
 	p.pgm.Stop(true)
@@ -385,14 +403,14 @@ func (p *PostgresKeeper) fullResync(followed *cluster.KeeperState, initialized, 
 	if err := pgm.RemoveAll(); err != nil {
 		return fmt.Errorf("failed to remove the postgres data dir: %v", err)
 	}
-	replConnString := p.getReplConnString(followed)
-	log.Infof("syncing from followed instance %q with connection url %q", followed.ID, replConnString)
-	if err := pgm.SyncFromFollowed(replConnString); err != nil {
+	replConnParams := p.getReplConnParams(followed)
+	log.Infof("syncing from followed instance %q with connection params: %v", followed.ID, replConnParams)
+	if err := pgm.SyncFromFollowed(replConnParams); err != nil {
 		return fmt.Errorf("error: %v", err)
 	}
 	log.Infof("sync from followed instance %q successfully finished", followed.ID)
 
-	if err := pgm.WriteRecoveryConf(replConnString); err != nil {
+	if err := pgm.WriteRecoveryConf(replConnParams); err != nil {
 		return fmt.Errorf("err: %v", err)
 	}
 	return nil
@@ -400,6 +418,7 @@ func (p *PostgresKeeper) fullResync(followed *cluster.KeeperState, initialized, 
 
 func (p *PostgresKeeper) isDifferentTimelineBranch(fPGState *cluster.PostgresState, pgState *cluster.PostgresState) bool {
 	if fPGState.TimelineID < pgState.TimelineID {
+		log.Infof("followed instance timeline %d < then out timeline %d", fPGState.TimelineID, pgState.TimelineID)
 		return true
 	}
 	if fPGState.TimelineID == pgState.TimelineID {
@@ -594,8 +613,8 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				// So we try to put it in recovery and then
 				// check if it's on the same branch or force a
 				// resync
-				replConnString := p.getReplConnString(followed)
-				if err = pgm.WriteRecoveryConf(replConnString); err != nil {
+				replConnParams := p.getReplConnParams(followed)
+				if err = pgm.WriteRecoveryConf(replConnParams); err != nil {
 					log.Errorf("err: %v", err)
 					return
 				}
@@ -693,7 +712,6 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 
 			// Update our primary_conninfo if replConnString changed
 			var curConnParams postgresql.ConnParams
-			var newConnParams postgresql.ConnParams
 
 			curConnParams, err = pgm.GetPrimaryConninfo()
 			if err != nil {
@@ -702,18 +720,13 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 			}
 			log.Debugf(spew.Sprintf("curConnParams: %v", curConnParams))
 
-			replConnString := p.getReplConnString(followed)
-			newConnParams, err = pg.URLToConnParams(replConnString)
-			if err != nil {
-				log.Errorf("cannot get conn params: %v", err)
-				return
-			}
+			newConnParams := p.getReplConnParams(followed)
 			log.Debugf(spew.Sprintf("newConnParams: %v", newConnParams))
 
 			if !curConnParams.Equals(newConnParams) {
 				log.Infof("followed instance connection parameters changed. Reconfiguring...")
-				log.Infof("following %s with connection url %s", keeperRole.Follow, replConnString)
-				if err = pgm.WriteRecoveryConf(replConnString); err != nil {
+				log.Infof("following %s with connection parameters %v", keeperRole.Follow, newConnParams)
+				if err = pgm.WriteRecoveryConf(newConnParams); err != nil {
 					log.Errorf("err: %v", err)
 					return
 				}
@@ -725,7 +738,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 		}
 	} else if keeperRole.Follow == "" {
 		log.Infof("our cluster requested state is standby following no one")
-		if err = pgm.WriteRecoveryConf(""); err != nil {
+		if err = pgm.WriteRecoveryConf(nil); err != nil {
 			log.Errorf("err: %v", err)
 			return
 		}
