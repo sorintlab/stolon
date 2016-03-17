@@ -109,7 +109,7 @@ func (p *PostgresKeeper) getReplConnParams(keeperState *cluster.KeeperState) pg.
 func (p *PostgresKeeper) getOurConnParams() pg.ConnParams {
 	return pg.ConnParams{
 		"host":    "localhost",
-		"port":    p.pgPort,
+		"port":    p.cfg.pgPort,
 		"dbname":  "postgres",
 		"sslmode": "disable",
 	}
@@ -119,8 +119,8 @@ func (p *PostgresKeeper) getOurReplConnParams() pg.ConnParams {
 	return pg.ConnParams{
 		"user":     p.clusterConfig.PGReplUser,
 		"password": p.clusterConfig.PGReplPassword,
-		"host":     p.pgListenAddress,
-		"port":     p.pgPort,
+		"host":     p.cfg.pgListenAddress,
+		"port":     p.cfg.pgPort,
 		"sslmode":  "disable",
 	}
 }
@@ -133,8 +133,8 @@ func (p *PostgresKeeper) createPGParameters(followersIDs []string) pg.Parameters
 		pgParameters[k] = v
 	}
 
-	pgParameters["listen_addresses"] = fmt.Sprintf("127.0.0.1,%s", cfg.pgListenAddress)
-	pgParameters["port"] = cfg.pgPort
+	pgParameters["listen_addresses"] = fmt.Sprintf("127.0.0.1,%s", p.cfg.pgListenAddress)
+	pgParameters["port"] = p.cfg.pgPort
 	pgParameters["max_replication_slots"] = strconv.FormatUint(uint64(p.clusterConfig.MaxStandbysPerSender), 10)
 	// Add some more wal senders, since also the keeper will use them
 	pgParameters["max_wal_senders"] = strconv.FormatUint(uint64(p.clusterConfig.MaxStandbysPerSender+2), 10)
@@ -151,16 +151,12 @@ func (p *PostgresKeeper) createPGParameters(followersIDs []string) pg.Parameters
 
 type PostgresKeeper struct {
 	id      string
+	cfg     *config
 	dataDir string
 	e       *store.StoreManager
 	pgm     *postgresql.Manager
 	stop    chan bool
 	end     chan error
-
-	listenAddress   string
-	port            string
-	pgListenAddress string
-	pgPort          string
 
 	clusterConfig *cluster.Config
 
@@ -171,7 +167,7 @@ type PostgresKeeper struct {
 	lastPGState  *cluster.PostgresState
 }
 
-func NewPostgresKeeper(id string, cfg config, stop chan bool, end chan error) (*PostgresKeeper, error) {
+func NewPostgresKeeper(id string, cfg *config, stop chan bool, end chan error) (*PostgresKeeper, error) {
 	storePath := filepath.Join(common.StoreBasePath, cfg.clusterName)
 
 	kvstore, err := store.NewStore(store.Backend(cfg.storeBackend), cfg.storeEndpoints)
@@ -180,15 +176,13 @@ func NewPostgresKeeper(id string, cfg config, stop chan bool, end chan error) (*
 	}
 	e := store.NewStoreManager(kvstore, storePath)
 
-	p := &PostgresKeeper{id: id,
-		dataDir:         cfg.dataDir,
-		e:               e,
-		listenAddress:   cfg.listenAddress,
-		port:            cfg.port,
-		pgListenAddress: cfg.pgListenAddress,
-		pgPort:          cfg.pgPort,
-		stop:            stop,
-		end:             end,
+	p := &PostgresKeeper{
+		id:      id,
+		dataDir: cfg.dataDir,
+		cfg:     cfg,
+		e:       e,
+		stop:    stop,
+		end:     end,
 	}
 
 	return p, nil
@@ -200,8 +194,8 @@ func (p *PostgresKeeper) publish() error {
 		return nil
 	}
 	discoveryInfo := &cluster.KeeperDiscoveryInfo{
-		ListenAddress: p.listenAddress,
-		Port:          p.port,
+		ListenAddress: p.cfg.listenAddress,
+		Port:          p.cfg.port,
 	}
 	log.Debugf(spew.Sprintf("discoveryInfo: %#v", discoveryInfo))
 
@@ -239,10 +233,10 @@ func (p *PostgresKeeper) infoHandler(w http.ResponseWriter, req *http.Request) {
 	keeperInfo := cluster.KeeperInfo{
 		ID:                 p.id,
 		ClusterViewVersion: p.cvVersion,
-		ListenAddress:      p.listenAddress,
-		Port:               p.port,
-		PGListenAddress:    p.pgListenAddress,
-		PGPort:             p.pgPort,
+		ListenAddress:      p.cfg.listenAddress,
+		Port:               p.cfg.port,
+		PGListenAddress:    p.cfg.pgListenAddress,
+		PGPort:             p.cfg.pgPort,
 	}
 
 	if err := json.NewEncoder(w).Encode(&keeperInfo); err != nil {
@@ -348,7 +342,7 @@ func (p *PostgresKeeper) Start() {
 	// and RequestTimeout) after a changed cluster config
 	followersIDs := cv.GetFollowersIDs(p.id)
 	pgParameters := p.createPGParameters(followersIDs)
-	pgm := postgresql.NewManager(p.id, cfg.pgBinPath, cfg.dataDir, cfg.pgConfDir, pgParameters, p.getOurConnParams().ConnString(), p.getOurReplConnParams().ConnString(), p.clusterConfig.PGReplUser, p.clusterConfig.PGReplPassword, p.clusterConfig.RequestTimeout)
+	pgm := postgresql.NewManager(p.id, p.cfg.pgBinPath, p.cfg.dataDir, p.cfg.pgConfDir, pgParameters, p.getOurConnParams().ConnString(), p.getOurReplConnParams().ConnString(), p.clusterConfig.PGReplUser, p.clusterConfig.PGReplPassword, p.clusterConfig.RequestTimeout)
 	p.pgm = pgm
 
 	p.pgm.Stop(true)
@@ -356,7 +350,7 @@ func (p *PostgresKeeper) Start() {
 	http.HandleFunc("/info", p.infoHandler)
 	http.HandleFunc("/pgstate", p.pgStateHandler)
 	go func() {
-		endApiCh <- http.ListenAndServe(fmt.Sprintf("%s:%s", p.listenAddress, p.port), nil)
+		endApiCh <- http.ListenAndServe(fmt.Sprintf("%s:%s", p.cfg.listenAddress, p.cfg.port), nil)
 	}()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -890,7 +884,7 @@ func keeper(cmd *cobra.Command, args []string) {
 	signal.Notify(sigs, os.Interrupt, os.Kill)
 	go sigHandler(sigs, stop)
 
-	p, err := NewPostgresKeeper(id, cfg, stop, end)
+	p, err := NewPostgresKeeper(id, &cfg, stop, end)
 	if err != nil {
 		log.Fatalf("cannot create keeper: %v", err)
 	}
