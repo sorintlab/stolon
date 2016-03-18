@@ -116,12 +116,10 @@ func TestInitWithMultipleKeepers(t *testing.T) {
 	}
 }
 
-func setupServers(t *testing.T, dir string, numKeepers, numSentinels uint8, syncRepl bool) ([]*TestKeeper, []*TestSentinel, *TestStore) {
+func setupServers(t *testing.T, clusterName, dir string, numKeepers, numSentinels uint8, syncRepl bool) ([]*TestKeeper, []*TestSentinel, *TestStore) {
 	tstore := setupStore(t, dir)
 
 	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
-
-	clusterName := uuid.NewV4().String()
 
 	storePath := filepath.Join(common.StoreBasePath, clusterName)
 
@@ -153,7 +151,7 @@ func setupServers(t *testing.T, dir string, numKeepers, numSentinels uint8, sync
 	}
 	tks = append(tks, tk)
 
-	t.Logf("tk: %v\n", tk)
+	t.Logf("tk: %v", tk)
 
 	// Start sentinels
 	for i := uint8(0); i < numSentinels; i++ {
@@ -280,7 +278,9 @@ func testMasterStandby(t *testing.T, syncRepl bool) {
 	}
 	defer os.RemoveAll(dir)
 
-	tks, tss, te := setupServers(t, dir, 2, 1, syncRepl)
+	clusterName := uuid.NewV4().String()
+
+	tks, tss, te := setupServers(t, clusterName, dir, 2, 1, syncRepl)
 	defer shutdown(tks, tss, te)
 
 	master, standbys, err := getRoles(t, tks)
@@ -323,7 +323,9 @@ func testFailover(t *testing.T, syncRepl bool) {
 	}
 	defer os.RemoveAll(dir)
 
-	tks, tss, te := setupServers(t, dir, 2, 1, syncRepl)
+	clusterName := uuid.NewV4().String()
+
+	tks, tss, te := setupServers(t, clusterName, dir, 2, 1, syncRepl)
 	defer shutdown(tks, tss, te)
 
 	master, standbys, err := getRoles(t, tks)
@@ -339,7 +341,7 @@ func testFailover(t *testing.T, syncRepl bool) {
 	}
 
 	// Stop the keeper process on master, should also stop the database
-	t.Logf("Stopping current master keeper: %s\n", master.id)
+	t.Logf("Stopping current master keeper: %s", master.id)
 	master.Stop()
 
 	if err := standbys[0].WaitRole(common.MasterRole, 30*time.Second); err != nil {
@@ -371,7 +373,9 @@ func testOldMasterRestart(t *testing.T, syncRepl bool) {
 	}
 	defer os.RemoveAll(dir)
 
-	tks, tss, te := setupServers(t, dir, 2, 1, syncRepl)
+	clusterName := uuid.NewV4().String()
+
+	tks, tss, te := setupServers(t, clusterName, dir, 2, 1, syncRepl)
 	defer shutdown(tks, tss, te)
 
 	master, standbys, err := getRoles(t, tks)
@@ -387,7 +391,7 @@ func testOldMasterRestart(t *testing.T, syncRepl bool) {
 	}
 
 	// Stop the keeper process on master, should also stop the database
-	t.Logf("Stopping current master keeper: %s\n", master.id)
+	t.Logf("Stopping current master keeper: %s", master.id)
 	master.Stop()
 
 	if err := standbys[0].WaitRole(common.MasterRole, 30*time.Second); err != nil {
@@ -407,7 +411,7 @@ func testOldMasterRestart(t *testing.T, syncRepl bool) {
 	}
 
 	// Restart the old master
-	t.Logf("Restarting old master keeper: %s\n", master.id)
+	t.Logf("Restarting old master keeper: %s", master.id)
 	if err := master.Start(); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -437,7 +441,9 @@ func testPartition1(t *testing.T, syncRepl bool) {
 	}
 	defer os.RemoveAll(dir)
 
-	tks, tss, te := setupServers(t, dir, 2, 1, syncRepl)
+	clusterName := uuid.NewV4().String()
+
+	tks, tss, te := setupServers(t, clusterName, dir, 2, 1, syncRepl)
 	defer shutdown(tks, tss, te)
 
 	master, standbys, err := getRoles(t, tks)
@@ -453,11 +459,11 @@ func testPartition1(t *testing.T, syncRepl bool) {
 	}
 
 	// Freeze the keeper and postgres processes on the master
-	t.Logf("SIGSTOPping current master keeper: %s\n", master.id)
+	t.Logf("SIGSTOPping current master keeper: %s", master.id)
 	if err := master.Signal(syscall.SIGSTOP); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	t.Logf("SIGSTOPping current master postgres: %s\n", master.id)
+	t.Logf("SIGSTOPping current master postgres: %s", master.id)
 	if err := master.SignalPG(syscall.SIGSTOP); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -478,11 +484,11 @@ func testPartition1(t *testing.T, syncRepl bool) {
 	}
 
 	// Make the master come back
-	t.Logf("Resuming old master keeper: %s\n", master.id)
+	t.Logf("Resuming old master keeper: %s", master.id)
 	if err := master.Signal(syscall.SIGCONT); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	t.Logf("Resuming old master postgres: %s\n", master.id)
+	t.Logf("Resuming old master postgres: %s", master.id)
 	if err := master.SignalPG(syscall.SIGCONT); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -512,7 +518,9 @@ func testTimelineFork(t *testing.T, syncRepl bool) {
 	}
 	defer os.RemoveAll(dir)
 
-	tks, tss, te := setupServers(t, dir, 3, 1, syncRepl)
+	clusterName := uuid.NewV4().String()
+
+	tks, tss, te := setupServers(t, clusterName, dir, 3, 1, syncRepl)
 	defer shutdown(tks, tss, te)
 
 	master, standbys, err := getRoles(t, tks)
@@ -533,7 +541,7 @@ func testTimelineFork(t *testing.T, syncRepl bool) {
 	}
 
 	// Stop one standby
-	t.Logf("Stopping standby[0]: %s\n", master.id)
+	t.Logf("Stopping standby[0]: %s", master.id)
 	standbys[0].Stop()
 	if err := standbys[0].WaitDBDown(60 * time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -550,9 +558,9 @@ func testTimelineFork(t *testing.T, syncRepl bool) {
 	}
 
 	// Stop the master and remaining standby[1]
-	t.Logf("Stopping master: %s\n", master.id)
+	t.Logf("Stopping master: %s", master.id)
 	master.Stop()
-	t.Logf("Stopping standby[1]: %s\n", standbys[1].id)
+	t.Logf("Stopping standby[1]: %s", standbys[1].id)
 	standbys[1].Stop()
 	if err := master.WaitDBDown(60 * time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -562,7 +570,7 @@ func testTimelineFork(t *testing.T, syncRepl bool) {
 	}
 
 	// Start standby[0]. It will be elected as master but it'll be behind (having only one line).
-	t.Logf("Starting standby[0]: %s\n", standbys[0].id)
+	t.Logf("Starting standby[0]: %s", standbys[0].id)
 	standbys[0].Start()
 	if err := standbys[0].WaitDBUp(60 * time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -579,7 +587,7 @@ func testTimelineFork(t *testing.T, syncRepl bool) {
 	}
 
 	// Start the other standby, it should be ahead of current on previous timeline and should full resync himself
-	t.Logf("Starting standby[1]: %s\n", standbys[1].id)
+	t.Logf("Starting standby[1]: %s", standbys[1].id)
 	standbys[1].Start()
 	// Standby[1] will start, then it'll detect it's in another timelinehistory,
 	// will stop, full resync and start. We have to avoid detecting it up
@@ -600,4 +608,61 @@ func TestTimelineFork(t *testing.T) {
 func TestTimelineForkSyncRepl(t *testing.T) {
 	t.Parallel()
 	testTimelineFork(t, true)
+}
+
+// tests that a master restart with changed address for both keeper and
+// postgres (without triggering failover since it restart before being marked
+// ad failed) make the slave continue to sync using the new address
+func TestMasterChangedAddress(t *testing.T) {
+	dir, err := ioutil.TempDir("", "stolon")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer os.RemoveAll(dir)
+
+	clusterName := uuid.NewV4().String()
+
+	tks, tss, tstore := setupServers(t, clusterName, dir, 2, 1, false)
+	defer shutdown(tks, tss, tstore)
+
+	master, standbys, err := getRoles(t, tks)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	if err := populate(t, master); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := write(t, master, 1, 1); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// Wait standby synced with master
+	if err := waitLines(t, master, 1, 60*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// Restart the keeper process on master with new keeper and postgres
+	// addresses (in this case only the port is changed)
+	t.Logf("Restarting current master keeper %q with different addresses", master.id)
+	master.Stop()
+	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
+	master, err = NewTestKeeperWithID(t, dir, master.id, clusterName, tstore.storeBackend, storeEndpoints)
+	tks = append(tks, master)
+
+	if err := master.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	if err := master.WaitRole(common.MasterRole, 30*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	if err := write(t, master, 2, 2); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	// Wait standby synced to master with changed address
+	if err := waitLines(t, standbys[0], 2, 60*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
 }
