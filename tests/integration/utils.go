@@ -66,7 +66,7 @@ func (p *Process) start() error {
 	go func() {
 		scanner := bufio.NewScanner(pr)
 		for scanner.Scan() {
-			p.t.Logf("[%s]: %s\n", p.id, scanner.Text())
+			p.t.Logf("[%s]: %s", p.id, scanner.Text())
 		}
 	}()
 
@@ -86,7 +86,7 @@ func (p *Process) StartExpect() error {
 }
 
 func (p *Process) Signal(sig os.Signal) error {
-	p.t.Logf("signalling %s %s with %s\n", p.name, p.id, sig)
+	p.t.Logf("signalling %s %s with %s", p.name, p.id, sig)
 	if p.cmd == nil {
 		panic(fmt.Errorf("p: %s, cmd is empty", p.id))
 	}
@@ -94,7 +94,7 @@ func (p *Process) Signal(sig os.Signal) error {
 }
 
 func (p *Process) Kill() {
-	p.t.Logf("killing %s %s\n", p.name, p.id)
+	p.t.Logf("killing %s %s", p.name, p.id)
 	if p.cmd == nil {
 		panic(fmt.Errorf("p: %s, cmd is empty", p.id))
 	}
@@ -104,7 +104,7 @@ func (p *Process) Kill() {
 }
 
 func (p *Process) Stop() {
-	p.t.Logf("stopping %s %s\n", p.name, p.id)
+	p.t.Logf("stopping %s %s", p.name, p.id)
 	if p.cmd == nil {
 		panic(fmt.Errorf("p: %s, cmd is empty", p.id))
 	}
@@ -233,7 +233,7 @@ func (tk *TestKeeper) WaitDBUp(timeout time.Duration) error {
 		if err == nil {
 			return nil
 		}
-		tk.t.Logf("tk: %v, error: %v\n", tk.id, err)
+		tk.t.Logf("tk: %v, error: %v", tk.id, err)
 		time.Sleep(2 * time.Second)
 	}
 
@@ -260,7 +260,7 @@ func (tk *TestKeeper) WaitUp(timeout time.Duration) error {
 		if err == nil {
 			return nil
 		}
-		tk.t.Logf("tk: %v, error: %v\n", tk.id, err)
+		tk.t.Logf("tk: %v, error: %v", tk.id, err)
 		time.Sleep(1 * time.Second)
 	}
 
@@ -514,7 +514,7 @@ func (tp *TestProxy) WaitListening(timeout time.Duration) error {
 		if err == nil {
 			return nil
 		}
-		tp.t.Logf("tp: %v, error: %v\n", tp.id, err)
+		tp.t.Logf("tp: %v, error: %v", tp.id, err)
 		time.Sleep(2 * time.Second)
 	}
 	return fmt.Errorf("timeout")
@@ -527,7 +527,7 @@ func (tp *TestProxy) WaitNotListening(timeout time.Duration) error {
 		if err != nil {
 			return nil
 		}
-		tp.t.Logf("tp: %v, error: %v\n", tp.id, err)
+		tp.t.Logf("tp: %v, error: %v", tp.id, err)
 		time.Sleep(2 * time.Second)
 	}
 	return fmt.Errorf("timeout")
@@ -700,7 +700,7 @@ func (ts *TestStore) WaitUp(timeout time.Duration) error {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
 		_, err := ts.store.Get("anykey")
-		ts.t.Logf("err: %v\n", err)
+		ts.t.Logf("err: %v", err)
 		if err != nil && err == kvstore.ErrKeyNotFound {
 			return nil
 		}
