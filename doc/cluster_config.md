@@ -39,6 +39,8 @@ By default the cluster configuration is empty. For every empty field a default i
     "pg_repl_password": "password",
     "max_standbys_per_sender": 3,
     "synchronous_replication": false,
+    "init_with_multiple_keepers": false,
+    "use_pg_rewind": false,
     "pg_parameters": null
 }
 ```
@@ -51,6 +53,8 @@ By default the cluster configuration is empty. For every empty field a default i
 * pg_repl_password: (string) PostgreSQL replication password
 * max_standbys_per_sender: (uint) max number of standbys for every sender. A sender can be a master or another standby (with cascading replication).
 * synchronous_replication: (bool) use synchronous replication between the master and its standbys
+* init_with_multiple_keepers: (bool) Choose a random initial master when multiple keeper are registered. Used only at cluster initialization (empty clusterview).
+* use_pg_rewind: (bool) try to use pg_rewind for faster instance resyncronization.
 * pg_parameters: (map[string]string) a map containing the postgres server parameters and their values.
 
 

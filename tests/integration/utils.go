@@ -370,6 +370,11 @@ func (tk *TestKeeper) IsMaster() (bool, error) {
 	return false, fmt.Errorf("no rows returned")
 }
 
+func (tk *TestKeeper) CreateSuperUser(username, password string) error {
+	_, err := tk.Exec(fmt.Sprintf(`create role "%s" with login superuser encrypted password '%s';`, username, password))
+	return err
+}
+
 func (tk *TestKeeper) WaitRole(r common.Role, timeout time.Duration) error {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {

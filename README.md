@@ -15,6 +15,7 @@ stolon is a cloud native PostgreSQL manager for PostgreSQL high availability. It
 * Full cluster setup in minutes.
 * Easy [cluster admininistration](doc/stolonctl.md)
 * Automatic service discovery and dynamic reconfiguration (handles postgres and stolon processes changing their addresses).
+* Can use [pg_rewind](doc/pg_rewind.md) for fast instance resyncronization with current master.
 
 ## Architecture
 

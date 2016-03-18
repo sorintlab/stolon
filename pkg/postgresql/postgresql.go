@@ -40,16 +40,16 @@ var (
 )
 
 type Manager struct {
-	name           string
-	dataDir        string
-	replUser       string
-	replPassword   string
-	connString     string
-	replConnString string
-	pgBinPath      string
-	requestTimeout time.Duration
-	parameters     Parameters
-	confDir        string
+	name            string
+	dataDir         string
+	replUser        string
+	replPassword    string
+	localConnString string
+	replConnString  string
+	pgBinPath       string
+	requestTimeout  time.Duration
+	parameters      Parameters
+	confDir         string
 }
 
 type Parameters map[string]string
@@ -75,18 +75,18 @@ func (s Parameters) Equals(is Parameters) bool {
 	return reflect.DeepEqual(s, is)
 }
 
-func NewManager(name string, pgBinPath string, dataDir string, confDir string, parameters Parameters, connString, replConnString, replUser, replPassword string, requestTimeout time.Duration) *Manager {
+func NewManager(name string, pgBinPath string, dataDir string, confDir string, parameters Parameters, localConnString, replConnString, replUser, replPassword string, requestTimeout time.Duration) *Manager {
 	return &Manager{
-		name:           name,
-		dataDir:        filepath.Join(dataDir, "postgres"),
-		replUser:       replUser,
-		replPassword:   replPassword,
-		connString:     connString,
-		replConnString: replConnString,
-		pgBinPath:      pgBinPath,
-		requestTimeout: requestTimeout,
-		parameters:     parameters,
-		confDir:        confDir,
+		name:            name,
+		dataDir:         filepath.Join(dataDir, "postgres"),
+		replUser:        replUser,
+		replPassword:    replPassword,
+		localConnString: localConnString,
+		replConnString:  replConnString,
+		pgBinPath:       pgBinPath,
+		requestTimeout:  requestTimeout,
+		parameters:      parameters,
+		confDir:         confDir,
 	}
 }
 
@@ -234,25 +234,25 @@ func (p *Manager) Promote() error {
 func (p *Manager) CreateReplRole() error {
 	ctx, cancel := context.WithTimeout(context.Background(), p.requestTimeout)
 	defer cancel()
-	return CreateReplRole(ctx, p.connString, p.replUser, p.replPassword)
+	return CreateReplRole(ctx, p.localConnString, p.replUser, p.replPassword)
 }
 
 func (p *Manager) GetReplicatinSlots() ([]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), p.requestTimeout)
 	defer cancel()
-	return GetReplicatinSlots(ctx, p.connString)
+	return GetReplicatinSlots(ctx, p.localConnString)
 }
 
 func (p *Manager) CreateReplicationSlot(name string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), p.requestTimeout)
 	defer cancel()
-	return CreateReplicationSlot(ctx, p.connString, name)
+	return CreateReplicationSlot(ctx, p.localConnString, name)
 }
 
 func (p *Manager) DropReplicationSlot(name string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), p.requestTimeout)
 	defer cancel()
-	return DropReplicationSlot(ctx, p.connString, name)
+	return DropReplicationSlot(ctx, p.localConnString, name)
 }
 
 func (p *Manager) IsInitialized() (bool, error) {
@@ -277,7 +277,7 @@ func (p *Manager) IsInitialized() (bool, error) {
 func (p *Manager) GetRoleFromDB() (common.Role, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), p.requestTimeout)
 	defer cancel()
-	return GetRole(ctx, p.connString)
+	return GetRole(ctx, p.localConnString)
 }
 
 func (p *Manager) GetRole() (common.Role, error) {
@@ -410,7 +410,39 @@ func (p *Manager) writePgHba() error {
 	return nil
 }
 
+func (p *Manager) SyncFromFollowedPGRewind(followedConnParams ConnParams, password string) error {
+	// ioutil.Tempfile already creates files with 0600 permissions
+	pgpass, err := ioutil.TempFile("", "pgpass")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(pgpass.Name())
+	defer pgpass.Close()
+
+	host := followedConnParams.Get("host")
+	port := followedConnParams.Get("port")
+	user := followedConnParams.Get("user")
+	pgpass.WriteString(fmt.Sprintf("%s:%s:*:%s:%s\n", host, port, user, password))
+
+	// Disable syncronous replication. pg_rewind needs to create a
+	// temporary table on the master but if synchronous replication is
+	// enabled and there're no active standbys it will hang.
+	followedConnParams.Set("options", "-c synchronous_commit=off")
+	followedConnString := followedConnParams.ConnString()
+
+	log.Infof("Running pg_rewind")
+	name := filepath.Join(p.pgBinPath, "pg_rewind")
+	cmd := exec.Command(name, "--debug", "-D", p.dataDir, "--source-server="+followedConnString)
+	cmd.Env = append(cmd.Env, fmt.Sprintf("PGPASSFILE=%s", pgpass.Name()))
+	log.Debugf("execing cmd: %s", cmd)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("error: %v, output: %s", err, string(out))
+	}
+	return nil
+}
+
 func (p *Manager) SyncFromFollowed(followedConnParams ConnParams) error {
+	// ioutil.Tempfile already creates files with 0600 permissions
 	pgpass, err := ioutil.TempFile("", "pgpass")
 	if err != nil {
 		return err
