@@ -193,8 +193,9 @@ type PostgresKeeper struct {
 	cvVersionMutex sync.Mutex
 	cvVersion      int
 
-	pgStateMutex sync.Mutex
-	lastPGState  *cluster.PostgresState
+	pgStateMutex    sync.Mutex
+	getPGStateMutex sync.Mutex
+	lastPGState     *cluster.PostgresState
 }
 
 func NewPostgresKeeper(id string, cfg *config, stop chan bool, end chan error) (*PostgresKeeper, error) {
@@ -289,13 +290,23 @@ func (p *PostgresKeeper) pgStateHandler(w http.ResponseWriter, req *http.Request
 
 func (p *PostgresKeeper) updatePGState(pctx context.Context) {
 	p.pgStateMutex.Lock()
-	pgState := &cluster.PostgresState{}
-
 	defer p.pgStateMutex.Unlock()
+	pgState, err := p.GetPGState(pctx)
+	if err != nil {
+		return
+	}
+	p.lastPGState = pgState
+}
+
+func (p *PostgresKeeper) GetPGState(pctx context.Context) (*cluster.PostgresState, error) {
+	p.getPGStateMutex.Lock()
+	defer p.getPGStateMutex.Unlock()
+	// Just get one pgstate at a time to avoid exausting available connections
+	pgState := &cluster.PostgresState{}
 
 	initialized, err := p.pgm.IsInitialized()
 	if err != nil {
-		return
+		return nil, err
 	}
 	if !initialized {
 		pgState.Initialized = false
@@ -304,8 +315,7 @@ func (p *PostgresKeeper) updatePGState(pctx context.Context) {
 		pgState, err = pg.GetPGState(ctx, p.getOurReplConnParams())
 		cancel()
 		if err != nil {
-			log.Errorf("error getting pg state: %v", err)
-			return
+			return nil, fmt.Errorf("error getting pg state: %v", err)
 		}
 		pgState.Initialized = true
 
@@ -316,14 +326,13 @@ func (p *PostgresKeeper) updatePGState(pctx context.Context) {
 			tlsh, err := pg.GetTimelinesHistory(ctx, pgState.TimelineID, p.getOurReplConnParams())
 			cancel()
 			if err != nil {
-				log.Errorf("error getting timeline history: %v", err)
-				return
+				return nil, fmt.Errorf("error getting timeline history: %v", err)
 			}
 			pgState.TimelinesHistory = tlsh
 		}
 	}
 
-	p.lastPGState = pgState
+	return pgState, nil
 }
 
 func (p *PostgresKeeper) getLastPGState() *cluster.PostgresState {
@@ -679,10 +688,10 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				// Check timeline history
 				// We need to update our pgState to avoid dealing with
 				// an old pgState not reflecting the real state
-				p.updatePGState(pctx)
-				pgState := p.getLastPGState()
-				if pgState == nil {
-					log.Errorf("our pgstate is unknown: %v", err)
+				var pgState *cluster.PostgresState
+				pgState, err = p.GetPGState(pctx)
+				if err != nil {
+					log.Errorf("cannot get current pgstate: %v", err)
 					return
 				}
 				fPGState := followed.PGState
@@ -732,10 +741,10 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 			// Check timeline history
 			// We need to update our pgState to avoid dealing with
 			// an old pgState not reflecting the real state
-			p.updatePGState(pctx)
-			pgState := p.getLastPGState()
-			if pgState == nil {
-				log.Errorf("our pgstate is unknown: %v", err)
+			var pgState *cluster.PostgresState
+			pgState, err = p.GetPGState(pctx)
+			if err != nil {
+				log.Errorf("cannot get current pgstate: %v", err)
 				return
 			}
 			fPGState := followed.PGState
