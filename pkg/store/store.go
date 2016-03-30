@@ -153,12 +153,15 @@ func (e *StoreManager) GetClusterView() (*cluster.ClusterView, *kvstore.KVPair, 
 	return cd.ClusterView, pair, nil
 }
 
-func (e *StoreManager) SetKeeperDiscoveryInfo(id string, ms *cluster.KeeperDiscoveryInfo) error {
+func (e *StoreManager) SetKeeperDiscoveryInfo(id string, ms *cluster.KeeperDiscoveryInfo, ttl time.Duration) error {
 	msj, err := json.Marshal(ms)
 	if err != nil {
 		return err
 	}
-	return e.store.Put(filepath.Join(e.clusterPath, keepersDiscoveryInfoDir, id), msj, nil)
+	if ttl < minTTL {
+		ttl = minTTL
+	}
+	return e.store.Put(filepath.Join(e.clusterPath, keepersDiscoveryInfoDir, id), msj, &kvstore.WriteOptions{TTL: ttl})
 }
 
 func (e *StoreManager) GetKeeperDiscoveryInfo(id string) (*cluster.KeeperDiscoveryInfo, bool, error) {
