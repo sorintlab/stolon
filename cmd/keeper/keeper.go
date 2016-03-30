@@ -230,7 +230,7 @@ func (p *PostgresKeeper) publish() error {
 	}
 	log.Debugf(spew.Sprintf("discoveryInfo: %#v", discoveryInfo))
 
-	if err := p.e.SetKeeperDiscoveryInfo(p.id, discoveryInfo); err != nil {
+	if err := p.e.SetKeeperDiscoveryInfo(p.id, discoveryInfo, p.clusterConfig.SleepInterval*2); err != nil {
 		return err
 	}
 	return nil
@@ -345,6 +345,7 @@ func (p *PostgresKeeper) getLastPGState() *cluster.PostgresState {
 func (p *PostgresKeeper) Start() {
 	endSMCh := make(chan struct{})
 	endPgStatecheckerCh := make(chan struct{})
+	endPublish := make(chan struct{})
 	endApiCh := make(chan error)
 
 	var err error
@@ -395,6 +396,7 @@ func (p *PostgresKeeper) Start() {
 	ctx, cancel := context.WithCancel(context.Background())
 	smTimerCh := time.NewTimer(0).C
 	updatePGStateTimerCh := time.NewTimer(0).C
+	publishCh := time.NewTimer(0).C
 	for true {
 		select {
 		case <-p.stop:
@@ -403,20 +405,34 @@ func (p *PostgresKeeper) Start() {
 			p.pgm.Stop(true)
 			p.end <- nil
 			return
+
 		case <-smTimerCh:
 			go func() {
 				p.postgresKeeperSM(ctx)
 				endSMCh <- struct{}{}
 			}()
+
 		case <-endSMCh:
 			smTimerCh = time.NewTimer(p.clusterConfig.SleepInterval).C
+
 		case <-updatePGStateTimerCh:
 			go func() {
 				p.updatePGState(ctx)
 				endPgStatecheckerCh <- struct{}{}
 			}()
+
 		case <-endPgStatecheckerCh:
 			updatePGStateTimerCh = time.NewTimer(p.clusterConfig.SleepInterval).C
+
+		case <-publishCh:
+			go func() {
+				p.publish()
+				endPublish <- struct{}{}
+			}()
+
+		case <-endPublish:
+			publishCh = time.NewTimer(p.clusterConfig.SleepInterval).C
+
 		case err := <-endApiCh:
 			if err != nil {
 				log.Fatal("ListenAndServe: ", err)
@@ -572,12 +588,6 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 		isMaster = true
 	} else {
 		log.Infof("current pg state: standby")
-	}
-
-	// publish ourself for discovery
-	if err = p.publish(); err != nil {
-		log.Errorf("failed to publish ourself to the cluster: %v", err)
-		return
 	}
 
 	masterID := cv.Master
