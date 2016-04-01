@@ -40,16 +40,18 @@ var (
 )
 
 type Manager struct {
-	name            string
-	dataDir         string
-	replUser        string
-	replPassword    string
-	localConnString string
-	replConnString  string
-	pgBinPath       string
-	requestTimeout  time.Duration
-	parameters      Parameters
-	confDir         string
+	name              string
+	dataDir           string
+	replUser          string
+	replPassword      string
+	localConnString   string
+	replConnString    string
+	pgBinPath         string
+	requestTimeout    time.Duration
+	parameters        Parameters
+	confDir           string
+	initialSUUsername string
+	initialSUPassword string
 }
 
 type Parameters map[string]string
@@ -75,18 +77,20 @@ func (s Parameters) Equals(is Parameters) bool {
 	return reflect.DeepEqual(s, is)
 }
 
-func NewManager(name string, pgBinPath string, dataDir string, confDir string, parameters Parameters, localConnString, replConnString, replUser, replPassword string, requestTimeout time.Duration) *Manager {
+func NewManager(name string, pgBinPath string, dataDir string, confDir string, parameters Parameters, localConnString, replConnString, replUser, replPassword, initialSUUsername, initialSUPassword string, requestTimeout time.Duration) *Manager {
 	return &Manager{
-		name:            name,
-		dataDir:         filepath.Join(dataDir, "postgres"),
-		replUser:        replUser,
-		replPassword:    replPassword,
-		localConnString: localConnString,
-		replConnString:  replConnString,
-		pgBinPath:       pgBinPath,
-		requestTimeout:  requestTimeout,
-		parameters:      parameters,
-		confDir:         confDir,
+		name:              name,
+		dataDir:           filepath.Join(dataDir, "postgres"),
+		replUser:          replUser,
+		replPassword:      replPassword,
+		localConnString:   localConnString,
+		replConnString:    replConnString,
+		pgBinPath:         pgBinPath,
+		requestTimeout:    requestTimeout,
+		parameters:        parameters,
+		confDir:           confDir,
+		initialSUUsername: initialSUUsername,
+		initialSUPassword: initialSUPassword,
 	}
 }
 
@@ -130,6 +134,15 @@ func (p *Manager) Init() error {
 		err = fmt.Errorf("error starting instance: %v", err)
 		goto out
 	}
+
+	if p.initialSUPassword != "" && p.initialSUUsername != "" {
+		log.Infof("Setting initial PostgreSQL password")
+		if err = p.SetInitialPassword(); err != nil {
+			err = fmt.Errorf("error setting initial password for '%s' user: %v", p.initialSUUsername, err)
+			goto out
+		}
+	}
+
 	log.Infof("Creating replication role")
 	if err = p.CreateReplRole(); err != nil {
 		err = fmt.Errorf("error creating replication role: %v", err)
@@ -139,6 +152,7 @@ func (p *Manager) Init() error {
 		err = fmt.Errorf("error stopping instance: %v", err)
 		goto out
 	}
+
 	// On every error remove the dataDir, so we don't end with an half initialized database
 out:
 	if err != nil {
@@ -229,6 +243,12 @@ func (p *Manager) Promote() error {
 		return fmt.Errorf("error: %v, output: %s", err, string(out))
 	}
 	return nil
+}
+
+func (p *Manager) SetInitialPassword() error {
+	ctx, cancel := context.WithTimeout(context.Background(), p.requestTimeout)
+	defer cancel()
+	return SetInitialPassword(ctx, p.localConnString, p.initialSUUsername, p.initialSUPassword)
 }
 
 func (p *Manager) CreateReplRole() error {

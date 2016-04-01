@@ -30,5 +30,7 @@ spec:
             # Enable debugging
           - name: STSENTINEL_DEBUG
             value: "true"
+          - name: STSENTINEL_KUBERNETES_NAMESPACE
+            value: "default"
         ports:
           - containerPort: 6431

@@ -59,6 +59,7 @@ type config struct {
 	keeperPort              string
 	keeperKubeLabelSelector string
 	initialClusterConfig    string
+	kubernetesNamespace     string
 	debug                   bool
 }
 
@@ -73,6 +74,7 @@ func init() {
 	cmdSentinel.PersistentFlags().StringVar(&cfg.keeperKubeLabelSelector, "keeper-kube-label-selector", "", "label selector for discoverying stolon-keeper(s) under kubernetes")
 	cmdSentinel.PersistentFlags().StringVar(&cfg.keeperPort, "keeper-port", "5431", "stolon-keeper(s) listening port (used by kubernetes discovery)")
 	cmdSentinel.PersistentFlags().StringVar(&cfg.initialClusterConfig, "initial-cluster-config", "", "a file providing the initial cluster config, used only at cluster initialization, ignored if cluster is already initialized")
+	cmdSentinel.PersistentFlags().StringVar(&cfg.kubernetesNamespace, "kubernetes-namespace", "default", "the Kubernetes namespace stolon is deployed under")
 	cmdSentinel.PersistentFlags().BoolVar(&cfg.debug, "debug", false, "enable debug logging")
 }
 
@@ -272,7 +274,7 @@ func (s *Sentinel) getKubernetesPodsIPs(ctx context.Context) ([]string, error) {
 	}
 	host := os.Getenv("KUBERNETES_SERVICE_HOST")
 	port := os.Getenv("KUBERNETES_SERVICE_PORT")
-	u, err := url.Parse(fmt.Sprintf("https://%s:%s/api/v1/namespaces/default/pods", host, port))
+	u, err := url.Parse(fmt.Sprintf("https://%s:%s/api/v1/namespaces/%s/pods", host, port, cfg.kubernetesNamespace))
 	if err != nil {
 		return nil, err
 	}

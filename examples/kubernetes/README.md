@@ -27,6 +27,14 @@ kubectl create -f stolon-sentinel.yaml
 
 This will create a replication controller with one pod executing the stolon sentinel. You can also increase the number of replicas for stolon sentinels in the rc definition or do it later.
 
+### Create the keeper's password secret
+
+This creates a password secret that can be used by the keeper to set up the initial database user. This example uses the value 'password1' but you will want to replace the value with a Base64-encoded password of your choice.
+
+```
+kubectl create -f secret.yaml
+```
+
 ### Create the first stolon keeper
 Note: In this example the stolon keeper is a replication controller that, for every pod replica, uses a volume for stolon and postgreSQL data of `emptyDir` type. So it'll go away when the related pod is destroyed. This is just for easy testing. In production you should use a persistent volume. Actually (kubernetes 1.0), for working with persistent volumes you should define a different replication controller with `replicas=1` for every keeper instance.
 
@@ -51,34 +59,6 @@ kubectl get pods
 NAME                       READY     STATUS    RESTARTS   AGE
 stolon-keeper-rc-qpqp9     1/1       Running   0          1m
 ```
-
-#### Enter the pod
-
-```
-kubectl exec stolon-keeper-rc-qpqp9 -it /bin/bash
-
-[root@stolon-keeper-rc-hwqxd /]#
-```
-
-now become the `stolon` user:
-```
-[root@stolon-keeper-rc-hwqxd /]# su - stolon
-
-[stolon@stolon-keeper-rc-hwqxd ~]$
-```
-
-connect to the postgres instance and create a password for the `stolon` superuser:
-
-```
-[stolon@stolon-keeper-rc-hwqxd ~]$ psql -h localhost -p 5432 postgres
-psql (9.4.4)
-Type "help" for help.
-
-postgres=# alter role stolon with password 'stolon';
-ALTER ROLE
-```
-you can now exit the shell.
-
 
 ### Create the proxies
 
@@ -106,6 +86,8 @@ stolon-proxy-service   <none>                                    stolon-cluster=
 ```
 
 #### Connect to the proxy service
+
+The password for the stolon user will be the value specified in your `secret.yaml` above (or `password1` if you did not change it). 
 
 ```
 psql --host 10.247.50.217 --port 5432 postgres -U stolon -W
