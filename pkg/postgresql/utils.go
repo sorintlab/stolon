@@ -89,6 +89,17 @@ func CheckDBStatus(ctx context.Context, connString string) error {
 	return nil
 }
 
+func SetInitialPassword(ctx context.Context, connString, superuser, initialPassword string) error {
+	db, err := sql.Open("postgres", connString)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	_, err = Exec(ctx, db, fmt.Sprintf(`alter user %s with password '%s';`, superuser, initialPassword))
+	return err
+}
+
 func CreateReplRole(ctx context.Context, connString, replUser, replPassword string) error {
 	db, err := sql.Open("postgres", connString)
 	if err != nil {

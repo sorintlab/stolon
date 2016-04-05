@@ -29,12 +29,21 @@ spec:
             # Enable debugging
           - name: STKEEPER_DEBUG
             value: "true"
+          - name: STKEEPER_INITIAL_PG_SU_USERNAME
+            value: "stolon"
+          - name: STKEEPER_INITIAL_PG_SU_PASSWORD_FILE
+            value: "/etc/secrets/stolon/password"
         ports:
           - containerPort: 5431
           - containerPort: 5432
         volumeMounts:
         - mountPath: /stolon-data
           name: data
+        - mountPath: /etc/secrets/stolon
+          name: stolon
       volumes:
         - name: data
           emptyDir: {}
+        - name: stolon
+          secret:
+            secretName: stolon
