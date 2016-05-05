@@ -71,7 +71,7 @@ func TestServerParameters(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	tk, err := NewTestKeeper(t, dir, clusterName, tstore.storeBackend, storeEndpoints)
+	tk, err := NewTestKeeper(t, dir, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, tstore.storeBackend, storeEndpoints)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}

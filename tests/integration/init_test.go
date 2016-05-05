@@ -60,7 +60,7 @@ func TestInit(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	defer ts.Stop()
-	tk, err := NewTestKeeper(t, dir, clusterName, tstore.storeBackend, storeEndpoints)
+	tk, err := NewTestKeeper(t, dir, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, tstore.storeBackend, storeEndpoints)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -75,6 +75,119 @@ func TestInit(t *testing.T) {
 	}
 	t.Logf("database is up")
 
+}
+
+func TestInitUsers(t *testing.T) {
+	t.Parallel()
+
+	dir, err := ioutil.TempDir("", "")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer os.RemoveAll(dir)
+
+	tstore, err := NewTestStore(t, dir)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := tstore.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := tstore.WaitUp(10 * time.Second); err != nil {
+		t.Fatalf("error waiting on store up: %v", err)
+	}
+	defer tstore.Stop()
+
+	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
+
+	// Test pg-repl-username == pg-su-username but password different
+	clusterName := uuid.NewV4().String()
+	tk, err := NewTestKeeper(t, dir, clusterName, "user01", "password01", "user01", "password02", tstore.storeBackend, storeEndpoints)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := tk.StartExpect(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer tk.Stop()
+	if err := tk.cmd.Expect("keeper: provided superuser name and replication user name are the same but provided passwords are different"); err != nil {
+		t.Fatalf("expecting keeper reporting provided superuser name and replication user name are the same but provided passwords are different")
+	}
+
+	// Test pg-repl-username == pg-su-username
+	clusterName = uuid.NewV4().String()
+	storePath := filepath.Join(common.StoreBasePath, clusterName)
+
+	kvstore, err := store.NewStore(tstore.storeBackend, storeEndpoints)
+	if err != nil {
+		t.Fatalf("cannot create store: %v", err)
+	}
+
+	e := store.NewStoreManager(kvstore, storePath)
+
+	ts, err := NewTestSentinel(t, dir, clusterName, tstore.storeBackend, storeEndpoints)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := ts.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer ts.Stop()
+
+	if err := WaitClusterInitialized(e, 30*time.Second); err != nil {
+		t.Fatal("expected cluster initialized")
+	}
+
+	tk2, err := NewTestKeeper(t, dir, clusterName, "user01", "password", "user01", "password", tstore.storeBackend, storeEndpoints)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := tk2.StartExpect(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer tk2.Stop()
+	if err := tk2.cmd.ExpectTimeout("postgresql: replication role added to superuser", 60*time.Second); err != nil {
+		t.Fatalf("expecting keeper reporting replication role added to superuser")
+	}
+
+	// Test pg-repl-username != pg-su-username and pg-su-password defined
+	clusterName = uuid.NewV4().String()
+	storePath = filepath.Join(common.StoreBasePath, clusterName)
+
+	kvstore, err = store.NewStore(tstore.storeBackend, storeEndpoints)
+	if err != nil {
+		t.Fatalf("cannot create store: %v", err)
+	}
+
+	e = store.NewStoreManager(kvstore, storePath)
+
+	ts2, err := NewTestSentinel(t, dir, clusterName, tstore.storeBackend, storeEndpoints)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := ts2.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer ts2.Stop()
+
+	if err := WaitClusterInitialized(e, 30*time.Second); err != nil {
+		t.Fatal("expected cluster initialized")
+	}
+
+	tk3, err := NewTestKeeper(t, dir, clusterName, "user01", "password", "user02", "password", tstore.storeBackend, storeEndpoints)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := tk3.StartExpect(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer tk3.Stop()
+	if err := tk3.cmd.ExpectTimeout("postgresql: superuser password defined", 60*time.Second); err != nil {
+		t.Fatalf("expecting keeper reporting superuser password defined")
+	}
+	if err := tk3.cmd.ExpectTimeout("postgresql: replication role user02 created", 60*time.Second); err != nil {
+		t.Fatalf("expecting keeper reporting replication role user02 created")
+	}
 }
 
 func TestInitialClusterConfig(t *testing.T) {
@@ -135,7 +248,7 @@ func TestInitialClusterConfig(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	if !*cv.Config.SynchronousReplication {
-		t.Fatal("expected cluster config with InitWithMultipleKeepers enabled")
+		t.Fatal("expected cluster config with SynchronousReplication enabled")
 	}
 }
 
@@ -166,7 +279,7 @@ func TestExclusiveLock(t *testing.T) {
 	u := uuid.NewV4()
 	id := fmt.Sprintf("%x", u[:4])
 
-	tk1, err := NewTestKeeperWithID(t, dir, id, clusterName, tstore.storeBackend, storeEndpoints)
+	tk1, err := NewTestKeeperWithID(t, dir, id, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, tstore.storeBackend, storeEndpoints)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -180,7 +293,7 @@ func TestExclusiveLock(t *testing.T) {
 		t.Fatalf("expecting tk1 up but it's down")
 	}
 
-	tk2, err := NewTestKeeperWithID(t, dir, id, clusterName, tstore.storeBackend, storeEndpoints)
+	tk2, err := NewTestKeeperWithID(t, dir, id, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, tstore.storeBackend, storeEndpoints)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -214,7 +327,7 @@ func TestKeeperPGConfDirBad(t *testing.T) {
 	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
 
 	// Test pgConfDir not absolute path
-	tk, err := NewTestKeeper(t, dir, clusterName, tstore.storeBackend, storeEndpoints, "--pg-conf-dir=not/absolute/path")
+	tk, err := NewTestKeeper(t, dir, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, tstore.storeBackend, storeEndpoints, "--pg-conf-dir=not/absolute/path")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -227,7 +340,7 @@ func TestKeeperPGConfDirBad(t *testing.T) {
 	}
 
 	// Test unexistent pgConfDir
-	tk2, err := NewTestKeeper(t, dir, clusterName, tstore.storeBackend, storeEndpoints, "--pg-conf-dir=/unexistent-configuration-directory")
+	tk2, err := NewTestKeeper(t, dir, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, tstore.storeBackend, storeEndpoints, "--pg-conf-dir=/unexistent-configuration-directory")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -248,7 +361,7 @@ func TestKeeperPGConfDirBad(t *testing.T) {
 		tmpFile.Close()
 		os.Remove(tmpFile.Name())
 	}()
-	tk3, err := NewTestKeeper(t, dir, clusterName, tstore.storeBackend, storeEndpoints, fmt.Sprintf("--pg-conf-dir=%s", tmpFile.Name()))
+	tk3, err := NewTestKeeper(t, dir, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, tstore.storeBackend, storeEndpoints, fmt.Sprintf("--pg-conf-dir=%s", tmpFile.Name()))
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -301,7 +414,7 @@ func TestKeeperPGConfDirGood(t *testing.T) {
 	}
 	defer os.Remove(tmpDir)
 
-	tk, err := NewTestKeeper(t, dir, clusterName, tstore.storeBackend, storeEndpoints, fmt.Sprintf("--pg-conf-dir=%s", tmpDir))
+	tk, err := NewTestKeeper(t, dir, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, tstore.storeBackend, storeEndpoints, fmt.Sprintf("--pg-conf-dir=%s", tmpDir))
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}

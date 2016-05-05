@@ -64,24 +64,29 @@ type config struct {
 	clusterName             string
 	listenAddress           string
 	port                    string
+	debug                   bool
 	pgListenAddress         string
 	pgPort                  string
 	pgBinPath               string
 	pgConfDir               string
+	pgReplUsername          string
+	pgReplPassword          string
+	pgReplPasswordFile      string
 	pgSUUsername            string
 	pgSUPassword            string
-	debug                   bool
+	pgSUPasswordFile        string
 	pgInitialSUUsername     string
 	pgInitialSUPasswordFile string
 }
 
 var cfg config
 
-func (c *config) hasPGRewindRequiredOptions() bool {
-	return c.pgSUUsername != "" && c.pgSUPassword != ""
-}
-
 func init() {
+	user, err := util.GetUser()
+	if err != nil {
+		log.Fatalf("%v", err)
+	}
+
 	cmdKeeper.PersistentFlags().StringVar(&cfg.id, "id", "", "keeper id (must be unique in the cluster and can contain only lower-case letters, numbers and the underscore character). If not provided a random id will be generated.")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.storeBackend, "store-backend", "", "store backend type (etcd or consul)")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.storeEndpoints, "store-endpoints", "", "a comma-delimited list of store endpoints (defaults: 127.0.0.1:2379 for etcd, 127.0.0.1:8500 for consul)")
@@ -93,10 +98,12 @@ func init() {
 	cmdKeeper.PersistentFlags().StringVar(&cfg.pgPort, "pg-port", "5432", "postgresql instance listening port")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.pgBinPath, "pg-bin-path", "", "absolute path to postgresql binaries. If empty they will be searched in the current PATH")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.pgConfDir, "pg-conf-dir", "", "absolute path to user provided postgres configuration. If empty a default dir under $dataDir/postgres/conf.d will be used")
-	cmdKeeper.PersistentFlags().StringVar(&cfg.pgSUUsername, "pg-su-username", "", "postgres superuser user name (required by pg_rewind)")
-	cmdKeeper.PersistentFlags().StringVar(&cfg.pgSUPassword, "pg-su-password", "", "postgres superuser password (required by pg_rewind)")
-	cmdKeeper.PersistentFlags().StringVar(&cfg.pgInitialSUUsername, "initial-pg-su-username", "", "postgres initial superuser username")
-	cmdKeeper.PersistentFlags().StringVar(&cfg.pgInitialSUPasswordFile, "initial-pg-su-password-file", "", "postgres initial superuser password secret file")
+	cmdKeeper.PersistentFlags().StringVar(&cfg.pgReplUsername, "pg-repl-username", "", "postgres replication user name. Required. It'll be created on db initialization. Requires --pg-repl-password or --pg-repl-passwordfile. Must be the same for all keepers.")
+	cmdKeeper.PersistentFlags().StringVar(&cfg.pgReplPassword, "pg-repl-password", "", "postgres replication user password. Required. Only one of --pg-repl-password or --pg-repl-passwordfile is required. Must be the same for all keepers.")
+	cmdKeeper.PersistentFlags().StringVar(&cfg.pgReplPasswordFile, "pg-repl-passwordfile", "", "postgres replication user password file. Only one of --pg-repl-password or --pg-repl-passwordfile is required. Must be the same for all keepers.")
+	cmdKeeper.PersistentFlags().StringVar(&cfg.pgSUUsername, "pg-su-username", user, "postgres superuser user name. Used for keeper managed instance access and pg_rewind based synchronization. It'll be created on db initialization. Defaults to the name of the effective user running stolon-keeper. Must be the same for all keepers.")
+	cmdKeeper.PersistentFlags().StringVar(&cfg.pgSUPassword, "pg-su-password", "", "postgres superuser password. Needed for pg_rewind based synchronization. If provided it'll be configured on db initialization. Only one of --pg-su-password or --pg-su-passwordfile is required. Must be the same for all keepers.")
+	cmdKeeper.PersistentFlags().StringVar(&cfg.pgSUPasswordFile, "pg-su-passwordfile", "", "postgres superuser password file. Requires --pg-su-username. Must be the same for all keepers)")
 	cmdKeeper.PersistentFlags().BoolVar(&cfg.debug, "debug", false, "enable debug logging")
 }
 
@@ -107,36 +114,28 @@ var defaultPGParameters = pg.Parameters{
 	"hot_standby":             "on",
 }
 
-func (p *PostgresKeeper) getPgInitialSUPassword() string {
-	var pw string
-
-	if p.cfg.pgInitialSUPasswordFile != "" {
-		fi, err := os.Lstat(p.cfg.pgInitialSUPasswordFile)
-		if err != nil {
-			log.Errorf("Unable to read password from file %s, error: %v", p.cfg.pgInitialSUPasswordFile, err)
-			return pw
-		}
-
-		if fi.Mode() > 0600 {
-			//TODO: enforce this by exiting with an error. Kubernetes makes this file too open today.
-			log.Warningf("Password file %s permissions %#o are too open. This file should only be readable to the user executing stolon! Continuing...", p.cfg.pgInitialSUPasswordFile, fi.Mode())
-		}
-
-		pwBytes, err := ioutil.ReadFile(p.cfg.pgInitialSUPasswordFile)
-		if err != nil {
-			log.Errorf("Unable to read password from file %s, error: %v", p.cfg.pgInitialSUPasswordFile, err)
-			return pw
-		}
-		pw = strings.TrimSpace(string(pwBytes))
+func readPasswordFromFile(filepath string) (string, error) {
+	fi, err := os.Lstat(filepath)
+	if err != nil {
+		return "", fmt.Errorf("unable to read password from file %s: %v", filepath, err)
 	}
 
-	return pw
+	if fi.Mode() > 0600 {
+		//TODO: enforce this by exiting with an error. Kubernetes makes this file too open today.
+		log.Warningf("password file %s permissions %#o are too open. This file should only be readable to the user executing stolon! Continuing...", filepath, fi.Mode())
+	}
+
+	pwBytes, err := ioutil.ReadFile(filepath)
+	if err != nil {
+		return "", fmt.Errorf("unable to read password from file %s: %v", filepath, err)
+	}
+	return strings.TrimSpace(string(pwBytes)), nil
 }
 
 func (p *PostgresKeeper) getSUConnParams(keeperState *cluster.KeeperState) pg.ConnParams {
 	cp := pg.ConnParams{
-		"user":             p.cfg.pgSUUsername,
-		"password":         p.cfg.pgSUPassword,
+		"user":             p.pgSUUsername,
+		"password":         p.pgSUPassword,
 		"host":             keeperState.PGListenAddress,
 		"port":             keeperState.PGPort,
 		"application_name": p.id,
@@ -148,8 +147,8 @@ func (p *PostgresKeeper) getSUConnParams(keeperState *cluster.KeeperState) pg.Co
 
 func (p *PostgresKeeper) getReplConnParams(keeperState *cluster.KeeperState) pg.ConnParams {
 	return pg.ConnParams{
-		"user":             p.clusterConfig.PGReplUser,
-		"password":         p.clusterConfig.PGReplPassword,
+		"user":             p.pgReplUsername,
+		"password":         p.pgReplPassword,
 		"host":             keeperState.PGListenAddress,
 		"port":             keeperState.PGPort,
 		"application_name": p.id,
@@ -157,10 +156,12 @@ func (p *PostgresKeeper) getReplConnParams(keeperState *cluster.KeeperState) pg.
 	}
 }
 
-func (p *PostgresKeeper) getOurConnParams() pg.ConnParams {
+func (p *PostgresKeeper) getLocalConnParams() pg.ConnParams {
 	return pg.ConnParams{
+		"user": p.pgSUUsername,
+		// Do not set password since we assume that pg_hba.conf trusts local users
 		"host":    "localhost",
-		"port":    p.cfg.pgPort,
+		"port":    p.pgPort,
 		"dbname":  "postgres",
 		"sslmode": "disable",
 	}
@@ -168,10 +169,10 @@ func (p *PostgresKeeper) getOurConnParams() pg.ConnParams {
 
 func (p *PostgresKeeper) getOurReplConnParams() pg.ConnParams {
 	return pg.ConnParams{
-		"user":     p.clusterConfig.PGReplUser,
-		"password": p.clusterConfig.PGReplPassword,
-		"host":     p.cfg.pgListenAddress,
-		"port":     p.cfg.pgPort,
+		"user":     p.pgReplUsername,
+		"password": p.pgReplPassword,
+		"host":     p.pgListenAddress,
+		"port":     p.pgPort,
 		"sslmode":  "disable",
 	}
 }
@@ -184,8 +185,8 @@ func (p *PostgresKeeper) createPGParameters(followersIDs []string) pg.Parameters
 		pgParameters[k] = v
 	}
 
-	pgParameters["listen_addresses"] = fmt.Sprintf("127.0.0.1,%s", p.cfg.pgListenAddress)
-	pgParameters["port"] = p.cfg.pgPort
+	pgParameters["listen_addresses"] = fmt.Sprintf("127.0.0.1,%s", p.pgListenAddress)
+	pgParameters["port"] = p.pgPort
 	pgParameters["max_replication_slots"] = strconv.FormatUint(uint64(p.clusterConfig.MaxStandbysPerSender), 10)
 	// Add some more wal senders, since also the keeper will use them
 	pgParameters["max_wal_senders"] = strconv.FormatUint(uint64(p.clusterConfig.MaxStandbysPerSender+2), 10)
@@ -207,13 +208,29 @@ func (p *PostgresKeeper) createPGParameters(followersIDs []string) pg.Parameters
 }
 
 type PostgresKeeper struct {
-	id      string
-	cfg     *config
-	dataDir string
-	e       *store.StoreManager
-	pgm     *postgresql.Manager
-	stop    chan bool
-	end     chan error
+	cfg *config
+
+	id                  string
+	dataDir             string
+	storeBackend        string
+	storeEndpoints      string
+	listenAddress       string
+	port                string
+	debug               bool
+	pgListenAddress     string
+	pgPort              string
+	pgBinPath           string
+	pgConfDir           string
+	pgReplUsername      string
+	pgReplPassword      string
+	pgSUUsername        string
+	pgSUPassword        string
+	pgInitialSUUsername string
+
+	e    *store.StoreManager
+	pgm  *postgresql.Manager
+	stop chan bool
+	end  chan error
 
 	clusterConfig *cluster.Config
 
@@ -235,15 +252,36 @@ func NewPostgresKeeper(id string, cfg *config, stop chan bool, end chan error) (
 	e := store.NewStoreManager(kvstore, storePath)
 
 	p := &PostgresKeeper{
-		id:      id,
-		dataDir: cfg.dataDir,
-		cfg:     cfg,
-		e:       e,
-		stop:    stop,
-		end:     end,
+		cfg: cfg,
+
+		id:             id,
+		dataDir:        cfg.dataDir,
+		storeBackend:   cfg.storeBackend,
+		storeEndpoints: cfg.storeEndpoints,
+
+		listenAddress:       cfg.listenAddress,
+		port:                cfg.port,
+		debug:               cfg.debug,
+		pgListenAddress:     cfg.pgListenAddress,
+		pgPort:              cfg.pgPort,
+		pgBinPath:           cfg.pgBinPath,
+		pgConfDir:           cfg.pgConfDir,
+		pgReplUsername:      cfg.pgReplUsername,
+		pgReplPassword:      cfg.pgReplPassword,
+		pgSUUsername:        cfg.pgSUUsername,
+		pgSUPassword:        cfg.pgSUPassword,
+		pgInitialSUUsername: cfg.pgInitialSUUsername,
+
+		e:    e,
+		stop: stop,
+		end:  end,
 	}
 
 	return p, nil
+}
+
+func (p *PostgresKeeper) usePGRewind() bool {
+	return p.pgSUUsername != "" && p.pgSUPassword != "" && p.clusterConfig.UsePGRewind
 }
 
 func (p *PostgresKeeper) publish() error {
@@ -252,8 +290,8 @@ func (p *PostgresKeeper) publish() error {
 		return nil
 	}
 	discoveryInfo := &cluster.KeeperDiscoveryInfo{
-		ListenAddress: p.cfg.listenAddress,
-		Port:          p.cfg.port,
+		ListenAddress: p.listenAddress,
+		Port:          p.port,
 	}
 	log.Debugf(spew.Sprintf("discoveryInfo: %#v", discoveryInfo))
 
@@ -291,10 +329,10 @@ func (p *PostgresKeeper) infoHandler(w http.ResponseWriter, req *http.Request) {
 	keeperInfo := cluster.KeeperInfo{
 		ID:                 p.id,
 		ClusterViewVersion: p.cvVersion,
-		ListenAddress:      p.cfg.listenAddress,
-		Port:               p.cfg.port,
-		PGListenAddress:    p.cfg.pgListenAddress,
-		PGPort:             p.cfg.pgPort,
+		ListenAddress:      p.listenAddress,
+		Port:               p.port,
+		PGListenAddress:    p.pgListenAddress,
+		PGPort:             p.pgPort,
 	}
 
 	if err := json.NewEncoder(w).Encode(&keeperInfo); err != nil {
@@ -405,13 +443,11 @@ func (p *PostgresKeeper) Start() {
 		return
 	}
 
-	// TODO(sgotti) reconfigure the various configurations options (PGRepl*
-	// and RequestTimeout) after a changed cluster config
+	// TODO(sgotti) reconfigure the various configurations options
+	// (RequestTimeout) after a changed cluster config
 	followersIDs := cv.GetFollowersIDs(p.id)
 	pgParameters := p.createPGParameters(followersIDs)
-	pgm := postgresql.NewManager(p.id, p.cfg.pgBinPath, p.cfg.dataDir, p.cfg.pgConfDir, pgParameters, p.getOurConnParams().ConnString(),
-		p.getOurReplConnParams().ConnString(), p.clusterConfig.PGReplUser, p.clusterConfig.PGReplPassword,
-		p.cfg.pgInitialSUUsername, p.getPgInitialSUPassword(), p.clusterConfig.RequestTimeout)
+	pgm := postgresql.NewManager(p.id, p.pgBinPath, p.dataDir, p.pgConfDir, pgParameters, p.getLocalConnParams().ConnString(), p.getOurReplConnParams().ConnString(), p.pgSUUsername, p.pgSUPassword, p.pgReplUsername, p.pgReplPassword, p.clusterConfig.RequestTimeout)
 	p.pgm = pgm
 
 	p.pgm.Stop(true)
@@ -419,7 +455,7 @@ func (p *PostgresKeeper) Start() {
 	http.HandleFunc("/info", p.infoHandler)
 	http.HandleFunc("/pgstate", p.pgStateHandler)
 	go func() {
-		endApiCh <- http.ListenAndServe(fmt.Sprintf("%s:%s", p.cfg.listenAddress, p.cfg.port), nil)
+		endApiCh <- http.ListenAndServe(fmt.Sprintf("%s:%s", p.listenAddress, p.port), nil)
 	}()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -471,7 +507,7 @@ func (p *PostgresKeeper) Start() {
 	}
 }
 
-func (p *PostgresKeeper) Resync(followed *cluster.KeeperState, initialized, started bool) error {
+func (p *PostgresKeeper) resync(followed *cluster.KeeperState, initialized, started bool) error {
 	pgm := p.pgm
 	if initialized && started {
 		if err := pgm.Stop(true); err != nil {
@@ -485,10 +521,10 @@ func (p *PostgresKeeper) Resync(followed *cluster.KeeperState, initialized, star
 	// installed pg_rewind for postgres 9.4. If a pg_rewind executable
 	// doesn't exists pgm.SyncFromFollowedPGRewind will return an error and
 	// fallback to pg_basebackup
-	if initialized && p.clusterConfig.UsePGRewind && p.cfg.hasPGRewindRequiredOptions() {
+	if initialized && p.usePGRewind() {
 		connParams := p.getSUConnParams(followed)
 		log.Infof("syncing using pg_rewind from followed instance %q", followed.ID)
-		if err := pgm.SyncFromFollowedPGRewind(connParams, p.cfg.pgSUPassword); err != nil {
+		if err := pgm.SyncFromFollowedPGRewind(connParams, p.pgSUPassword); err != nil {
 			// log pg_rewind error and fallback to pg_basebackup
 			log.Errorf("error syncing with pg_rewind: %v", err)
 		} else {
@@ -737,7 +773,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 
 				// Check if we are on another branch
 				if p.isDifferentTimelineBranch(fPGState, pgState) {
-					if err = p.Resync(followed, initialized, started); err != nil {
+					if err = p.resync(followed, initialized, started); err != nil {
 						log.Errorf("failed to full resync from followed instance: %v", err)
 						return
 					}
@@ -749,7 +785,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 					}
 				}
 			} else {
-				if err = p.Resync(followed, initialized, started); err != nil {
+				if err = p.resync(followed, initialized, started); err != nil {
 					log.Errorf("failed to full resync from followed instance: %v", err)
 					return
 				}
@@ -788,7 +824,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 			}
 			fPGState := followed.PGState
 			if p.isDifferentTimelineBranch(fPGState, pgState) {
-				if err = p.Resync(followed, initialized, started); err != nil {
+				if err = p.resync(followed, initialized, started); err != nil {
 					log.Errorf("failed to full resync from followed instance: %v", err)
 					return
 				}
@@ -910,6 +946,7 @@ func main() {
 }
 
 func keeper(cmd *cobra.Command, args []string) {
+	var err error
 	capnslog.SetGlobalLogLevel(capnslog.INFO)
 	if cfg.debug {
 		capnslog.SetGlobalLogLevel(capnslog.DEBUG)
@@ -925,7 +962,7 @@ func keeper(cmd *cobra.Command, args []string) {
 		log.Fatalf("store backend type required")
 	}
 
-	if err := os.MkdirAll(cfg.dataDir, 0700); err != nil {
+	if err = os.MkdirAll(cfg.dataDir, 0700); err != nil {
 		log.Fatalf("error: %v", err)
 	}
 
@@ -933,7 +970,8 @@ func keeper(cmd *cobra.Command, args []string) {
 		if !filepath.IsAbs(cfg.pgConfDir) {
 			log.Fatalf("pg-conf-dir must be an absolute path")
 		}
-		fi, err := os.Stat(cfg.pgConfDir)
+		var fi os.FileInfo
+		fi, err = os.Stat(cfg.pgConfDir)
 		if err != nil {
 			log.Fatalf("cannot stat pg-conf-dir: %v", err)
 		}
@@ -942,12 +980,45 @@ func keeper(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	if !cfg.hasPGRewindRequiredOptions() {
-		log.Warning("both --pg-su-username and --pg-su-password needs to be defined to use pg_rewind")
+	if cfg.pgReplUsername == "" {
+		log.Fatalf("--pg-repl-username is required")
+	}
+
+	if cfg.pgReplPassword == "" && cfg.pgReplPasswordFile == "" {
+		log.Fatalf("one of --pg-repl-password or --pg-repl-passwordfile is required")
+	}
+	if cfg.pgReplPassword != "" && cfg.pgReplPasswordFile != "" {
+		log.Fatalf("only one of --pg-repl-password or --pg-repl-passwordfile must be provided")
+	}
+	if cfg.pgSUPassword == "" && cfg.pgSUPasswordFile == "" {
+		log.Fatalf("one of --pg-su-password or --pg-su-passwordfile is required")
+	}
+	if cfg.pgSUPassword != "" && cfg.pgSUPasswordFile != "" {
+		log.Fatalf("only one of --pg-su-password or --pg-su-passwordfile must be provided")
+	}
+
+	if cfg.pgSUUsername == cfg.pgReplUsername {
+		log.Warning("superuser name and replication user name are the same. Different users are suggested.")
+		if cfg.pgSUPassword != cfg.pgReplPassword {
+			log.Fatalf("provided superuser name and replication user name are the same but provided passwords are different")
+		}
+	}
+
+	if cfg.pgReplPasswordFile != "" {
+		cfg.pgReplPassword, err = readPasswordFromFile(cfg.pgReplPasswordFile)
+		if err != nil {
+			log.Fatalf("cannot read pg replication user password: %v", err)
+		}
+	}
+	if cfg.pgSUPasswordFile != "" {
+		cfg.pgSUPassword, err = readPasswordFromFile(cfg.pgSUPasswordFile)
+		if err != nil {
+			log.Fatalf("cannot read pg superuser password: %v", err)
+		}
 	}
 
 	// Take an exclusive lock on dataDir
-	_, err := lock.TryExclusiveLock(cfg.dataDir, lock.Dir)
+	_, err = lock.TryExclusiveLock(cfg.dataDir, lock.Dir)
 	if err != nil {
 		log.Fatalf("cannot take exclusive lock on data dir %q: %v", cfg.dataDir, err)
 	}

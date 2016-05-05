@@ -35,8 +35,6 @@ By default the cluster configuration is empty. For every empty field a default i
     "request_timeout": "10s",
     "sleep_interval": "5s",
     "keeper_fail_interval": "20s",
-    "pg_repl_user": "username",
-    "pg_repl_password": "password",
     "max_standbys_per_sender": 3,
     "synchronous_replication": false,
     "init_with_multiple_keepers": false,
@@ -49,8 +47,6 @@ By default the cluster configuration is empty. For every empty field a default i
 * request_timeout: (duration) time after which any request (keepers checks from sentinel etc...) will fail.
 * sleep_interval: (duration) interval to wait before next check (for every component: keeper, sentinel, proxy).
 * keeper_fail_interval: (duration) interval after the first fail to declare a keeper as not healthy.
-* pg_repl_user: (string) PostgreSQL replication username
-* pg_repl_password: (string) PostgreSQL replication password
 * max_standbys_per_sender: (uint) max number of standbys for every sender. A sender can be a master or another standby (with cascading replication).
 * synchronous_replication: (bool) use synchronous replication between the master and its standbys
 * init_with_multiple_keepers: (bool) Choose a random initial master when multiple keeper are registered. Used only at cluster initialization (empty clusterview).

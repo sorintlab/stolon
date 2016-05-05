@@ -32,6 +32,7 @@ import (
 
 	"github.com/sorintlab/stolon/common"
 	"github.com/sorintlab/stolon/pkg/cluster"
+	pg "github.com/sorintlab/stolon/pkg/postgresql"
 	"github.com/sorintlab/stolon/pkg/store"
 
 	kvstore "github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/docker/libkv/store"
@@ -140,7 +141,7 @@ type TestKeeper struct {
 	db              *sql.DB
 }
 
-func NewTestKeeperWithID(t *testing.T, dir string, id string, clusterName string, storeBackend store.Backend, storeEndpoints string, a ...string) (*TestKeeper, error) {
+func NewTestKeeperWithID(t *testing.T, dir, id, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword string, storeBackend store.Backend, storeEndpoints string, a ...string) (*TestKeeper, error) {
 	args := []string{}
 
 	dataDir := filepath.Join(dir, fmt.Sprintf("st%s", id))
@@ -169,10 +170,24 @@ func NewTestKeeperWithID(t *testing.T, dir string, id string, clusterName string
 	args = append(args, fmt.Sprintf("--data-dir=%s", dataDir))
 	args = append(args, fmt.Sprintf("--store-backend=%s", storeBackend))
 	args = append(args, fmt.Sprintf("--store-endpoints=%s", storeEndpoints))
+	args = append(args, fmt.Sprintf("--pg-su-username=%s", pgSUUsername))
+	if pgSUPassword != "" {
+		args = append(args, fmt.Sprintf("--pg-su-password=%s", pgSUPassword))
+	}
+	args = append(args, fmt.Sprintf("--pg-repl-username=%s", pgReplUsername))
+	args = append(args, fmt.Sprintf("--pg-repl-password=%s", pgReplPassword))
 	args = append(args, "--debug")
 	args = append(args, a...)
 
-	connString := fmt.Sprintf("postgres://%s:%s/postgres?sslmode=disable", pgListenAddress, pgPort)
+	connParams := pg.ConnParams{
+		"user":    pgSUUsername,
+		"host":    pgListenAddress,
+		"port":    pgPort,
+		"dbname":  "postgres",
+		"sslmode": "disable",
+	}
+
+	connString := connParams.ConnString()
 	db, err := sql.Open("postgres", connString)
 	if err != nil {
 		return nil, err
@@ -201,11 +216,11 @@ func NewTestKeeperWithID(t *testing.T, dir string, id string, clusterName string
 	return tk, nil
 }
 
-func NewTestKeeper(t *testing.T, dir string, clusterName string, storeBackend store.Backend, storeEndpoints string, a ...string) (*TestKeeper, error) {
+func NewTestKeeper(t *testing.T, dir, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword string, storeBackend store.Backend, storeEndpoints string, a ...string) (*TestKeeper, error) {
 	u := uuid.NewV4()
 	id := fmt.Sprintf("%x", u[:4])
 
-	return NewTestKeeperWithID(t, dir, id, clusterName, storeBackend, storeEndpoints, a...)
+	return NewTestKeeperWithID(t, dir, id, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, storeBackend, storeEndpoints, a...)
 }
 
 func (tk *TestKeeper) Exec(query string, args ...interface{}) (sql.Result, error) {
@@ -368,11 +383,6 @@ func (tk *TestKeeper) IsMaster() (bool, error) {
 		return false, nil
 	}
 	return false, fmt.Errorf("no rows returned")
-}
-
-func (tk *TestKeeper) CreateSuperUser(username, password string) error {
-	_, err := tk.Exec(fmt.Sprintf(`create role "%s" with login superuser encrypted password '%s';`, username, password))
-	return err
 }
 
 func (tk *TestKeeper) WaitRole(r common.Role, timeout time.Duration) error {
