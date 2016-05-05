@@ -27,8 +27,6 @@ const (
 	DefaultRequestTimeout          = 10 * time.Second
 	DefaultSleepInterval           = 5 * time.Second
 	DefaultKeeperFailInterval      = 20 * time.Second
-	DefaultPGReplUser              = "repluser"
-	DefaultPGReplPassword          = "replpassword"
 	DefaultMaxStandbysPerSender    = 3
 	DefaultSynchronousReplication  = false
 	DefaultInitWithMultipleKeepers = false
@@ -39,8 +37,6 @@ type NilConfig struct {
 	RequestTimeout          *Duration          `json:"request_timeout,omitempty"`
 	SleepInterval           *Duration          `json:"sleep_interval,omitempty"`
 	KeeperFailInterval      *Duration          `json:"keeper_fail_interval,omitempty"`
-	PGReplUser              *string            `json:"pg_repl_user,omitempty"`
-	PGReplPassword          *string            `json:"pg_repl_password,omitempty"`
 	MaxStandbysPerSender    *uint              `json:"max_standbys_per_sender,omitempty"`
 	SynchronousReplication  *bool              `json:"synchronous_replication,omitempty"`
 	InitWithMultipleKeepers *bool              `json:"init_with_multiple_keepers,omitempty"`
@@ -55,10 +51,6 @@ type Config struct {
 	SleepInterval time.Duration
 	// Interval after the first fail to declare a keeper as not healthy.
 	KeeperFailInterval time.Duration
-	// PostgreSQL replication username
-	PGReplUser string
-	// PostgreSQL replication password
-	PGReplPassword string
 	// Max number of standbys for every sender. A sender can be a master or
 	// another standby (with cascading replication).
 	MaxStandbysPerSender uint
@@ -124,12 +116,6 @@ func (c *NilConfig) Copy() *NilConfig {
 	if c.KeeperFailInterval != nil {
 		nc.KeeperFailInterval = DurationP(*c.KeeperFailInterval)
 	}
-	if c.PGReplUser != nil {
-		nc.PGReplUser = StringP(*c.PGReplUser)
-	}
-	if c.PGReplPassword != nil {
-		nc.PGReplPassword = StringP(*c.PGReplPassword)
-	}
 	if c.MaxStandbysPerSender != nil {
 		nc.MaxStandbysPerSender = UintP(*c.MaxStandbysPerSender)
 	}
@@ -186,12 +172,6 @@ func (c *NilConfig) Validate() error {
 	if c.KeeperFailInterval != nil && (*c.KeeperFailInterval).Duration < 0 {
 		return fmt.Errorf("keeper_fail_interval must be positive")
 	}
-	if c.PGReplUser != nil && *c.PGReplUser == "" {
-		return fmt.Errorf("pg_repl_user cannot be empty")
-	}
-	if c.PGReplPassword != nil && *c.PGReplPassword == "" {
-		return fmt.Errorf("pg_repl_password cannot be empty")
-	}
 	if c.MaxStandbysPerSender != nil && *c.MaxStandbysPerSender < 1 {
 		return fmt.Errorf("max_standbys_per_sender must be at least 1")
 	}
@@ -207,12 +187,6 @@ func (c *NilConfig) MergeDefaults() {
 	}
 	if c.KeeperFailInterval == nil {
 		c.KeeperFailInterval = &Duration{DefaultKeeperFailInterval}
-	}
-	if c.PGReplUser == nil {
-		c.PGReplUser = StringP(DefaultPGReplUser)
-	}
-	if c.PGReplPassword == nil {
-		c.PGReplPassword = StringP(DefaultPGReplPassword)
 	}
 	if c.MaxStandbysPerSender == nil {
 		c.MaxStandbysPerSender = UintP(DefaultMaxStandbysPerSender)
@@ -238,8 +212,6 @@ func (c *NilConfig) ToConfig() *Config {
 		RequestTimeout:          (*nc.RequestTimeout).Duration,
 		SleepInterval:           (*nc.SleepInterval).Duration,
 		KeeperFailInterval:      (*nc.KeeperFailInterval).Duration,
-		PGReplUser:              *nc.PGReplUser,
-		PGReplPassword:          *nc.PGReplPassword,
 		MaxStandbysPerSender:    *nc.MaxStandbysPerSender,
 		SynchronousReplication:  *nc.SynchronousReplication,
 		InitWithMultipleKeepers: *nc.InitWithMultipleKeepers,

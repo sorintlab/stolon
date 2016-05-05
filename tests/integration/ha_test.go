@@ -30,8 +30,10 @@ import (
 )
 
 const (
-	PGSUUsername = "stolon_superuser"
-	PGSUPassword = "stolon_superuser"
+	pgReplUsername = "stolon_repluser"
+	pgReplPassword = "stolon_replpassword"
+	pgSUUsername   = "stolon_superuser"
+	pgSUPassword   = "stolon_superuserpassword"
 )
 
 func setupStore(t *testing.T, dir string) *TestStore {
@@ -89,7 +91,7 @@ func TestInitWithMultipleKeepers(t *testing.T) {
 
 	// Start 3 keepers
 	for i := uint8(0); i < 3; i++ {
-		tk, err := NewTestKeeper(t, dir, clusterName, tstore.storeBackend, storeEndpoints)
+		tk, err := NewTestKeeper(t, dir, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, tstore.storeBackend, storeEndpoints)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -152,7 +154,7 @@ func setupServers(t *testing.T, clusterName, dir string, numKeepers, numSentinel
 	tks := []*TestKeeper{}
 	tss := []*TestSentinel{}
 
-	tk, err := NewTestKeeper(t, dir, clusterName, tstore.storeBackend, storeEndpoints, "--pg-su-username="+PGSUUsername, "--pg-su-password="+PGSUPassword)
+	tk, err := NewTestKeeper(t, dir, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, tstore.storeBackend, storeEndpoints)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -187,14 +189,9 @@ func setupServers(t *testing.T, clusterName, dir string, numKeepers, numSentinel
 		t.Fatalf("expected master %q in cluster view", tk.id)
 	}
 
-	// Create superuser (needed for pg_rewind)
-	if err := tk.CreateSuperUser(PGSUUsername, PGSUPassword); err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
-
 	// Start other keepers
 	for i := uint8(1); i < numKeepers; i++ {
-		tk, err := NewTestKeeper(t, dir, clusterName, tstore.storeBackend, storeEndpoints, "--pg-su-username="+PGSUUsername, "--pg-su-password="+PGSUPassword)
+		tk, err := NewTestKeeper(t, dir, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, tstore.storeBackend, storeEndpoints)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -691,7 +688,7 @@ func TestMasterChangedAddress(t *testing.T) {
 	t.Logf("Restarting current master keeper %q with different addresses", master.id)
 	master.Stop()
 	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
-	master, err = NewTestKeeperWithID(t, dir, master.id, clusterName, tstore.storeBackend, storeEndpoints)
+	master, err = NewTestKeeperWithID(t, dir, master.id, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, tstore.storeBackend, storeEndpoints)
 	tks = append(tks, master)
 
 	if err := master.Start(); err != nil {

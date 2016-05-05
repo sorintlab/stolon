@@ -89,25 +89,36 @@ func CheckDBStatus(ctx context.Context, connString string) error {
 	return nil
 }
 
-func SetInitialPassword(ctx context.Context, connString, superuser, initialPassword string) error {
+func SetPassword(ctx context.Context, connString, username, password string) error {
 	db, err := sql.Open("postgres", connString)
 	if err != nil {
 		return err
 	}
 	defer db.Close()
 
-	_, err = Exec(ctx, db, fmt.Sprintf(`alter user %s with password '%s';`, superuser, initialPassword))
+	_, err = Exec(ctx, db, fmt.Sprintf(`alter role %s with password '%s';`, username, password))
 	return err
 }
 
-func CreateReplRole(ctx context.Context, connString, replUser, replPassword string) error {
+func CreateRole(ctx context.Context, connString string, roles []string, username, password string) error {
 	db, err := sql.Open("postgres", connString)
 	if err != nil {
 		return err
 	}
 	defer db.Close()
 
-	_, err = Exec(ctx, db, fmt.Sprintf(`create role "%s" with login replication encrypted password '%s';`, replUser, replPassword))
+	_, err = Exec(ctx, db, fmt.Sprintf(`create role "%s" with login replication encrypted password '%s';`, username, password))
+	return err
+}
+
+func AlterRole(ctx context.Context, connString string, roles []string, username, password string) error {
+	db, err := sql.Open("postgres", connString)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	_, err = Exec(ctx, db, fmt.Sprintf(`alter role "%s" with login replication encrypted password '%s';`, username, password))
 	return err
 }
 

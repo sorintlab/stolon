@@ -67,23 +67,13 @@ func TestParseConfig(t *testing.T) {
 			err: fmt.Errorf("config validation failed: keeper_fail_interval must be positive"),
 		},
 		{
-			in:  `{ "pg_repl_user": "" }`,
-			cfg: nil,
-			err: fmt.Errorf("config validation failed: pg_repl_user cannot be empty"),
-		},
-		{
-			in:  `{ "pg_repl_password": "" }`,
-			cfg: nil,
-			err: fmt.Errorf("config validation failed: pg_repl_password cannot be empty"),
-		},
-		{
 			in:  `{ "max_standbys_per_sender": 0 }`,
 			cfg: nil,
 			err: fmt.Errorf("config validation failed: max_standbys_per_sender must be at least 1"),
 		},
 		// All options defined
 		{
-			in: `{ "request_timeout": "10s", "sleep_interval": "10s", "keeper_fail_interval": "100s", "pg_repl_user": "username", "pg_repl_password": "password", "max_standbys_per_sender": 5, "synchronous_replication": true, "init_with_multiple_keepers": true,
+			in: `{ "request_timeout": "10s", "sleep_interval": "10s", "keeper_fail_interval": "100s", "max_standbys_per_sender": 5, "synchronous_replication": true, "init_with_multiple_keepers": true,
 			       "pg_parameters": {
 			         "param01": "value01"
 				}
@@ -92,8 +82,6 @@ func TestParseConfig(t *testing.T) {
 				RequestTimeout:          &Duration{10 * time.Second},
 				SleepInterval:           &Duration{10 * time.Second},
 				KeeperFailInterval:      &Duration{100 * time.Second},
-				PGReplUser:              StringP("username"),
-				PGReplPassword:          StringP("password"),
 				MaxStandbysPerSender:    UintP(5),
 				SynchronousReplication:  BoolP(true),
 				InitWithMultipleKeepers: BoolP(true),

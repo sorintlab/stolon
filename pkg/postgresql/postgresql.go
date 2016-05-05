@@ -40,18 +40,18 @@ var (
 )
 
 type Manager struct {
-	name              string
-	dataDir           string
-	replUser          string
-	replPassword      string
-	localConnString   string
-	replConnString    string
-	pgBinPath         string
-	requestTimeout    time.Duration
-	parameters        Parameters
-	confDir           string
-	initialSUUsername string
-	initialSUPassword string
+	name            string
+	pgBinPath       string
+	dataDir         string
+	confDir         string
+	parameters      Parameters
+	localConnString string
+	replConnString  string
+	suUsername      string
+	suPassword      string
+	replUsername    string
+	replPassword    string
+	requestTimeout  time.Duration
 }
 
 type Parameters map[string]string
@@ -77,20 +77,20 @@ func (s Parameters) Equals(is Parameters) bool {
 	return reflect.DeepEqual(s, is)
 }
 
-func NewManager(name string, pgBinPath string, dataDir string, confDir string, parameters Parameters, localConnString, replConnString, replUser, replPassword, initialSUUsername, initialSUPassword string, requestTimeout time.Duration) *Manager {
+func NewManager(name string, pgBinPath string, dataDir string, confDir string, parameters Parameters, localConnString, replConnString, suUsername, suPassword, replUsername, replPassword string, requestTimeout time.Duration) *Manager {
 	return &Manager{
-		name:              name,
-		dataDir:           filepath.Join(dataDir, "postgres"),
-		replUser:          replUser,
-		replPassword:      replPassword,
-		localConnString:   localConnString,
-		replConnString:    replConnString,
-		pgBinPath:         pgBinPath,
-		requestTimeout:    requestTimeout,
-		parameters:        parameters,
-		confDir:           confDir,
-		initialSUUsername: initialSUUsername,
-		initialSUPassword: initialSUPassword,
+		name:            name,
+		pgBinPath:       pgBinPath,
+		dataDir:         filepath.Join(dataDir, "postgres"),
+		confDir:         confDir,
+		parameters:      parameters,
+		replConnString:  replConnString,
+		localConnString: localConnString,
+		suUsername:      suUsername,
+		suPassword:      suPassword,
+		replUsername:    replUsername,
+		replPassword:    replPassword,
+		requestTimeout:  requestTimeout,
 	}
 }
 
@@ -104,7 +104,7 @@ func (p *Manager) GetParameters() Parameters {
 
 func (p *Manager) Init() error {
 	name := filepath.Join(p.pgBinPath, "initdb")
-	out, err := exec.Command(name, "-D", p.dataDir).CombinedOutput()
+	out, err := exec.Command(name, "-D", p.dataDir, "-U", p.suUsername).CombinedOutput()
 	if err != nil {
 		err = fmt.Errorf("error: %v, output: %s", err, out)
 		goto out
@@ -135,17 +135,9 @@ func (p *Manager) Init() error {
 		goto out
 	}
 
-	if p.initialSUPassword != "" && p.initialSUUsername != "" {
-		log.Infof("Setting initial PostgreSQL password")
-		if err = p.SetInitialPassword(); err != nil {
-			err = fmt.Errorf("error setting initial password for '%s' user: %v", p.initialSUUsername, err)
-			goto out
-		}
-	}
-
-	log.Infof("Creating replication role")
-	if err = p.CreateReplRole(); err != nil {
-		err = fmt.Errorf("error creating replication role: %v", err)
+	log.Infof("Setting roles")
+	if err = p.SetupRoles(); err != nil {
+		err = fmt.Errorf("error setting roles: %v", err)
 		goto out
 	}
 	if err = p.Stop(true); err != nil {
@@ -245,16 +237,33 @@ func (p *Manager) Promote() error {
 	return nil
 }
 
-func (p *Manager) SetInitialPassword() error {
+func (p *Manager) SetupRoles() error {
 	ctx, cancel := context.WithTimeout(context.Background(), p.requestTimeout)
 	defer cancel()
-	return SetInitialPassword(ctx, p.localConnString, p.initialSUUsername, p.initialSUPassword)
-}
 
-func (p *Manager) CreateReplRole() error {
-	ctx, cancel := context.WithTimeout(context.Background(), p.requestTimeout)
-	defer cancel()
-	return CreateReplRole(ctx, p.localConnString, p.replUser, p.replPassword)
+	if p.suUsername == p.replUsername {
+		log.Infof("Adding replication role to superuser")
+		if err := AlterRole(ctx, p.localConnString, []string{"replication"}, p.suUsername, p.suPassword); err != nil {
+			return fmt.Errorf("error adding replication role to superuser: %v", err)
+		}
+		log.Debugf("replication role added to superuser")
+	} else {
+		// Configure superuser role password
+		if p.suPassword != "" {
+			log.Infof("Defining superuser password")
+			if err := SetPassword(ctx, p.localConnString, p.suUsername, p.suPassword); err != nil {
+				return fmt.Errorf("error setting superuser password: %v", err)
+			}
+			log.Debugf("superuser password defined")
+		}
+		roles := []string{"login", "replication"}
+		log.Infof("Creating replication role")
+		if err := CreateRole(ctx, p.localConnString, roles, p.replUsername, p.replPassword); err != nil {
+			return fmt.Errorf("error creating replication role: %v", err)
+		}
+		log.Debugf("replication role %s created", p.replUsername)
+	}
+	return nil
 }
 
 func (p *Manager) GetReplicatinSlots() ([]string, error) {
@@ -425,8 +434,8 @@ func (p *Manager) writePgHba() error {
 	f.WriteString("host all all 0.0.0.0/0 md5\n")
 	f.WriteString("host all all ::0/0 md5\n")
 	// TODO(sgotti) Configure this dynamically based on our followers provided by the clusterview
-	f.WriteString(fmt.Sprintf("host replication %s %s md5\n", p.replUser, "0.0.0.0/0"))
-	f.WriteString(fmt.Sprintf("host replication %s %s md5\n", p.replUser, "::0/0"))
+	f.WriteString(fmt.Sprintf("host replication %s %s md5\n", p.replUsername, "0.0.0.0/0"))
+	f.WriteString(fmt.Sprintf("host replication %s %s md5\n", p.replUsername, "::0/0"))
 	return nil
 }
 

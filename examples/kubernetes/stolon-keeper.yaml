@@ -27,12 +27,17 @@ spec:
           - name: STKEEPER_STORE_ENDPOINTS
             value: "10.245.1.1:2379"
             # Enable debugging
+          - name: STKEEPER_PG_REPL_USERNAME
+            value: "repluser"
+            # Or use a password file like in the below supersuser password
+          - name: STKEEPER_PG_REPL_PASSWORD
+            value: "replpassword"
+          - name: STKEEPER_PG_SU_USERNAME
+            value: "stolon"
+          - name: STKEEPER_PG_SU_PASSWORDFILE
+            value: "/etc/secrets/stolon/password"
           - name: STKEEPER_DEBUG
             value: "true"
-          - name: STKEEPER_INITIAL_PG_SU_USERNAME
-            value: "stolon"
-          - name: STKEEPER_INITIAL_PG_SU_PASSWORD_FILE
-            value: "/etc/secrets/stolon/password"
         ports:
           - containerPort: 5431
           - containerPort: 5432
