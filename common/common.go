@@ -31,6 +31,8 @@ const (
 	SentinelLeaderKey = "sentinel-leader"
 )
 
+const PgUnixSocketDirectories = "/tmp"
+
 type Role string
 
 const (

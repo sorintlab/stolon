@@ -1436,6 +1436,8 @@ func TestKeeperRemoval(t *testing.T) {
 }
 
 func TestStandbyCantSync(t *testing.T) {
+	t.Parallel()
+
 	dir, err := ioutil.TempDir("", "stolon")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)

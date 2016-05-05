@@ -124,13 +124,6 @@ func init() {
 	cmdKeeper.PersistentFlags().MarkDeprecated("debug", "use --log-level=debug instead")
 }
 
-var mandatoryPGParameters = common.Parameters{
-	"unix_socket_directories": "/tmp",
-	"wal_level":               "hot_standby",
-	"wal_keep_segments":       "8",
-	"hot_standby":             "on",
-}
-
 var managedPGParameters = []string{
 	"unix_socket_directories",
 	"wal_level",
@@ -177,6 +170,15 @@ func readPasswordFromFile(filepath string) (string, error) {
 	return strings.TrimSpace(string(pwBytes)), nil
 }
 
+func (p *PostgresKeeper) mandatoryPGParameters() common.Parameters {
+	return common.Parameters{
+		"unix_socket_directories": common.PgUnixSocketDirectories,
+		"wal_level":               "hot_standby",
+		"wal_keep_segments":       "8",
+		"hot_standby":             "on",
+	}
+}
+
 func (p *PostgresKeeper) getSUConnParams(db, followedDB *cluster.DB) pg.ConnParams {
 	cp := pg.ConnParams{
 		"user":             p.pgSUUsername,
@@ -205,18 +207,18 @@ func (p *PostgresKeeper) getLocalConnParams() pg.ConnParams {
 	return pg.ConnParams{
 		"user":     p.pgSUUsername,
 		"password": p.pgSUPassword,
-		"host":     "localhost",
+		"host":     common.PgUnixSocketDirectories,
 		"port":     p.pgPort,
 		"dbname":   "postgres",
 		"sslmode":  "disable",
 	}
 }
 
-func (p *PostgresKeeper) getOurReplConnParams() pg.ConnParams {
+func (p *PostgresKeeper) getLocalReplConnParams() pg.ConnParams {
 	return pg.ConnParams{
 		"user":     p.pgReplUsername,
 		"password": p.pgReplPassword,
-		"host":     p.pgListenAddress,
+		"host":     common.PgUnixSocketDirectories,
 		"port":     p.pgPort,
 		"sslmode":  "disable",
 	}
@@ -238,11 +240,12 @@ func (p *PostgresKeeper) createPGParameters(db *cluster.DB) common.Parameters {
 	}
 
 	// Add/Replace mandatory PGParameters
-	for k, v := range mandatoryPGParameters {
+	for k, v := range p.mandatoryPGParameters() {
 		parameters[k] = v
 	}
 
 	parameters["listen_addresses"] = fmt.Sprintf("127.0.0.1,%s", p.pgListenAddress)
+
 	parameters["port"] = p.pgPort
 	// TODO(sgotti) max_replication_slots needs to be at least the
 	// number of existing replication slots or startup will
@@ -382,12 +385,18 @@ func NewPostgresKeeper(cfg *config, stop chan bool, end chan error) (*PostgresKe
 	}
 	e := store.NewStoreManager(kvstore, storePath)
 
+	// Clean and get absolute datadir path
+	dataDir, err := filepath.Abs(cfg.dataDir)
+	if err != nil {
+		return nil, fmt.Errorf("cannot get absolute datadir path for %q: %v", cfg.dataDir, err)
+	}
+
 	p := &PostgresKeeper{
 		cfg: cfg,
 
 		bootUUID: common.UUID(),
 
-		dataDir:        cfg.dataDir,
+		dataDir:        dataDir,
 		storeBackend:   cfg.storeBackend,
 		storeEndpoints: cfg.storeEndpoints,
 
@@ -650,7 +659,7 @@ func (p *PostgresKeeper) Start() {
 	// TODO(sgotti) reconfigure the various configurations options
 	// (RequestTimeout) after a changed cluster config
 	pgParameters := make(common.Parameters)
-	pgm := postgresql.NewManager(p.pgBinPath, p.dataDir, pgParameters, p.getLocalConnParams(), p.getOurReplConnParams(), p.pgSUUsername, p.pgSUPassword, p.pgReplUsername, p.pgReplPassword, p.requestTimeout)
+	pgm := postgresql.NewManager(p.pgBinPath, p.dataDir, pgParameters, p.getLocalConnParams(), p.getLocalReplConnParams(), p.pgSUUsername, p.pgSUPassword, p.pgReplUsername, p.pgReplPassword, p.requestTimeout)
 	p.pgm = pgm
 
 	p.pgm.Stop(true)
