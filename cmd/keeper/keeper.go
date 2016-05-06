@@ -285,10 +285,6 @@ func (p *PostgresKeeper) usePGRewind() bool {
 }
 
 func (p *PostgresKeeper) publish() error {
-	if kubernetes.OnKubernetes() {
-		log.Infof("running under kubernetes. Not using store discovery")
-		return nil
-	}
 	discoveryInfo := &cluster.KeeperDiscoveryInfo{
 		ListenAddress: p.listenAddress,
 		Port:          p.port,
@@ -1051,6 +1047,10 @@ func keeper(cmd *cobra.Command, args []string) {
 	}
 
 	log.Infof("id: %s", id)
+
+	if kubernetes.OnKubernetes() {
+		log.Infof("running under kubernetes.")
+	}
 
 	stop := make(chan bool, 0)
 	end := make(chan error, 0)

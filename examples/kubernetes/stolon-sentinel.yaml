@@ -19,6 +19,9 @@ spec:
         env:
           - name: SENTINEL
             value: "true"
+          # Uncomment this if kubernetes discovery doesn't work on your kubernetes cluster (for example no api service certificates configured or https api serving disabled)
+          #- name: STSENTINEL_DISCOVERY_TYPE
+          #  value: "store"
           - name: STSENTINEL_CLUSTER_NAME
             value: "kube-stolon"
           - name: STSENTINEL_STORE_BACKEND

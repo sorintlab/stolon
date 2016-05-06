@@ -50,6 +50,11 @@ var cmdSentinel = &cobra.Command{
 	Run: sentinel,
 }
 
+const (
+	storeDiscovery      = "store"
+	kubernetesDiscovery = "kubernetes"
+)
+
 type config struct {
 	storeBackend            string
 	storeEndpoints          string
@@ -60,6 +65,7 @@ type config struct {
 	keeperKubeLabelSelector string
 	initialClusterConfig    string
 	kubernetesNamespace     string
+	discoveryType           string
 	debug                   bool
 }
 
@@ -74,7 +80,8 @@ func init() {
 	cmdSentinel.PersistentFlags().StringVar(&cfg.keeperKubeLabelSelector, "keeper-kube-label-selector", "", "label selector for discoverying stolon-keeper(s) under kubernetes")
 	cmdSentinel.PersistentFlags().StringVar(&cfg.keeperPort, "keeper-port", "5431", "stolon-keeper(s) listening port (used by kubernetes discovery)")
 	cmdSentinel.PersistentFlags().StringVar(&cfg.initialClusterConfig, "initial-cluster-config", "", "a file providing the initial cluster config, used only at cluster initialization, ignored if cluster is already initialized")
-	cmdSentinel.PersistentFlags().StringVar(&cfg.kubernetesNamespace, "kubernetes-namespace", "default", "the Kubernetes namespace stolon is deployed under")
+	cmdSentinel.PersistentFlags().StringVar(&cfg.kubernetesNamespace, "kubernetes-namespace", "default", "the kubernetes namespace stolon is deployed under")
+	cmdSentinel.PersistentFlags().StringVar(&cfg.discoveryType, "discovery-type", "", "discovery type (store or kubernetes). Default: detected")
 	cmdSentinel.PersistentFlags().BoolVar(&cfg.debug, "debug", false, "enable debug logging")
 }
 
@@ -241,23 +248,27 @@ func (s *Sentinel) GetBestStandby(cv *cluster.ClusterView, keepersState cluster.
 }
 
 func (s *Sentinel) discover(ctx context.Context) (cluster.KeepersDiscoveryInfo, error) {
-	if kubernetes.OnKubernetes() {
+	switch s.cfg.discoveryType {
+	case storeDiscovery:
+		log.Debugf("using store discovery")
+		return s.discoverStore(ctx)
+	case kubernetesDiscovery:
+		log.Debugf("using kubernetes discovery")
 		ksdi := cluster.KeepersDiscoveryInfo{}
-		log.Debugf("running inside kubernetes")
 		podsIPs, err := s.getKubernetesPodsIPs(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get running pods ips: %v", err)
 		}
 		for _, podIP := range podsIPs {
-			ksdi = append(ksdi, &cluster.KeeperDiscoveryInfo{ListenAddress: podIP, Port: cfg.keeperPort})
+			ksdi = append(ksdi, &cluster.KeeperDiscoveryInfo{ListenAddress: podIP, Port: s.cfg.keeperPort})
 		}
 		return ksdi, nil
+	default:
+		return nil, fmt.Errorf("unknown discovery type")
 	}
-
-	return s.discoverEtcd(ctx)
 }
 
-func (s *Sentinel) discoverEtcd(ctx context.Context) (cluster.KeepersDiscoveryInfo, error) {
+func (s *Sentinel) discoverStore(ctx context.Context) (cluster.KeepersDiscoveryInfo, error) {
 	return s.e.GetKeepersDiscoveryInfo()
 }
 
@@ -279,7 +290,7 @@ func (s *Sentinel) getKubernetesPodsIPs(ctx context.Context) ([]string, error) {
 		return nil, err
 	}
 	q := u.Query()
-	q.Set("labelSelector", cfg.keeperKubeLabelSelector)
+	q.Set("labelSelector", s.cfg.keeperKubeLabelSelector)
 	u.RawQuery = q.Encode()
 
 	req, err := http.NewRequest("GET", u.String(), nil)
@@ -620,8 +631,9 @@ func (s *Sentinel) isKeeperConverged(keeperState *cluster.KeeperState, cv *clust
 }
 
 type Sentinel struct {
-	id string
-	e  *store.StoreManager
+	id  string
+	cfg *config
+	e   *store.StoreManager
 
 	candidate *leadership.Candidate
 	stop      chan bool
@@ -638,7 +650,7 @@ type Sentinel struct {
 	leaderMutex sync.Mutex
 }
 
-func NewSentinel(id string, cfg config, stop chan bool, end chan bool) (*Sentinel, error) {
+func NewSentinel(id string, cfg *config, stop chan bool, end chan bool) (*Sentinel, error) {
 	var initialClusterNilConfig *cluster.NilConfig
 	if cfg.initialClusterConfig != "" {
 		configData, err := ioutil.ReadFile(cfg.initialClusterConfig)
@@ -661,6 +673,7 @@ func NewSentinel(id string, cfg config, stop chan bool, end chan bool) (*Sentine
 
 	return &Sentinel{
 		id:                      id,
+		cfg:                     cfg,
 		e:                       e,
 		listenAddress:           cfg.listenAddress,
 		port:                    cfg.port,
@@ -836,7 +849,17 @@ func sentinel(cmd *cobra.Command, args []string) {
 	if cfg.storeBackend == "" {
 		log.Fatalf("store backend type required")
 	}
-	if kubernetes.OnKubernetes() {
+	if cfg.discoveryType == "" {
+		if kubernetes.OnKubernetes() {
+			cfg.discoveryType = kubernetesDiscovery
+		} else {
+			cfg.discoveryType = storeDiscovery
+		}
+	}
+	if cfg.discoveryType != storeDiscovery && cfg.discoveryType != kubernetesDiscovery {
+		log.Fatalf("unknown discovery type: %s", cfg.discoveryType)
+	}
+	if cfg.discoveryType == kubernetesDiscovery {
 		if cfg.keeperKubeLabelSelector == "" {
 			log.Fatalf("keeper-kube-label-selector must be define under kubernetes")
 		}
@@ -852,7 +875,7 @@ func sentinel(cmd *cobra.Command, args []string) {
 	signal.Notify(sigs, os.Interrupt, os.Kill)
 	go sigHandler(sigs, stop)
 
-	s, err := NewSentinel(id, cfg, stop, end)
+	s, err := NewSentinel(id, &cfg, stop, end)
 	if err != nil {
 		log.Fatalf("cannot create sentinel: %v", err)
 	}
