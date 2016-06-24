@@ -21,7 +21,7 @@ import (
 
 	"github.com/sorintlab/stolon/pkg/flagutil"
 
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/spf13/cobra"
+	"github.com/spf13/cobra"
 )
 
 var cmdStolonCtl = &cobra.Command{

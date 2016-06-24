@@ -22,7 +22,7 @@ import (
 	"reflect"
 	"sort"
 
-	forkedjson "github.com/sorintlab/stolon/Godeps/_workspace/src/k8s.io/kubernetes/third_party/forked/json"
+	forkedjson "k8s.io/kubernetes/third_party/forked/json"
 )
 
 // An alternate implementation of JSON Merge Patch

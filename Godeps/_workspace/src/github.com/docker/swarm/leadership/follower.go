@@ -3,7 +3,7 @@ package leadership
 import (
 	"errors"
 
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/docker/libkv/store"
+	"github.com/docker/libkv/store"
 )
 
 // Follower can follow an election in real-time and push notifications whenever

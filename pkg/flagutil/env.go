@@ -19,7 +19,7 @@ import (
 	"os"
 	"strings"
 
-	flag "github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/spf13/pflag"
+	flag "github.com/spf13/pflag"
 )
 
 // SetFlagsFromEnv parses all registered flags in the given flagset,

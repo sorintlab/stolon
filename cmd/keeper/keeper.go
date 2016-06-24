@@ -36,12 +36,12 @@ import (
 	"github.com/sorintlab/stolon/pkg/store"
 	"github.com/sorintlab/stolon/pkg/util"
 
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/coreos/pkg/capnslog"
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/coreos/rkt/pkg/lock"
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/davecgh/go-spew/spew"
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/satori/go.uuid"
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/spf13/cobra"
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/golang.org/x/net/context"
+	"github.com/coreos/pkg/capnslog"
+	"github.com/coreos/rkt/pkg/lock"
+	"github.com/davecgh/go-spew/spew"
+	"github.com/satori/go.uuid"
+	"github.com/spf13/cobra"
+	"golang.org/x/net/context"
 )
 
 var log = capnslog.NewPackageLogger("github.com/sorintlab/stolon/cmd", "keeper")

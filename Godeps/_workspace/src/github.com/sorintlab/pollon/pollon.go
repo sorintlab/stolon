@@ -20,7 +20,7 @@ import (
 	"net"
 	"sync"
 
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/coreos/pkg/capnslog"
+	"github.com/coreos/pkg/capnslog"
 )
 
 var log = capnslog.NewPackageLogger("github.com/sorintlab/pollon", "pollon")

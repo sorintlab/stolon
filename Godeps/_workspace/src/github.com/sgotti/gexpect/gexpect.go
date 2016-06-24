@@ -11,8 +11,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	shell "github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/kballard/go-shellquote"
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/kr/pty"
+	shell "github.com/kballard/go-shellquote"
+	"github.com/kr/pty"
 )
 
 type ExpectSubprocess struct {

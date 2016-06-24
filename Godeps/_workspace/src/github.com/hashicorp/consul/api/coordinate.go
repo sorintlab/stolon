@@ -1,7 +1,7 @@
 package api
 
 import (
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/hashicorp/serf/coordinate"
+	"github.com/hashicorp/serf/coordinate"
 )
 
 // CoordinateEntry represents a node and its associated network coordinate.

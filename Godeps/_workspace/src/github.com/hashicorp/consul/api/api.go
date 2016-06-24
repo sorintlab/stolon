@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/hashicorp/go-cleanhttp"
+	"github.com/hashicorp/go-cleanhttp"
 )
 
 // QueryOptions are used to parameterize a query

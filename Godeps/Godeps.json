@@ -1,6 +1,7 @@
 {
 	"ImportPath": "github.com/sorintlab/stolon",
 	"GoVersion": "go1.5.1",
+	"GodepVersion": "v74",
 	"Packages": [
 		"./..."
 	],
@@ -40,8 +41,23 @@
 		},
 		{
 			"ImportPath": "github.com/docker/libkv",
-			"Comment": "v0.1.0-10-ga7db351",
-			"Rev": "a7db3510533ae4be25daaf61c49c90b1ea3b339c"
+			"Comment": "v0.1.0-10-g7283ef2",
+			"Rev": "7283ef27ed32fe267388510a91709b307bb9942c"
+		},
+		{
+			"ImportPath": "github.com/docker/libkv/store",
+			"Comment": "v0.1.0-35-g7283ef2",
+			"Rev": "7283ef27ed32fe267388510a91709b307bb9942c"
+		},
+		{
+			"ImportPath": "github.com/docker/libkv/store/consul",
+			"Comment": "v0.1.0-35-g7283ef2",
+			"Rev": "7283ef27ed32fe267388510a91709b307bb9942c"
+		},
+		{
+			"ImportPath": "github.com/docker/libkv/store/etcd",
+			"Comment": "v0.1.0-35-g7283ef2",
+			"Rev": "7283ef27ed32fe267388510a91709b307bb9942c"
 		},
 		{
 			"ImportPath": "github.com/docker/swarm/leadership",
@@ -89,6 +105,11 @@
 		},
 		{
 			"ImportPath": "github.com/lib/pq",
+			"Comment": "go1.0-cutoff-63-g11fc39a",
+			"Rev": "11fc39a580a008f1f39bb3d11d984fb34ed778d9"
+		},
+		{
+			"ImportPath": "github.com/lib/pq/oid",
 			"Comment": "go1.0-cutoff-63-g11fc39a",
 			"Rev": "11fc39a580a008f1f39bb3d11d984fb34ed778d9"
 		},

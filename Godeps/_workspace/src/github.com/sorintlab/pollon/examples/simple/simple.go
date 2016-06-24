@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/sorintlab/pollon"
+	"github.com/sorintlab/pollon"
 )
 
 func Check(c chan pollon.ConfData) {

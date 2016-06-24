@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/docker/libkv/store"
+	"github.com/docker/libkv/store"
 )
 
 const (

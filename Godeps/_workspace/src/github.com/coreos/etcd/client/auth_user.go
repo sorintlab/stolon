@@ -21,7 +21,7 @@ import (
 	"net/url"
 	"path"
 
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/golang.org/x/net/context"
+	"golang.org/x/net/context"
 )
 
 var (

@@ -11,7 +11,7 @@ import (
 	"path"
 	"regexp"
 
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/gorilla/context"
+	"github.com/gorilla/context"
 )
 
 // NewRouter returns a new router instance.
