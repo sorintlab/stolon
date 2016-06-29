@@ -15,8 +15,11 @@
 package store
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"path/filepath"
 	"strings"
 	"time"
@@ -70,7 +73,7 @@ type StoreManager struct {
 	store       kvstore.Store
 }
 
-func NewStore(backend Backend, addrsStr string) (kvstore.Store, error) {
+func NewStore(backend Backend, addrsStr, certFile, keyFile, caCertFile string) (kvstore.Store, error) {
 
 	var kvbackend kvstore.Backend
 	switch backend {
@@ -92,7 +95,42 @@ func NewStore(backend Backend, addrsStr string) (kvstore.Store, error) {
 	}
 	addrs := strings.Split(addrsStr, ",")
 
-	store, err := libkv.NewStore(kvbackend, addrs, &kvstore.Config{ConnectionTimeout: 10 * time.Second})
+	var tlsC *tls.Config = nil
+	if certFile != "" && keyFile != "" {
+		cc := &kvstore.ClientTLSConfig{
+			CertFile:   certFile,
+			KeyFile:    keyFile,
+			CACertFile: caCertFile,
+		}
+
+		var certPool *x509.CertPool = nil
+		if caCertFile != "" {
+			if pemBytes, err := ioutil.ReadFile(cc.CACertFile); err == nil {
+				certPool = x509.NewCertPool()
+				certPool.AppendCertsFromPEM(pemBytes)
+			} else {
+				return nil, err
+			}
+		}
+
+		if tlsCert, err := tls.LoadX509KeyPair(cc.CertFile, cc.KeyFile); err == nil {
+			tlsC = &tls.Config{
+				RootCAs:      certPool,
+				Certificates: []tls.Certificate{tlsCert},
+			}
+		} else {
+			return nil, err
+		}
+	}
+
+	store, err := libkv.NewStore(
+		kvbackend,
+		addrs,
+		&kvstore.Config{
+			TLS:               tlsC,
+			ConnectionTimeout: 10 * time.Second,
+		},
+	)
 	if err != nil {
 		return nil, err
 	}

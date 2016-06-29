@@ -84,7 +84,13 @@ func status(cmd *cobra.Command, args []string) {
 	}
 	storePath := filepath.Join(common.StoreBasePath, cfg.clusterName)
 
-	kvstore, err := store.NewStore(store.Backend(cfg.storeBackend), cfg.storeEndpoints)
+	kvstore, err := store.NewStore(
+		store.Backend(cfg.storeBackend),
+		cfg.storeEndpoints,
+		cfg.storeCertFile,
+		cfg.storeKeyFile,
+		cfg.storeCACertFile,
+	)
 	if err != nil {
 		die("cannot create store: %v", err)
 	}
