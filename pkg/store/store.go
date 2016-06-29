@@ -24,11 +24,11 @@ import (
 	"github.com/sorintlab/stolon/common"
 	"github.com/sorintlab/stolon/pkg/cluster"
 
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/coreos/pkg/capnslog"
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/docker/libkv"
-	kvstore "github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/docker/libkv/store"
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/docker/libkv/store/consul"
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/docker/libkv/store/etcd"
+	"github.com/coreos/pkg/capnslog"
+	"github.com/docker/libkv"
+	kvstore "github.com/docker/libkv/store"
+	"github.com/docker/libkv/store/consul"
+	"github.com/docker/libkv/store/etcd"
 )
 
 func init() {

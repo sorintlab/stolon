@@ -1,10 +1,21 @@
 {
 	"ImportPath": "github.com/sorintlab/stolon",
-	"GoVersion": "go1.5.1",
+	"GoVersion": "go1.5",
+	"GodepVersion": "v74",
 	"Packages": [
 		"./..."
 	],
 	"Deps": [
+		{
+			"ImportPath": "github.com/coreos/etcd/Godeps/_workspace/src/github.com/ugorji/go/codec",
+			"Comment": "v2.3.0-alpha.0-430-g374b14e",
+			"Rev": "374b14e47189c249c069c9b3376cf5c36f286fa6"
+		},
+		{
+			"ImportPath": "github.com/coreos/etcd/Godeps/_workspace/src/golang.org/x/net/context",
+			"Comment": "v2.3.0-alpha.0-430-g374b14e",
+			"Rev": "374b14e47189c249c069c9b3376cf5c36f286fa6"
+		},
 		{
 			"ImportPath": "github.com/coreos/etcd/client",
 			"Comment": "v2.3.0-alpha.0-430-g374b14e",
@@ -40,8 +51,23 @@
 		},
 		{
 			"ImportPath": "github.com/docker/libkv",
-			"Comment": "v0.1.0-10-ga7db351",
-			"Rev": "a7db3510533ae4be25daaf61c49c90b1ea3b339c"
+			"Comment": "v0.1.0-35-g7283ef2",
+			"Rev": "7283ef27ed32fe267388510a91709b307bb9942c"
+		},
+		{
+			"ImportPath": "github.com/docker/libkv/store",
+			"Comment": "v0.1.0-35-g7283ef2",
+			"Rev": "7283ef27ed32fe267388510a91709b307bb9942c"
+		},
+		{
+			"ImportPath": "github.com/docker/libkv/store/consul",
+			"Comment": "v0.1.0-35-g7283ef2",
+			"Rev": "7283ef27ed32fe267388510a91709b307bb9942c"
+		},
+		{
+			"ImportPath": "github.com/docker/libkv/store/etcd",
+			"Comment": "v0.1.0-35-g7283ef2",
+			"Rev": "7283ef27ed32fe267388510a91709b307bb9942c"
 		},
 		{
 			"ImportPath": "github.com/docker/swarm/leadership",
@@ -93,6 +119,11 @@
 			"Rev": "11fc39a580a008f1f39bb3d11d984fb34ed778d9"
 		},
 		{
+			"ImportPath": "github.com/lib/pq/oid",
+			"Comment": "go1.0-cutoff-63-g11fc39a",
+			"Rev": "11fc39a580a008f1f39bb3d11d984fb34ed778d9"
+		},
+		{
 			"ImportPath": "github.com/satori/go.uuid",
 			"Rev": "d41af8bb6a7704f00bc3b7cba9355ae6a5a80048"
 		},
@@ -105,16 +136,20 @@
 			"Rev": "0fc4e27d6290f15d02d35f438ffa58068dee2014"
 		},
 		{
+			"ImportPath": "github.com/sorintlab/pollon/Godeps/_workspace/src/github.com/coreos/go-systemd/journal",
+			"Rev": "0fc4e27d6290f15d02d35f438ffa58068dee2014"
+		},
+		{
+			"ImportPath": "github.com/sorintlab/pollon/Godeps/_workspace/src/github.com/coreos/pkg/capnslog",
+			"Rev": "0fc4e27d6290f15d02d35f438ffa58068dee2014"
+		},
+		{
 			"ImportPath": "github.com/spf13/cobra",
 			"Rev": "66816bcd0378e248c613e3c443c020f544c28804"
 		},
 		{
 			"ImportPath": "github.com/spf13/pflag",
 			"Rev": "67cbc198fd11dab704b214c1e629a97af392c085"
-		},
-		{
-			"ImportPath": "github.com/ugorji/go/codec",
-			"Rev": "646ae4a518c1c3be0739df898118d9bccf993858"
 		},
 		{
 			"ImportPath": "golang.org/x/net/context",
