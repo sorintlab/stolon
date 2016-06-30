@@ -26,7 +26,7 @@ import (
 	"github.com/sorintlab/stolon/pkg/cluster"
 	"github.com/sorintlab/stolon/pkg/store"
 
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/satori/go.uuid"
+	"github.com/satori/go.uuid"
 )
 
 func TestServerParameters(t *testing.T) {
