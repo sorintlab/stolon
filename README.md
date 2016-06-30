@@ -54,21 +54,19 @@ Basic go tests can be launched like:
 ./test
 ```
 
-Also you might want to launch [integration tests](tests/integration) locally.
-These tests use some real backends, in this examle I'll use etcd and postgresql 9.4.
-If you are capable to run stolon locally, for example using [simple cluster example](doc/simplecluster.md), you will launch tests like:
+Also you might want to launch [integration tests](tests/integration) locally. These tests use real backends, in this exapmle I'll use etcd and postgresql 9.4. If you are capable of running stolon locally, for example using [simple cluster example](doc/simplecluster.md), you will launch tests like:
 ```sh
 $ PATH=/usr/lib/postgresql/9.4/bin/:$PATH INTEGRATION=1 STOLON_TEST_STORE_BACKEND=etcd ETCD_BIN=$GOPATH/src/github.com/coreos/etcd/bin/etcd ./test
 ```
 
-Tests can leave demonized postgresql processes, to be on the safe side check it with:
+Tests can leave daemonized postgresql processes, so to be on the safe side check for them with:
 ```sh
 $ pidof postgres
 # Kill if needed
 $ sudo kill -TERM $(pidof postgres)
+```
 
-Also your postgres service should be stopped before this.
-Check it with:
+Also, your postgres service should be stopped before this. Check with:
 ```sh
 $ sudo systemctl status postgresql
 # Stop if needed
