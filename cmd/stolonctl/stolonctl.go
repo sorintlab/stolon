@@ -38,9 +38,12 @@ var cmdStolonCtl = &cobra.Command{
 }
 
 type config struct {
-	storeBackend   string
-	storeEndpoints string
-	clusterName    string
+	storeBackend    string
+	storeEndpoints  string
+	storeCertFile   string
+	storeKeyFile    string
+	storeCACertFile string
+	clusterName     string
 }
 
 var cfg config
@@ -48,6 +51,9 @@ var cfg config
 func init() {
 	cmdStolonCtl.PersistentFlags().StringVar(&cfg.storeBackend, "store-backend", "", "store backend type (etcd or consul)")
 	cmdStolonCtl.PersistentFlags().StringVar(&cfg.storeEndpoints, "store-endpoints", "", "a comma-delimited list of store endpoints (defaults: 127.0.0.1:2379 for etcd, 127.0.0.1:8500 for consul)")
+	cmdStolonCtl.PersistentFlags().StringVar(&cfg.storeCertFile, "store-cert", "", "path to the client server TLS cert file")
+	cmdStolonCtl.PersistentFlags().StringVar(&cfg.storeKeyFile, "store-key", "", "path to the client server TLS key file")
+	cmdStolonCtl.PersistentFlags().StringVar(&cfg.storeCACertFile, "store-cacert", "", "path to the client server TLS trusted CA key file")
 	cmdStolonCtl.PersistentFlags().StringVar(&cfg.clusterName, "cluster-name", "", "cluster name")
 }
 

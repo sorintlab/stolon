@@ -46,13 +46,16 @@ var cmdProxy = &cobra.Command{
 }
 
 type config struct {
-	storeBackend   string
-	storeEndpoints string
-	clusterName    string
-	listenAddress  string
-	port           string
-	stopListening  bool
-	debug          bool
+	storeBackend    string
+	storeEndpoints  string
+	storeCertFile   string
+	storeKeyFile    string
+	storeCACertFile string
+	clusterName     string
+	listenAddress   string
+	port            string
+	stopListening   bool
+	debug           bool
 }
 
 var cfg config
@@ -60,6 +63,9 @@ var cfg config
 func init() {
 	cmdProxy.PersistentFlags().StringVar(&cfg.storeBackend, "store-backend", "", "store backend type (etcd or consul)")
 	cmdProxy.PersistentFlags().StringVar(&cfg.storeEndpoints, "store-endpoints", "", "a comma-delimited list of store endpoints (defaults: 127.0.0.1:2379 for etcd, 127.0.0.1:8500 for consul)")
+	cmdProxy.PersistentFlags().StringVar(&cfg.storeCertFile, "store-cert", "", "path to the client server TLS cert file")
+	cmdProxy.PersistentFlags().StringVar(&cfg.storeKeyFile, "store-key", "", "path to the client server TLS key file")
+	cmdProxy.PersistentFlags().StringVar(&cfg.storeCACertFile, "store-cacert", "", "path to the client server TLS trusted CA key file")
 	cmdProxy.PersistentFlags().StringVar(&cfg.clusterName, "cluster-name", "", "cluster name")
 	cmdProxy.PersistentFlags().StringVar(&cfg.listenAddress, "listen-address", "127.0.0.1", "proxy listening address")
 	cmdProxy.PersistentFlags().StringVar(&cfg.port, "port", "5432", "proxy listening port")
@@ -83,7 +89,13 @@ type ClusterChecker struct {
 func NewClusterChecker(id string, cfg config) (*ClusterChecker, error) {
 	storePath := filepath.Join(common.StoreBasePath, cfg.clusterName)
 
-	kvstore, err := store.NewStore(store.Backend(cfg.storeBackend), cfg.storeEndpoints)
+	kvstore, err := store.NewStore(
+		store.Backend(cfg.storeBackend),
+		cfg.storeEndpoints,
+		cfg.storeCertFile,
+		cfg.storeKeyFile,
+		cfg.storeCACertFile,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create store: %v", err)
 	}
