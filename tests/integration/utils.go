@@ -35,11 +35,11 @@ import (
 	pg "github.com/sorintlab/stolon/pkg/postgresql"
 	"github.com/sorintlab/stolon/pkg/store"
 
-	kvstore "github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/docker/libkv/store"
-	_ "github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/lib/pq"
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/satori/go.uuid"
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/sgotti/gexpect"
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/golang.org/x/net/context"
+	kvstore "github.com/docker/libkv/store"
+	_ "github.com/lib/pq"
+	"github.com/satori/go.uuid"
+	"github.com/sgotti/gexpect"
+	"golang.org/x/net/context"
 )
 
 type Process struct {

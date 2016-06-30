@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/davecgh/go-spew/spew"
+	"github.com/davecgh/go-spew/spew"
 )
 
 func TestParseConfig(t *testing.T) {
