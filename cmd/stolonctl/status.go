@@ -15,6 +15,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -28,13 +29,23 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var cmdStatus = &cobra.Command{
-	Use: "status",
-	Run: status,
-}
+var (
+	cmdStatus = &cobra.Command{
+		Use: "status",
+		Run: status,
+	}
+	cmdMasterStatus = &cobra.Command{
+		Use: "master-status [(-o|--output=)json",
+		Run: masterStatus,
+	}
+)
 
 func init() {
 	cmdStolonCtl.AddCommand(cmdStatus)
+
+	var outputFormat string
+	cmdMasterStatus.Flags().StringVarP(&outputFormat, "output", "o", "", "Output format. One of: json")
+	cmdStolonCtl.AddCommand(cmdMasterStatus)
 }
 
 func printTree(id string, cv *cluster.ClusterView, level int, prefix string, tail bool) {
@@ -75,10 +86,7 @@ func printTree(id string, cv *cluster.ClusterView, level int, prefix string, tai
 	}
 }
 
-func status(cmd *cobra.Command, args []string) {
-	tabOut := new(tabwriter.Writer)
-	tabOut.Init(os.Stdout, 0, 8, 1, '\t', 0)
-
+func getStoreManager() *store.StoreManager {
 	if cfg.clusterName == "" {
 		die("cluster name required")
 	}
@@ -94,7 +102,15 @@ func status(cmd *cobra.Command, args []string) {
 	if err != nil {
 		die("cannot create store: %v", err)
 	}
-	e := store.NewStoreManager(kvstore, storePath)
+
+	return store.NewStoreManager(kvstore, storePath)
+}
+
+func status(cmd *cobra.Command, args []string) {
+	tabOut := new(tabwriter.Writer)
+	tabOut.Init(os.Stdout, 0, 8, 1, '\t', 0)
+
+	e := getStoreManager()
 
 	sentinelsInfo, err := e.GetSentinelsInfo()
 	if err != nil {
@@ -189,4 +205,34 @@ func status(cmd *cobra.Command, args []string) {
 	}
 
 	stdout("")
+}
+
+func masterStatus(cmd *cobra.Command, args []string) {
+	outputFlag := "output"
+	outputFormat, err := cmd.Flags().GetString(outputFlag)
+	if err != nil {
+		die("error accesing flag %v for command %v: %v", outputFlag, cmd.Name(), err)
+	}
+
+	e := getStoreManager()
+
+	clusterData, _, err := e.GetClusterData()
+	if err != nil {
+		die("cannot get cluster data: %v", err)
+	}
+	if clusterData == nil {
+		die("cluster data not available: %v", err)
+	}
+	cv := clusterData.ClusterView
+	kss := clusterData.KeepersState
+	masterData := kss[cv.Master]
+	if outputFormat == "json" {
+		data, err := json.Marshal(masterData)
+		if err != nil {
+			die("can't convert to json: %v")
+		}
+		fmt.Println(string(data))
+	} else {
+		fmt.Println(masterData)
+	}
 }
