@@ -30,16 +30,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sorintlab/stolon/common"
-	"github.com/sorintlab/stolon/pkg/cluster"
-	pg "github.com/sorintlab/stolon/pkg/postgresql"
-	"github.com/sorintlab/stolon/pkg/store"
+	"github.com/gravitational/stolon/common"
+	"github.com/gravitational/stolon/pkg/cluster"
+	pg "github.com/gravitational/stolon/pkg/postgresql"
+	"github.com/gravitational/stolon/pkg/store"
 
-	kvstore "github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/docker/libkv/store"
-	_ "github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/lib/pq"
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/satori/go.uuid"
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/sgotti/gexpect"
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/golang.org/x/net/context"
+	kvstore "github.com/docker/libkv/store"
+	_ "github.com/lib/pq"
+	"github.com/satori/go.uuid"
+	"github.com/sgotti/gexpect"
+	"golang.org/x/net/context"
 )
 
 type Process struct {
@@ -603,7 +603,13 @@ func NewTestEtcd(t *testing.T, dir string, a ...string) (*TestStore, error) {
 
 	storeEndpoints := fmt.Sprintf("%s:%s", listenAddress, port)
 
-	kvstore, err := store.NewStore(store.ETCD, storeEndpoints)
+	kvstore, err := store.NewStore(
+		store.ETCD,
+		storeEndpoints,
+		"",
+		"",
+		"",
+	)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create store: %v", err)
 	}
@@ -685,7 +691,13 @@ func NewTestConsul(t *testing.T, dir string, a ...string) (*TestStore, error) {
 
 	storeEndpoints := fmt.Sprintf("%s:%s", listenAddress, portHTTP)
 
-	kvstore, err := store.NewStore(store.CONSUL, storeEndpoints)
+	kvstore, err := store.NewStore(
+		store.CONSUL,
+		storeEndpoints,
+		"",
+		"",
+		"",
+	)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create store: %v", err)
 	}

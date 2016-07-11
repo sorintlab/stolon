@@ -19,10 +19,10 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/sorintlab/stolon/pkg/cluster"
+	"github.com/gravitational/stolon/pkg/cluster"
 
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/davecgh/go-spew/spew"
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/gorilla/mux"
+	"github.com/davecgh/go-spew/spew"
+	"github.com/gorilla/mux"
 )
 
 func (s *Sentinel) updateConfigHandler(w http.ResponseWriter, req *http.Request) {

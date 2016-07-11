@@ -69,6 +69,23 @@ type KeeperState struct {
 	PGState            *PostgresState
 }
 
+func (ks *KeeperState) String() string {
+	var healthy string
+	if ks.Healthy {
+		healthy = "healthy"
+	} else {
+		healthy = "not healthy"
+	}
+
+	return fmt.Sprintf(
+		"Keeper with ID %v is %v and listens on %v:%v",
+		ks.ID,
+		healthy,
+		ks.ListenAddress,
+		ks.Port,
+	)
+}
+
 func (ks *KeeperState) Copy() *KeeperState {
 	if ks == nil {
 		return nil

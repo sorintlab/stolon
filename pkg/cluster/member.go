@@ -14,7 +14,7 @@
 
 package cluster
 
-import "github.com/sorintlab/stolon/common"
+import "github.com/gravitational/stolon/common"
 
 type Keeper struct {
 	ClusterViewVersion int

@@ -23,10 +23,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/satori/go.uuid"
-	"github.com/sorintlab/stolon/common"
-	"github.com/sorintlab/stolon/pkg/cluster"
-	"github.com/sorintlab/stolon/pkg/store"
+	"github.com/gravitational/stolon/common"
+	"github.com/gravitational/stolon/pkg/cluster"
+	"github.com/gravitational/stolon/pkg/store"
+	"github.com/satori/go.uuid"
 )
 
 const (
@@ -67,7 +67,13 @@ func TestInitWithMultipleKeepers(t *testing.T) {
 
 	storePath := filepath.Join(common.StoreBasePath, clusterName)
 
-	kvstore, err := store.NewStore(tstore.storeBackend, storeEndpoints)
+	kvstore, err := store.NewStore(
+		tstore.storeBackend,
+		storeEndpoints,
+		"",
+		"",
+		"",
+	)
 	if err != nil {
 		t.Fatalf("cannot create store: %v", err)
 	}
@@ -131,7 +137,13 @@ func setupServers(t *testing.T, clusterName, dir string, numKeepers, numSentinel
 
 	storePath := filepath.Join(common.StoreBasePath, clusterName)
 
-	kvstore, err := store.NewStore(tstore.storeBackend, storeEndpoints)
+	kvstore, err := store.NewStore(
+		tstore.storeBackend,
+		storeEndpoints,
+		"",
+		"",
+		"",
+	)
 	if err != nil {
 		t.Fatalf("cannot create store: %v", err)
 	}

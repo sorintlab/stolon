@@ -27,24 +27,24 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sorintlab/stolon/common"
-	"github.com/sorintlab/stolon/pkg/cluster"
-	"github.com/sorintlab/stolon/pkg/flagutil"
-	"github.com/sorintlab/stolon/pkg/kubernetes"
-	"github.com/sorintlab/stolon/pkg/postgresql"
-	pg "github.com/sorintlab/stolon/pkg/postgresql"
-	"github.com/sorintlab/stolon/pkg/store"
-	"github.com/sorintlab/stolon/pkg/util"
+	"github.com/gravitational/stolon/common"
+	"github.com/gravitational/stolon/pkg/cluster"
+	"github.com/gravitational/stolon/pkg/flagutil"
+	"github.com/gravitational/stolon/pkg/kubernetes"
+	"github.com/gravitational/stolon/pkg/postgresql"
+	pg "github.com/gravitational/stolon/pkg/postgresql"
+	"github.com/gravitational/stolon/pkg/store"
+	"github.com/gravitational/stolon/pkg/util"
 
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/coreos/pkg/capnslog"
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/coreos/rkt/pkg/lock"
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/davecgh/go-spew/spew"
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/satori/go.uuid"
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/spf13/cobra"
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/golang.org/x/net/context"
+	"github.com/coreos/pkg/capnslog"
+	"github.com/coreos/rkt/pkg/lock"
+	"github.com/davecgh/go-spew/spew"
+	"github.com/satori/go.uuid"
+	"github.com/spf13/cobra"
+	"golang.org/x/net/context"
 )
 
-var log = capnslog.NewPackageLogger("github.com/sorintlab/stolon/cmd", "keeper")
+var log = capnslog.NewPackageLogger("github.com/gravitational/stolon/cmd", "keeper")
 
 func init() {
 	capnslog.SetFormatter(capnslog.NewPrettyFormatter(os.Stderr, true))
@@ -60,6 +60,9 @@ type config struct {
 	id                      string
 	storeBackend            string
 	storeEndpoints          string
+	storeCertFile           string
+	storeKeyFile            string
+	storeCACertFile         string
 	dataDir                 string
 	clusterName             string
 	listenAddress           string
@@ -90,6 +93,9 @@ func init() {
 	cmdKeeper.PersistentFlags().StringVar(&cfg.id, "id", "", "keeper id (must be unique in the cluster and can contain only lower-case letters, numbers and the underscore character). If not provided a random id will be generated.")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.storeBackend, "store-backend", "", "store backend type (etcd or consul)")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.storeEndpoints, "store-endpoints", "", "a comma-delimited list of store endpoints (defaults: 127.0.0.1:2379 for etcd, 127.0.0.1:8500 for consul)")
+	cmdKeeper.PersistentFlags().StringVar(&cfg.storeCertFile, "store-cert", "", "path to the client server TLS cert file")
+	cmdKeeper.PersistentFlags().StringVar(&cfg.storeKeyFile, "store-key", "", "path to the client server TLS key file")
+	cmdKeeper.PersistentFlags().StringVar(&cfg.storeCACertFile, "store-cacert", "", "path to the client server TLS trusted CA key file")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.dataDir, "data-dir", "", "data directory")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.clusterName, "cluster-name", "", "cluster name")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.listenAddress, "listen-address", "localhost", "keeper listening address")
@@ -245,7 +251,13 @@ type PostgresKeeper struct {
 func NewPostgresKeeper(id string, cfg *config, stop chan bool, end chan error) (*PostgresKeeper, error) {
 	storePath := filepath.Join(common.StoreBasePath, cfg.clusterName)
 
-	kvstore, err := store.NewStore(store.Backend(cfg.storeBackend), cfg.storeEndpoints)
+	kvstore, err := store.NewStore(
+		store.Backend(cfg.storeBackend),
+		cfg.storeEndpoints,
+		cfg.storeCertFile,
+		cfg.storeKeyFile,
+		cfg.storeCACertFile,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create store: %v", err)
 	}

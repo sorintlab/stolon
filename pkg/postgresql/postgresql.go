@@ -28,15 +28,15 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/sorintlab/stolon/common"
+	"github.com/gravitational/stolon/common"
 
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/coreos/pkg/capnslog"
-	_ "github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/lib/pq"
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/golang.org/x/net/context"
+	"github.com/coreos/pkg/capnslog"
+	_ "github.com/lib/pq"
+	"golang.org/x/net/context"
 )
 
 var (
-	log = capnslog.NewPackageLogger("github.com/sorintlab/stolon/pkg", "postgresql")
+	log = capnslog.NewPackageLogger("github.com/gravitational/stolon/pkg", "postgresql")
 )
 
 type Manager struct {

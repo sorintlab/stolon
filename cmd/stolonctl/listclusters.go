@@ -19,11 +19,11 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/sorintlab/stolon/common"
-	"github.com/sorintlab/stolon/pkg/store"
+	"github.com/gravitational/stolon/common"
+	"github.com/gravitational/stolon/pkg/store"
 
-	libkvstore "github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/docker/libkv/store"
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/spf13/cobra"
+	libkvstore "github.com/docker/libkv/store"
+	"github.com/spf13/cobra"
 )
 
 var cmdListClusters = &cobra.Command{
@@ -36,7 +36,14 @@ func init() {
 }
 
 func getClusters(storeBasePath string) ([]string, error) {
-	kvstore, err := store.NewStore(store.Backend(cfg.storeBackend), cfg.storeEndpoints)
+	kvstore, err := store.NewStore(
+		store.Backend(cfg.storeBackend),
+		cfg.storeEndpoints,
+		cfg.storeCertFile,
+		cfg.storeKeyFile,
+		cfg.storeCACertFile,
+	)
+
 	if err != nil {
 		return nil, fmt.Errorf("cannot create store: %v", err)
 	}

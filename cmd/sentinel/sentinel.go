@@ -28,22 +28,22 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sorintlab/stolon/common"
-	"github.com/sorintlab/stolon/pkg/cluster"
-	"github.com/sorintlab/stolon/pkg/flagutil"
-	"github.com/sorintlab/stolon/pkg/kubernetes"
-	"github.com/sorintlab/stolon/pkg/store"
+	"github.com/gravitational/stolon/common"
+	"github.com/gravitational/stolon/pkg/cluster"
+	"github.com/gravitational/stolon/pkg/flagutil"
+	"github.com/gravitational/stolon/pkg/kubernetes"
+	"github.com/gravitational/stolon/pkg/store"
 
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/coreos/pkg/capnslog"
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/davecgh/go-spew/spew"
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/docker/swarm/leadership"
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/jmoiron/jsonq"
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/satori/go.uuid"
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/spf13/cobra"
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/golang.org/x/net/context"
+	"github.com/coreos/pkg/capnslog"
+	"github.com/davecgh/go-spew/spew"
+	"github.com/docker/swarm/leadership"
+	"github.com/jmoiron/jsonq"
+	"github.com/satori/go.uuid"
+	"github.com/spf13/cobra"
+	"golang.org/x/net/context"
 )
 
-var log = capnslog.NewPackageLogger("github.com/sorintlab/stolon/cmd", "sentinel")
+var log = capnslog.NewPackageLogger("github.com/gravitational/stolon/cmd", "sentinel")
 
 var cmdSentinel = &cobra.Command{
 	Use: "stolon-sentinel",
@@ -58,6 +58,9 @@ const (
 type config struct {
 	storeBackend            string
 	storeEndpoints          string
+	storeCertFile           string
+	storeKeyFile            string
+	storeCACertFile         string
 	clusterName             string
 	listenAddress           string
 	port                    string
@@ -74,6 +77,9 @@ var cfg config
 func init() {
 	cmdSentinel.PersistentFlags().StringVar(&cfg.storeBackend, "store-backend", "", "store backend type (etcd or consul)")
 	cmdSentinel.PersistentFlags().StringVar(&cfg.storeEndpoints, "store-endpoints", "", "a comma-delimited list of store endpoints (defaults: 127.0.0.1:2379 for etcd, 127.0.0.1:8500 for consul)")
+	cmdSentinel.PersistentFlags().StringVar(&cfg.storeCertFile, "store-cert", "", "path to the client server TLS cert file")
+	cmdSentinel.PersistentFlags().StringVar(&cfg.storeKeyFile, "store-key", "", "path to the client server TLS key file")
+	cmdSentinel.PersistentFlags().StringVar(&cfg.storeCACertFile, "store-cacert", "", "path to the client server TLS trusted CA key file")
 	cmdSentinel.PersistentFlags().StringVar(&cfg.clusterName, "cluster-name", "", "cluster name")
 	cmdSentinel.PersistentFlags().StringVar(&cfg.listenAddress, "listen-address", "localhost", "sentinel listening address")
 	cmdSentinel.PersistentFlags().StringVar(&cfg.port, "port", "6431", "sentinel listening port")
@@ -663,7 +669,13 @@ func NewSentinel(id string, cfg *config, stop chan bool, end chan bool) (*Sentin
 	}
 
 	storePath := filepath.Join(common.StoreBasePath, cfg.clusterName)
-	kvstore, err := store.NewStore(store.Backend(cfg.storeBackend), cfg.storeEndpoints)
+	kvstore, err := store.NewStore(
+		store.Backend(cfg.storeBackend),
+		cfg.storeEndpoints,
+		cfg.storeCertFile,
+		cfg.storeKeyFile,
+		cfg.storeCACertFile,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create store: %v", err)
 	}

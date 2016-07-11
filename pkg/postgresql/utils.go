@@ -22,11 +22,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/sorintlab/stolon/common"
-	"github.com/sorintlab/stolon/pkg/cluster"
+	"github.com/gravitational/stolon/common"
+	"github.com/gravitational/stolon/pkg/cluster"
 
-	_ "github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/lib/pq"
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/golang.org/x/net/context"
+	_ "github.com/lib/pq"
+	"golang.org/x/net/context"
 )
 
 var (

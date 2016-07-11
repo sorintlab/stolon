@@ -15,26 +15,133 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"sort"
 	"text/tabwriter"
 
-	"github.com/sorintlab/stolon/common"
-	"github.com/sorintlab/stolon/pkg/cluster"
-	"github.com/sorintlab/stolon/pkg/store"
-
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/spf13/cobra"
+	"github.com/gravitational/stolon/pkg/cluster"
 )
 
-var cmdStatus = &cobra.Command{
-	Use: "status",
-	Run: status,
+func status(client *client, clusterName string, masterOnly string) error {
+	clt, err := client.getCluster(clusterName)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	if masterOnly {
+		return masterStatus(cluster)
+	}
+
+	tabOut := new(tabwriter.Writer)
+	tabOut.Init(os.Fmt.Println, 0, 8, 1, '\t', 0)
+
+	sentinelsInfo, err := clt.GetSentinelsInfo()
+	if err != nil {
+		return trace.Wrap("cannot get sentinels info: %v", err)
+	}
+
+	lsid, err := clt.GetLeaderSentinelId()
+	if err != nil {
+		return trace.Wrap("cannot get leader sentinel info")
+	}
+
+	fmt.Println("Active sentinels")
+	if len(sentinelsInfo) == 0 {
+		fmt.Println("No active sentinels")
+	} else {
+		sort.Sort(sentinelsInfo)
+		fmt.Fprintf(tabOut, "ID\tLISTENADDRESS\tLEADER\n")
+		for _, si := range sentinelsInfo {
+			leader := false
+			if lsid != "" {
+				if si.ID == lsid {
+					leader = true
+				}
+			}
+			fmt.Fprintf(tabOut, "%s\t%s:%s\t%t\n", si.ID, si.ListenAddress, si.Port, leader)
+			tabOut.Flush()
+		}
+	}
+
+	proxiesInfo, err := clt.GetProxiesInfo()
+	if err != nil {
+		return trace.Wrap("cannot get proxies info: %v", err)
+	}
+
+	fmt.Println("=== Active proxies ===")
+	if len(proxiesInfo) == 0 {
+		fmt.Println("No active proxies")
+	} else {
+		sort.Sort(proxiesInfo)
+		fmt.Fprintf(tabOut, "ID\tLISTENADDRESS\tCV VERSION\n")
+		for _, pi := range proxiesInfo {
+			fmt.Fprintf(tabOut, "%s\t%s:%s\t%d\n", pi.ID, pi.ListenAddress, pi.Port, pi.ClusterViewVersion)
+			tabOut.Flush()
+		}
+	}
+
+	clusterData, _, err := clt.GetClusterData()
+	if err != nil {
+		return trace.Wrap("cannot get cluster data: %v", err)
+	}
+	if clusterData == nil {
+		return trace.Wrap("cluster data not available: %v", err)
+	}
+	cv := clusterData.ClusterView
+	kss := clusterData.KeepersState
+
+	fmt.Println("Keepers")
+	if kss == nil {
+		fmt.Println("No keepers state available")
+	} else {
+		kssKeys := kss.SortedKeys()
+		fmt.Fprintf(tabOut, "ID\tLISTENADDRESS\tPG LISTENADDRESS\tCV VERSION\tHEALTHY\n")
+		for _, k := range kssKeys {
+			ks := kss[k]
+			fmt.Fprintf(tabOut, "%s\t%s:%s\t%s:%s\t%d\t%t\n", ks.ID, ks.ListenAddress, ks.Port, ks.PGListenAddress, ks.PGPort, ks.ClusterViewVersion, ks.Healthy)
+		}
+	}
+	tabOut.Flush()
+
+	fmt.Println("Required Cluster View")
+	fmt.Printf("Version: %d", cv.Version)
+	if cv == nil {
+		fmt.Println("No clusterview available")
+	} else {
+		fmt.Printf("Master: %s\n", cv.Master)
+		fmt.Println("Keepers tree")
+		for _, mr := range cv.KeepersRole {
+			if mr.Follow == "" {
+				printTree(mr.ID, cv, 0, "", true)
+			}
+		}
+	}
+
+	fmt.Println("")
 }
 
-func init() {
-	cmdStolonCtl.AddCommand(cmdStatus)
+func masterStatus(clt *clusterClient) error {
+	clusterData, _, err := clt.GetClusterData()
+	if err != nil {
+		return trace.Wrap(err, "cannot get cluster data")
+	}
+	if clusterData == nil {
+		return trace.NotFound("cluster data not available")
+	}
+	cv := clusterData.ClusterView
+	kss := clusterData.KeepersState
+	masterData := kss[cv.Master]
+	if outputFormat == OutputJSON {
+		data, err := json.Marshal(masterData)
+		if err != nil {
+			return trace.Wrap(err, "can't convert to json")
+		}
+		fmt.Println(string(data))
+	} else {
+		fmt.Println(masterData)
+	}
+	return nil
 }
 
 func printTree(id string, cv *cluster.ClusterView, level int, prefix string, tail bool) {
@@ -50,7 +157,7 @@ func printTree(id string, cv *cluster.ClusterView, level int, prefix string, tai
 	if id == cv.Master {
 		out += " (master)"
 	}
-	stdout(out)
+	fmt.Println(out)
 	followersIDs := cv.GetFollowersIDs(id)
 	c := len(followersIDs)
 	for i, f := range cv.GetFollowersIDs(id) {
@@ -73,114 +180,4 @@ func printTree(id string, cv *cluster.ClusterView, level int, prefix string, tai
 			}
 		}
 	}
-}
-
-func status(cmd *cobra.Command, args []string) {
-	tabOut := new(tabwriter.Writer)
-	tabOut.Init(os.Stdout, 0, 8, 1, '\t', 0)
-
-	if cfg.clusterName == "" {
-		die("cluster name required")
-	}
-	storePath := filepath.Join(common.StoreBasePath, cfg.clusterName)
-
-	kvstore, err := store.NewStore(store.Backend(cfg.storeBackend), cfg.storeEndpoints)
-	if err != nil {
-		die("cannot create store: %v", err)
-	}
-	e := store.NewStoreManager(kvstore, storePath)
-
-	sentinelsInfo, err := e.GetSentinelsInfo()
-	if err != nil {
-		die("cannot get sentinels info: %v", err)
-	}
-
-	lsid, err := e.GetLeaderSentinelId()
-	if err != nil {
-		die("cannot get leader sentinel info")
-	}
-
-	stdout("=== Active sentinels ===")
-	stdout("")
-	if len(sentinelsInfo) == 0 {
-		stdout("No active sentinels")
-	} else {
-		sort.Sort(sentinelsInfo)
-		fmt.Fprintf(tabOut, "ID\tLISTENADDRESS\tLEADER\n")
-		for _, si := range sentinelsInfo {
-			leader := false
-			if lsid != "" {
-				if si.ID == lsid {
-					leader = true
-				}
-			}
-			fmt.Fprintf(tabOut, "%s\t%s:%s\t%t\n", si.ID, si.ListenAddress, si.Port, leader)
-			tabOut.Flush()
-		}
-	}
-
-	proxiesInfo, err := e.GetProxiesInfo()
-	if err != nil {
-		die("cannot get proxies info: %v", err)
-	}
-
-	stdout("")
-	stdout("=== Active proxies ===")
-	stdout("")
-	if len(proxiesInfo) == 0 {
-		stdout("No active proxies")
-	} else {
-		sort.Sort(proxiesInfo)
-		fmt.Fprintf(tabOut, "ID\tLISTENADDRESS\tCV VERSION\n")
-		for _, pi := range proxiesInfo {
-			fmt.Fprintf(tabOut, "%s\t%s:%s\t%d\n", pi.ID, pi.ListenAddress, pi.Port, pi.ClusterViewVersion)
-			tabOut.Flush()
-		}
-	}
-
-	clusterData, _, err := e.GetClusterData()
-	if err != nil {
-		die("cannot get cluster data: %v", err)
-	}
-	if clusterData == nil {
-		die("cluster data not available: %v", err)
-	}
-	cv := clusterData.ClusterView
-	kss := clusterData.KeepersState
-
-	stdout("")
-	stdout("=== Keepers ===")
-	stdout("")
-	if kss == nil {
-		stdout("No keepers state available")
-		stdout("")
-	} else {
-		kssKeys := kss.SortedKeys()
-		fmt.Fprintf(tabOut, "ID\tLISTENADDRESS\tPG LISTENADDRESS\tCV VERSION\tHEALTHY\n")
-		for _, k := range kssKeys {
-			ks := kss[k]
-			fmt.Fprintf(tabOut, "%s\t%s:%s\t%s:%s\t%d\t%t\n", ks.ID, ks.ListenAddress, ks.Port, ks.PGListenAddress, ks.PGPort, ks.ClusterViewVersion, ks.Healthy)
-		}
-	}
-	tabOut.Flush()
-
-	stdout("")
-	stdout("=== Required Cluster View ===")
-	stdout("")
-	stdout("Version: %d", cv.Version)
-	if cv == nil {
-		stdout("No clusterview available")
-	} else {
-		stdout("Master: %s", cv.Master)
-		stdout("")
-		stdout("===== Keepers tree =====")
-		for _, mr := range cv.KeepersRole {
-			if mr.Follow == "" {
-				stdout("")
-				printTree(mr.ID, cv, 0, "", true)
-			}
-		}
-	}
-
-	stdout("")
 }
