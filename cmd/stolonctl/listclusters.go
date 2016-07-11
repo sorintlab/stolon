@@ -19,8 +19,8 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/sorintlab/stolon/common"
-	"github.com/sorintlab/stolon/pkg/store"
+	"github.com/gravitational/stolon/common"
+	"github.com/gravitational/stolon/pkg/store"
 
 	libkvstore "github.com/docker/libkv/store"
 	"github.com/spf13/cobra"

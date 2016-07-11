@@ -24,8 +24,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sorintlab/stolon/common"
-	"github.com/sorintlab/stolon/pkg/cluster"
+	"github.com/gravitational/stolon/common"
+	"github.com/gravitational/stolon/pkg/cluster"
 
 	"github.com/coreos/pkg/capnslog"
 	"github.com/docker/libkv"
@@ -39,7 +39,7 @@ func init() {
 	consul.Register()
 }
 
-var log = capnslog.NewPackageLogger("github.com/sorintlab/stolon/pkg", "store")
+var log = capnslog.NewPackageLogger("github.com/gravitational/stolon/pkg", "store")
 
 // Backend represents a KV Store Backend
 type Backend string

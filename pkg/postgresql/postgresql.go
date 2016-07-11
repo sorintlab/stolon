@@ -28,7 +28,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/sorintlab/stolon/common"
+	"github.com/gravitational/stolon/common"
 
 	"github.com/coreos/pkg/capnslog"
 	_ "github.com/lib/pq"
@@ -36,7 +36,7 @@ import (
 )
 
 var (
-	log = capnslog.NewPackageLogger("github.com/sorintlab/stolon/pkg", "postgresql")
+	log = capnslog.NewPackageLogger("github.com/gravitational/stolon/pkg", "postgresql")
 )
 
 type Manager struct {

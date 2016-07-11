@@ -27,14 +27,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sorintlab/stolon/common"
-	"github.com/sorintlab/stolon/pkg/cluster"
-	"github.com/sorintlab/stolon/pkg/flagutil"
-	"github.com/sorintlab/stolon/pkg/kubernetes"
-	"github.com/sorintlab/stolon/pkg/postgresql"
-	pg "github.com/sorintlab/stolon/pkg/postgresql"
-	"github.com/sorintlab/stolon/pkg/store"
-	"github.com/sorintlab/stolon/pkg/util"
+	"github.com/gravitational/stolon/common"
+	"github.com/gravitational/stolon/pkg/cluster"
+	"github.com/gravitational/stolon/pkg/flagutil"
+	"github.com/gravitational/stolon/pkg/kubernetes"
+	"github.com/gravitational/stolon/pkg/postgresql"
+	pg "github.com/gravitational/stolon/pkg/postgresql"
+	"github.com/gravitational/stolon/pkg/store"
+	"github.com/gravitational/stolon/pkg/util"
 
 	"github.com/coreos/pkg/capnslog"
 	"github.com/coreos/rkt/pkg/lock"
@@ -44,7 +44,7 @@ import (
 	"golang.org/x/net/context"
 )
 
-var log = capnslog.NewPackageLogger("github.com/sorintlab/stolon/cmd", "keeper")
+var log = capnslog.NewPackageLogger("github.com/gravitational/stolon/cmd", "keeper")
 
 func init() {
 	capnslog.SetFormatter(capnslog.NewPrettyFormatter(os.Stderr, true))

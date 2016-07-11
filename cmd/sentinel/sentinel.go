@@ -28,11 +28,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sorintlab/stolon/common"
-	"github.com/sorintlab/stolon/pkg/cluster"
-	"github.com/sorintlab/stolon/pkg/flagutil"
-	"github.com/sorintlab/stolon/pkg/kubernetes"
-	"github.com/sorintlab/stolon/pkg/store"
+	"github.com/gravitational/stolon/common"
+	"github.com/gravitational/stolon/pkg/cluster"
+	"github.com/gravitational/stolon/pkg/flagutil"
+	"github.com/gravitational/stolon/pkg/kubernetes"
+	"github.com/gravitational/stolon/pkg/store"
 
 	"github.com/coreos/pkg/capnslog"
 	"github.com/davecgh/go-spew/spew"
@@ -43,7 +43,7 @@ import (
 	"golang.org/x/net/context"
 )
 
-var log = capnslog.NewPackageLogger("github.com/sorintlab/stolon/cmd", "sentinel")
+var log = capnslog.NewPackageLogger("github.com/gravitational/stolon/cmd", "sentinel")
 
 var cmdSentinel = &cobra.Command{
 	Use: "stolon-sentinel",

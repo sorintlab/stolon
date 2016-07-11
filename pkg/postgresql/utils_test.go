@@ -19,7 +19,7 @@ import (
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/sorintlab/stolon/pkg/cluster"
+	"github.com/gravitational/stolon/pkg/cluster"
 )
 
 func TestParseTimeLineHistory(t *testing.T) {

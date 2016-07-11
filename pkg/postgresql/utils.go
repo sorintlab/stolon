@@ -22,8 +22,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/sorintlab/stolon/common"
-	"github.com/sorintlab/stolon/pkg/cluster"
+	"github.com/gravitational/stolon/common"
+	"github.com/gravitational/stolon/pkg/cluster"
 
 	_ "github.com/lib/pq"
 	"golang.org/x/net/context"

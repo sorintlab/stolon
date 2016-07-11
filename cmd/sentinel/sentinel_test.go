@@ -20,7 +20,7 @@ import (
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/sorintlab/stolon/pkg/cluster"
+	"github.com/gravitational/stolon/pkg/cluster"
 )
 
 func TestUpdateClusterView(t *testing.T) {

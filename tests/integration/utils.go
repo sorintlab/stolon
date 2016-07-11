@@ -30,10 +30,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sorintlab/stolon/common"
-	"github.com/sorintlab/stolon/pkg/cluster"
-	pg "github.com/sorintlab/stolon/pkg/postgresql"
-	"github.com/sorintlab/stolon/pkg/store"
+	"github.com/gravitational/stolon/common"
+	"github.com/gravitational/stolon/pkg/cluster"
+	pg "github.com/gravitational/stolon/pkg/postgresql"
+	"github.com/gravitational/stolon/pkg/store"
 
 	kvstore "github.com/docker/libkv/store"
 	_ "github.com/lib/pq"

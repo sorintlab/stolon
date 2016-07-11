@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/sorintlab/stolon/pkg/cluster"
+	"github.com/gravitational/stolon/pkg/cluster"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/gorilla/mux"

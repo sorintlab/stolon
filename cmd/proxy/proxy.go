@@ -21,10 +21,10 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/sorintlab/stolon/common"
-	"github.com/sorintlab/stolon/pkg/cluster"
-	"github.com/sorintlab/stolon/pkg/flagutil"
-	"github.com/sorintlab/stolon/pkg/store"
+	"github.com/gravitational/stolon/common"
+	"github.com/gravitational/stolon/pkg/cluster"
+	"github.com/gravitational/stolon/pkg/flagutil"
+	"github.com/gravitational/stolon/pkg/store"
 
 	"github.com/coreos/pkg/capnslog"
 	"github.com/davecgh/go-spew/spew"
@@ -33,7 +33,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var log = capnslog.NewPackageLogger("github.com/sorintlab/stolon/cmd", "proxy")
+var log = capnslog.NewPackageLogger("github.com/gravitational/stolon/cmd", "proxy")
 
 func init() {
 	capnslog.SetFormatter(capnslog.NewPrettyFormatter(os.Stderr, true))
