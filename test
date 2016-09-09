@@ -77,7 +77,7 @@ for path in $FMT; do
 done
 
 echo "Checking for license header..."
-licRes=$(for file in $(find . -type f -iname '*.go' ! -path './Godeps/*'); do
+licRes=$(for file in $(find . -type f -iname '*.go' ! -path './vendor/*'); do
 		head -n3 "${file}" | grep -Eq "(Copyright|generated|GENERATED)" || echo -e "  ${file}"
 	done;)
 if [ -n "${licRes}" ]; then
@@ -107,7 +107,6 @@ if [ -n "$INTEGRATION" ]; then
 		echo "using etcd from $ETCD_BIN"
 		export ETCD_BIN
 	elif [ "${STOLON_TEST_STORE_BACKEND}" == "consul" ]; then
-
 		if [ -z ${CONSUL_BIN} ]; then
 			if [ -z $(which consul) ]; then
 				echo "cannot find consul in PATH and CONSUL_BIN environment variable not defined"

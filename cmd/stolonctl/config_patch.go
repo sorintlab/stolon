@@ -25,8 +25,8 @@ import (
 	"github.com/sorintlab/stolon/pkg/cluster"
 	"github.com/sorintlab/stolon/pkg/store"
 
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/spf13/cobra"
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/k8s.io/kubernetes/pkg/util/strategicpatch"
+	"github.com/spf13/cobra"
+	"k8s.io/kubernetes/pkg/util/strategicpatch"
 )
 
 var cmdConfigPatch = &cobra.Command{

@@ -1,0 +1,95 @@
+hash: f1a42c7be85ff482748c56a31dedd1be6c03d49942fe5d4593c9fb3aee5907dd
+updated: 2016-09-09T11:46:59.899879255+02:00
+imports:
+- name: github.com/cloudfoundry-incubator/candiedyaml
+  version: 99c3df83b51532e3615f851d8c2dbb638f5313bf
+- name: github.com/coreos/etcd
+  version: bc9ddf260115d2680191c46977ae72b837785472
+  subpackages:
+  - Godeps/_workspace/src/github.com/ugorji/go/codec
+  - Godeps/_workspace/src/golang.org/x/net/context
+  - client
+  - pkg/pathutil
+  - pkg/types
+- name: github.com/coreos/go-systemd
+  version: 2f344660b11f7285b0af86195c4456e92970f640
+  subpackages:
+  - journal
+- name: github.com/coreos/pkg
+  version: 3ac0863d7acf3bc44daf49afef8919af12f704ef
+  subpackages:
+  - capnslog
+- name: github.com/coreos/rkt
+  version: 0491f0f2ddbaa3ad219f93ef03b7877aae7f55cb
+  subpackages:
+  - pkg/lock
+- name: github.com/davecgh/go-spew
+  version: 6d212800a42e8ab5c146b8ace3490ee17e5225f9
+  subpackages:
+  - spew
+- name: github.com/docker/leadership
+  version: bfc7753dd48af19513b29deec23c364bf0f274eb
+- name: github.com/docker/libkv
+  version: aabc039ad04deb721e234f99cd1b4aa28ac71a40
+  subpackages:
+  - store
+  - store/consul
+  - store/etcd
+- name: github.com/ghodss/yaml
+  version: aa0c862057666179de291b67d9f093d12b5a8473
+- name: github.com/gorilla/context
+  version: 08b5f424b9271eedf6f9f0ce86cb9396ed337a42
+- name: github.com/gorilla/mux
+  version: 0a192a193177452756c362c20087ddafcf6829c4
+- name: github.com/hashicorp/consul
+  version: 0a34741d7266af34eed36048d1a8e8880a7b17a1
+  subpackages:
+  - api
+- name: github.com/hashicorp/errwrap
+  version: 7554cd9344cec97297fa6649b055a8c98c2a1e55
+- name: github.com/hashicorp/go-cleanhttp
+  version: ad28ea4487f05916463e2423a55166280e8254b5
+- name: github.com/hashicorp/serf
+  version: 9432bc08aa8d486e497e27f84878ebbe8c1eab66
+  subpackages:
+  - coordinate
+- name: github.com/inconshreveable/mousetrap
+  version: 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75
+- name: github.com/jmoiron/jsonq
+  version: e874b168d07ecc7808bc950a17998a8aa3141d82
+- name: github.com/kballard/go-shellquote
+  version: d8ec1a69a250a17bb0e419c386eac1f3711dc142
+- name: github.com/kr/pty
+  version: ce7fa45920dc37a92de8377972e52bc55ffa8d57
+- name: github.com/lib/pq
+  version: 50761b0867bd1d9d069276790bcd4a3bccf2324a
+  subpackages:
+  - oid
+- name: github.com/satori/go.uuid
+  version: 0aa62d5ddceb50dbcb909d790b5345affd3669b6
+- name: github.com/sgotti/gexpect
+  version: 81b69f472c22d5a42aefcf07b58015d0ef4da2e1
+- name: github.com/sorintlab/pollon
+  version: 0fc4e27d6290f15d02d35f438ffa58068dee2014
+  subpackages:
+  - Godeps/_workspace/src/github.com/coreos/go-systemd/journal
+  - Godeps/_workspace/src/github.com/coreos/pkg/capnslog
+- name: github.com/spf13/cobra
+  version: 9c28e4bbd74e5c3ed7aacbc552b2cab7cfdfe744
+- name: github.com/spf13/pflag
+  version: 6fd2ff4ff8dfcdf5556fbdc0ac0284408274b1a7
+- name: github.com/ugorji/go
+  version: f1f1a805ed361a0e078bb537e4ea78cd37dcf065
+  subpackages:
+  - codec
+- name: golang.org/x/net
+  version: 9313baa13d9262e49d07b20ed57dceafcd7240cc
+  subpackages:
+  - context
+- name: k8s.io/kubernetes
+  version: 283137936a498aed572ee22af6774b6fb6e9fd94
+  subpackages:
+  - pkg/util/json
+  - pkg/util/strategicpatch
+  - third_party/forked/json
+testImports: []
