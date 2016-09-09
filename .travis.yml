@@ -1,0 +1,16 @@
+language: go
+
+go:
+  - 1.5.4
+  - 1.6.3
+  - 1.7
+
+env:
+  - TARGET=amd64
+  - TARGET=arm64
+
+install:
+  -
+
+script:
+        ./test
