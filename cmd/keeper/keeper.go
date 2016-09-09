@@ -534,7 +534,8 @@ func (p *PostgresKeeper) resync(followed *cluster.KeeperState, initialized, star
 	if err := pgm.RemoveAll(); err != nil {
 		return fmt.Errorf("failed to remove the postgres data dir: %v", err)
 	}
-	log.Infof("syncing from followed instance %q with connection params: %v", followed.ID, replConnParams)
+	log.Debugf("syncing from followed instance %q with connection params: %v", followed.ID, replConnParams)
+	log.Infof("syncing from followed instance %q", followed.ID)
 	if err := pgm.SyncFromFollowed(replConnParams); err != nil {
 		return fmt.Errorf("error: %v", err)
 	}
