@@ -669,7 +669,7 @@ func NewSentinel(id string, cfg *config, stop chan bool, end chan bool) (*Sentin
 	}
 	e := store.NewStoreManager(kvstore, storePath)
 
-	candidate := leadership.NewCandidate(kvstore, filepath.Join(storePath, common.SentinelLeaderKey), id, 15*time.Second)
+	candidate := leadership.NewCandidate(kvstore, filepath.Join(storePath, common.SentinelLeaderKey), id, store.MinTTL)
 
 	return &Sentinel{
 		id:                      id,
