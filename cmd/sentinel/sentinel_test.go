@@ -19,7 +19,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/davecgh/go-spew/spew"
+	"github.com/davecgh/go-spew/spew"
 	"github.com/sorintlab/stolon/pkg/cluster"
 )
 

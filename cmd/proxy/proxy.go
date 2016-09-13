@@ -26,11 +26,11 @@ import (
 	"github.com/sorintlab/stolon/pkg/flagutil"
 	"github.com/sorintlab/stolon/pkg/store"
 
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/coreos/pkg/capnslog"
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/davecgh/go-spew/spew"
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/satori/go.uuid"
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/sorintlab/pollon"
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/spf13/cobra"
+	"github.com/coreos/pkg/capnslog"
+	"github.com/davecgh/go-spew/spew"
+	"github.com/satori/go.uuid"
+	"github.com/sorintlab/pollon"
+	"github.com/spf13/cobra"
 )
 
 var log = capnslog.NewPackageLogger("github.com/sorintlab/stolon/cmd", "proxy")

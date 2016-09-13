@@ -22,8 +22,8 @@ import (
 	"github.com/sorintlab/stolon/common"
 	"github.com/sorintlab/stolon/pkg/store"
 
-	libkvstore "github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/docker/libkv/store"
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/spf13/cobra"
+	libkvstore "github.com/docker/libkv/store"
+	"github.com/spf13/cobra"
 )
 
 var cmdListClusters = &cobra.Command{

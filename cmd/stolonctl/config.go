@@ -14,7 +14,7 @@
 
 package main
 
-import "github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/spf13/cobra"
+import "github.com/spf13/cobra"
 
 var cmdConfig = &cobra.Command{
 	Use: "config",
