@@ -23,7 +23,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/satori/go.uuid"
+	"github.com/satori/go.uuid"
 	"github.com/sorintlab/stolon/common"
 	"github.com/sorintlab/stolon/pkg/cluster"
 	"github.com/sorintlab/stolon/pkg/store"

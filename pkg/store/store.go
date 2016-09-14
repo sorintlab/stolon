@@ -24,11 +24,11 @@ import (
 	"github.com/sorintlab/stolon/common"
 	"github.com/sorintlab/stolon/pkg/cluster"
 
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/coreos/pkg/capnslog"
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/docker/libkv"
-	kvstore "github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/docker/libkv/store"
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/docker/libkv/store/consul"
-	"github.com/sorintlab/stolon/Godeps/_workspace/src/github.com/docker/libkv/store/etcd"
+	"github.com/coreos/pkg/capnslog"
+	"github.com/docker/libkv"
+	kvstore "github.com/docker/libkv/store"
+	"github.com/docker/libkv/store/consul"
+	"github.com/docker/libkv/store/etcd"
 )
 
 func init() {
@@ -62,7 +62,7 @@ const (
 const (
 	//TODO(sgotti) fix this in libkv?
 	// consul min ttl is 10s and libkv divides this by 2
-	minTTL = 20 * time.Second
+	MinTTL = 20 * time.Second
 )
 
 type StoreManager struct {
@@ -158,8 +158,8 @@ func (e *StoreManager) SetKeeperDiscoveryInfo(id string, ms *cluster.KeeperDisco
 	if err != nil {
 		return err
 	}
-	if ttl < minTTL {
-		ttl = minTTL
+	if ttl < MinTTL {
+		ttl = MinTTL
 	}
 	return e.store.Put(filepath.Join(e.clusterPath, keepersDiscoveryInfoDir, id), msj, &kvstore.WriteOptions{TTL: ttl})
 }
@@ -207,8 +207,8 @@ func (e *StoreManager) SetSentinelInfo(si *cluster.SentinelInfo, ttl time.Durati
 	if err != nil {
 		return err
 	}
-	if ttl < minTTL {
-		ttl = minTTL
+	if ttl < MinTTL {
+		ttl = MinTTL
 	}
 	return e.store.Put(filepath.Join(e.clusterPath, sentinelsInfoDir, si.ID), sij, &kvstore.WriteOptions{TTL: ttl})
 }
@@ -268,8 +268,8 @@ func (e *StoreManager) SetProxyInfo(pi *cluster.ProxyInfo, ttl time.Duration) er
 	if err != nil {
 		return err
 	}
-	if ttl < minTTL {
-		ttl = minTTL
+	if ttl < MinTTL {
+		ttl = MinTTL
 	}
 	return e.store.Put(filepath.Join(e.clusterPath, proxiesInfoDir, pi.ID), pij, &kvstore.WriteOptions{TTL: ttl})
 }

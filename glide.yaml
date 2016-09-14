@@ -1,0 +1,42 @@
+package: github.com/sorintlab/stolon
+import:
+- package: github.com/coreos/pkg
+  subpackages:
+  - capnslog
+- package: github.com/coreos/rkt
+  subpackages:
+  - pkg/lock
+- package: github.com/davecgh/go-spew
+  subpackages:
+  - spew
+- package: github.com/docker/leadership
+  version: v0.1.0
+- package: github.com/docker/libkv
+  version: v0.2.1
+  subpackages:
+  - store
+  - store/consul
+  - store/etcd
+- package: github.com/gorilla/mux
+- package: github.com/jmoiron/jsonq
+- package: github.com/lib/pq
+- package: github.com/satori/go.uuid
+- package: github.com/sgotti/gexpect
+- package: github.com/sorintlab/pollon
+- package: github.com/spf13/cobra
+- package: github.com/spf13/pflag
+- package: golang.org/x/net
+  subpackages:
+  - context
+- package: k8s.io/kubernetes
+  version: 1.3.0
+  subpackages:
+  - pkg/util/strategicpatch
+- package: github.com/ugorji/go
+  version: f1f1a805ed361a0e078bb537e4ea78cd37dcf065
+  subpackages:
+  - codec
+- package: github.com/coreos/etcd
+  version: v2.2.5
+  subpackages:
+  - client
