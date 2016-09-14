@@ -16,9 +16,14 @@ spec:
       containers:
       - name: stolon-proxy
         image: sorintlab/stolon:master
+        command:
+          - "/bin/sh"
+          - "-ec"
+          - |
+            export POD_IP=$(hostname -i)
+            export STPROXY_LISTEN_ADDRESS=$POD_IP
+            exec stolon-proxy
         env:
-          - name: PROXY
-            value: "true"
           - name: STPROXY_CLUSTER_NAME
           # TODO(sgotti) Get cluster name from "stoloncluster" label using a downward volume api instead of duplicating the name here
             value: "kube-stolon"

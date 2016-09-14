@@ -16,9 +16,16 @@ spec:
       containers:
       - name: stolon-keeper
         image: sorintlab/stolon:master
+        command:
+          - "/bin/sh"
+          - "-ec"
+          - |
+            export POD_IP=$(hostname -i)
+            export STKEEPER_LISTEN_ADDRESS=$POD_IP
+            export STKEEPER_PG_LISTEN_ADDRESS=$POD_IP
+            chown stolon:stolon $PGDATA
+            exec gosu stolon stolon-keeper --data-dir $PGDATA
         env:
-          - name: KEEPER
-            value: "true"
           - name: STKEEPER_CLUSTER_NAME
           # TODO(sgotti) Get cluster name from "stoloncluster" label using a downward volume api instead of duplicating the name here
             value: "kube-stolon"
