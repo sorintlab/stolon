@@ -120,3 +120,89 @@ func mergeDefaults(c *NilConfig) *NilConfig {
 	c.MergeDefaults()
 	return c
 }
+
+func TestNilConfigCopy(t *testing.T) {
+	// cfg and origCfg are declared in an identical way. It's not
+	// possible to take a shallow copy since cfg must absolutely
+	// not change as it's used for the reflect.DeepEqual comparison.
+	cfg := mergeDefaults(&NilConfig{
+		RequestTimeout:          &Duration{10 * time.Second},
+		SleepInterval:           &Duration{10 * time.Second},
+		KeeperFailInterval:      &Duration{10 * time.Second},
+		MaxStandbysPerSender:    UintP(5),
+		SynchronousReplication:  BoolP(true),
+		InitWithMultipleKeepers: BoolP(true),
+		PGParameters: &map[string]string{
+			"param01": "value01",
+		},
+	})
+	origCfg := mergeDefaults(&NilConfig{
+		RequestTimeout:          &Duration{10 * time.Second},
+		SleepInterval:           &Duration{10 * time.Second},
+		KeeperFailInterval:      &Duration{10 * time.Second},
+		MaxStandbysPerSender:    UintP(5),
+		SynchronousReplication:  BoolP(true),
+		InitWithMultipleKeepers: BoolP(true),
+		PGParameters: &map[string]string{
+			"param01": "value01",
+		},
+	})
+
+	// Now take a origCfg copy, change all its fields and check that origCfg isn't changed
+	newCfg := origCfg.Copy()
+	newCfg.RequestTimeout = &Duration{20 * time.Second}
+	newCfg.SleepInterval = &Duration{20 * time.Second}
+	newCfg.KeeperFailInterval = &Duration{20 * time.Second}
+	newCfg.MaxStandbysPerSender = UintP(10)
+	newCfg.SynchronousReplication = BoolP(false)
+	newCfg.InitWithMultipleKeepers = BoolP(false)
+	(*newCfg.PGParameters)["param01"] = "anothervalue01"
+
+	if !reflect.DeepEqual(origCfg, cfg) {
+		t.Errorf("Original config shouldn't be changed")
+	}
+
+}
+
+func TestConfigCopy(t *testing.T) {
+	// cfg and origCfg are declared in an identical way. It's not
+	// possible to take a shallow copy since cfg must absolutely
+	// not change as it's used for the reflect.DeepEqual comparison.
+	cfg := mergeDefaults(&NilConfig{
+		RequestTimeout:          &Duration{10 * time.Second},
+		SleepInterval:           &Duration{10 * time.Second},
+		KeeperFailInterval:      &Duration{100 * time.Second},
+		MaxStandbysPerSender:    UintP(5),
+		SynchronousReplication:  BoolP(true),
+		InitWithMultipleKeepers: BoolP(true),
+		PGParameters: &map[string]string{
+			"param01": "value01",
+		},
+	}).ToConfig()
+	origCfg := mergeDefaults(&NilConfig{
+		RequestTimeout:          &Duration{10 * time.Second},
+		SleepInterval:           &Duration{10 * time.Second},
+		KeeperFailInterval:      &Duration{100 * time.Second},
+		MaxStandbysPerSender:    UintP(5),
+		SynchronousReplication:  BoolP(true),
+		InitWithMultipleKeepers: BoolP(true),
+		PGParameters: &map[string]string{
+			"param01": "value01",
+		},
+	}).ToConfig()
+
+	// Now take a origCfg copy, change all its fields and check that origCfg isn't changed
+	newCfg := origCfg.Copy()
+	newCfg.RequestTimeout = 20 * time.Second
+	newCfg.SleepInterval = 20 * time.Second
+	newCfg.KeeperFailInterval = 20 * time.Second
+	newCfg.MaxStandbysPerSender = 10
+	newCfg.SynchronousReplication = false
+	newCfg.InitWithMultipleKeepers = false
+	newCfg.PGParameters["param01"] = "anothervalue01"
+
+	if !reflect.DeepEqual(origCfg, cfg) {
+		t.Errorf("Original config shouldn't be changed")
+	}
+
+}
