@@ -6,7 +6,7 @@ In this example you'll see how stolon can provide an high available postgreSQL c
 ## Docker image
 Prebuilt images are available on the dockerhub, the images' tags are their release version. Additional images are available:
 
-* `latest`: latest released image (actually v0.2.0).
+* `latest`: latest released image (actually v0.3.0).
 * `master`: automatically built after every commit to the master branch.
 
 
