@@ -23,7 +23,6 @@ import (
 	"strings"
 
 	"github.com/sorintlab/stolon/common"
-	"github.com/sorintlab/stolon/pkg/cluster"
 
 	_ "github.com/lib/pq"
 	"golang.org/x/net/context"
@@ -34,7 +33,7 @@ var (
 	ValidReplSlotName = regexp.MustCompile("^[a-z0-9_]+$")
 )
 
-func Exec(ctx context.Context, db *sql.DB, query string, args ...interface{}) (sql.Result, error) {
+func dbExec(ctx context.Context, db *sql.DB, query string, args ...interface{}) (sql.Result, error) {
 	ch := make(chan struct {
 		res sql.Result
 		err error
@@ -55,7 +54,7 @@ func Exec(ctx context.Context, db *sql.DB, query string, args ...interface{}) (s
 	}
 }
 
-func Query(ctx context.Context, db *sql.DB, query string, args ...interface{}) (*sql.Rows, error) {
+func query(ctx context.Context, db *sql.DB, query string, args ...interface{}) (*sql.Rows, error) {
 	ch := make(chan struct {
 		rows *sql.Rows
 		err  error
@@ -76,55 +75,55 @@ func Query(ctx context.Context, db *sql.DB, query string, args ...interface{}) (
 	}
 }
 
-func CheckDBStatus(ctx context.Context, connString string) error {
-	db, err := sql.Open("postgres", connString)
+func checkDBStatus(ctx context.Context, connParams ConnParams) error {
+	db, err := sql.Open("postgres", connParams.ConnString())
 	if err != nil {
 		return err
 	}
 	defer db.Close()
 
-	_, err = Exec(ctx, db, "select 1")
+	_, err = dbExec(ctx, db, "select 1")
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func SetPassword(ctx context.Context, connString, username, password string) error {
-	db, err := sql.Open("postgres", connString)
+func setPassword(ctx context.Context, connParams ConnParams, username, password string) error {
+	db, err := sql.Open("postgres", connParams.ConnString())
 	if err != nil {
 		return err
 	}
 	defer db.Close()
 
-	_, err = Exec(ctx, db, fmt.Sprintf(`alter role %s with password '%s';`, username, password))
+	_, err = dbExec(ctx, db, fmt.Sprintf(`alter role %s with password '%s';`, username, password))
 	return err
 }
 
-func CreateRole(ctx context.Context, connString string, roles []string, username, password string) error {
-	db, err := sql.Open("postgres", connString)
+func createRole(ctx context.Context, connParams ConnParams, roles []string, username, password string) error {
+	db, err := sql.Open("postgres", connParams.ConnString())
 	if err != nil {
 		return err
 	}
 	defer db.Close()
 
-	_, err = Exec(ctx, db, fmt.Sprintf(`create role "%s" with login replication encrypted password '%s';`, username, password))
+	_, err = dbExec(ctx, db, fmt.Sprintf(`create role "%s" with login replication encrypted password '%s';`, username, password))
 	return err
 }
 
-func AlterRole(ctx context.Context, connString string, roles []string, username, password string) error {
-	db, err := sql.Open("postgres", connString)
+func alterRole(ctx context.Context, connParams ConnParams, roles []string, username, password string) error {
+	db, err := sql.Open("postgres", connParams.ConnString())
 	if err != nil {
 		return err
 	}
 	defer db.Close()
 
-	_, err = Exec(ctx, db, fmt.Sprintf(`alter role "%s" with login replication encrypted password '%s';`, username, password))
+	_, err = dbExec(ctx, db, fmt.Sprintf(`alter role "%s" with login replication encrypted password '%s';`, username, password))
 	return err
 }
 
-func GetReplicatinSlots(ctx context.Context, connString string) ([]string, error) {
-	db, err := sql.Open("postgres", connString)
+func getReplicatinSlots(ctx context.Context, connParams ConnParams) ([]string, error) {
+	db, err := sql.Open("postgres", connParams.ConnString())
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +131,7 @@ func GetReplicatinSlots(ctx context.Context, connString string) ([]string, error
 
 	replSlots := []string{}
 
-	rows, err := Query(ctx, db, "select slot_name from pg_replication_slots")
+	rows, err := query(ctx, db, "select slot_name from pg_replication_slots")
 	if err != nil {
 		return nil, err
 	}
@@ -148,36 +147,36 @@ func GetReplicatinSlots(ctx context.Context, connString string) ([]string, error
 	return replSlots, nil
 }
 
-func CreateReplicationSlot(ctx context.Context, connString string, name string) error {
-	db, err := sql.Open("postgres", connString)
+func createReplicationSlot(ctx context.Context, connParams ConnParams, name string) error {
+	db, err := sql.Open("postgres", connParams.ConnString())
 	if err != nil {
 		return err
 	}
 	defer db.Close()
 
-	_, err = Exec(ctx, db, fmt.Sprintf("select pg_create_physical_replication_slot('%s')", name))
+	_, err = dbExec(ctx, db, fmt.Sprintf("select pg_create_physical_replication_slot('%s')", name))
 	return err
 }
 
-func DropReplicationSlot(ctx context.Context, connString string, name string) error {
-	db, err := sql.Open("postgres", connString)
+func dropReplicationSlot(ctx context.Context, connParams ConnParams, name string) error {
+	db, err := sql.Open("postgres", connParams.ConnString())
 	if err != nil {
 		return err
 	}
 	defer db.Close()
 
-	_, err = Exec(ctx, db, fmt.Sprintf("select pg_drop_replication_slot('%s')", name))
+	_, err = dbExec(ctx, db, fmt.Sprintf("select pg_drop_replication_slot('%s')", name))
 	return err
 }
 
-func GetRole(ctx context.Context, connString string) (common.Role, error) {
-	db, err := sql.Open("postgres", connString)
+func getRole(ctx context.Context, connParams ConnParams) (common.Role, error) {
+	db, err := sql.Open("postgres", connParams.ConnString())
 	if err != nil {
 		return 0, err
 	}
 	defer db.Close()
 
-	rows, err := Query(ctx, db, "select pg_is_in_recovery from pg_is_in_recovery()")
+	rows, err := query(ctx, db, "select pg_is_in_recovery from pg_is_in_recovery()")
 	if err != nil {
 		return 0, err
 	}
@@ -195,14 +194,14 @@ func GetRole(ctx context.Context, connString string) (common.Role, error) {
 	return 0, fmt.Errorf("no rows returned")
 }
 
-func GetPGMasterLocation(ctx context.Context, connString string) (uint64, error) {
-	db, err := sql.Open("postgres", connString)
+func getPGMasterLocation(ctx context.Context, connParams ConnParams) (uint64, error) {
+	db, err := sql.Open("postgres", connParams.ConnString())
 	if err != nil {
 		return 0, err
 	}
 	defer db.Close()
 
-	rows, err := Query(ctx, db, "select pg_current_xlog_location() - '0/0000000'")
+	rows, err := query(ctx, db, "select pg_current_xlog_location() - '0/0000000'")
 	if err != nil {
 		return 0, err
 	}
@@ -217,7 +216,7 @@ func GetPGMasterLocation(ctx context.Context, connString string) (uint64, error)
 	return 0, fmt.Errorf("no rows returned")
 }
 
-func PGLSNToInt(lsn string) (uint64, error) {
+func pgLsnToInt(lsn string) (uint64, error) {
 	parts := strings.Split(lsn, "/")
 	if len(parts) != 2 {
 		return 0, fmt.Errorf("bad pg_lsn: %s", lsn)
@@ -234,7 +233,7 @@ func PGLSNToInt(lsn string) (uint64, error) {
 	return v, nil
 }
 
-func GetPGState(ctx context.Context, replConnParams ConnParams) (*cluster.PostgresState, error) {
+func getSystemData(ctx context.Context, replConnParams ConnParams) (*SystemData, error) {
 	// Add "replication=1" connection option
 	replConnParams["replication"] = "1"
 	db, err := sql.Open("postgres", replConnParams.ConnString())
@@ -243,29 +242,29 @@ func GetPGState(ctx context.Context, replConnParams ConnParams) (*cluster.Postgr
 	}
 	defer db.Close()
 
-	rows, err := Query(ctx, db, "IDENTIFY_SYSTEM")
+	rows, err := query(ctx, db, "IDENTIFY_SYSTEM")
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var pgState cluster.PostgresState
+		var sd SystemData
 		var xLogPosLsn string
 		var unused *string
-		if err = rows.Scan(&pgState.SystemID, &pgState.TimelineID, &xLogPosLsn, &unused); err != nil {
+		if err = rows.Scan(&sd.SystemID, &sd.TimelineID, &xLogPosLsn, &unused); err != nil {
 			return nil, err
 		}
-		pgState.XLogPos, err = PGLSNToInt(xLogPosLsn)
+		sd.XLogPos, err = pgLsnToInt(xLogPosLsn)
 		if err != nil {
 			return nil, err
 		}
-		return &pgState, nil
+		return &sd, nil
 	}
 	return nil, fmt.Errorf("query returned 0 rows")
 }
 
-func parseTimeLinesHistory(contents string) (cluster.PostgresTimeLinesHistory, error) {
-	tlsh := cluster.PostgresTimeLinesHistory{}
+func parseTimelinesHistory(contents string) ([]*TimelineHistory, error) {
+	tlsh := []*TimelineHistory{}
 	regex, err := regexp.Compile(`(\S+)\s+(\S+)\s+(.*)$`)
 	if err != nil {
 		return nil, err
@@ -277,11 +276,11 @@ func parseTimeLinesHistory(contents string) (cluster.PostgresTimeLinesHistory, e
 	for scanner.Scan() {
 		m := regex.FindStringSubmatch(scanner.Text())
 		if len(m) == 4 {
-			var tlh cluster.PostgresTimeLineHistory
+			var tlh TimelineHistory
 			if tlh.TimelineID, err = strconv.ParseUint(m[1], 10, 64); err != nil {
 				return nil, fmt.Errorf("cannot parse timelineID in timeline history line %q: %v", scanner.Text(), err)
 			}
-			if tlh.SwitchPoint, err = PGLSNToInt(m[2]); err != nil {
+			if tlh.SwitchPoint, err = pgLsnToInt(m[2]); err != nil {
 				return nil, fmt.Errorf("cannot parse start lsn in timeline history line %q: %v", scanner.Text(), err)
 			}
 			tlh.Reason = m[3]
@@ -291,7 +290,7 @@ func parseTimeLinesHistory(contents string) (cluster.PostgresTimeLinesHistory, e
 	return tlsh, err
 }
 
-func GetTimelinesHistory(ctx context.Context, timeline uint64, replConnParams ConnParams) (cluster.PostgresTimeLinesHistory, error) {
+func getTimelinesHistory(ctx context.Context, timeline uint64, replConnParams ConnParams) ([]*TimelineHistory, error) {
 	// Add "replication=1" connection option
 	replConnParams["replication"] = "1"
 	db, err := sql.Open("postgres", replConnParams.ConnString())
@@ -300,7 +299,7 @@ func GetTimelinesHistory(ctx context.Context, timeline uint64, replConnParams Co
 	}
 	defer db.Close()
 
-	rows, err := Query(ctx, db, fmt.Sprintf("TIMELINE_HISTORY %d", timeline))
+	rows, err := query(ctx, db, fmt.Sprintf("TIMELINE_HISTORY %d", timeline))
 	if err != nil {
 		return nil, err
 	}
@@ -311,7 +310,7 @@ func GetTimelinesHistory(ctx context.Context, timeline uint64, replConnParams Co
 		if err := rows.Scan(&timelineFile, &contents); err != nil {
 			return nil, err
 		}
-		tlsh, err := parseTimeLinesHistory(contents)
+		tlsh, err := parseTimelinesHistory(contents)
 		if err != nil {
 			return nil, err
 		}

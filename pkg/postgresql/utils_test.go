@@ -19,23 +19,22 @@ import (
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/sorintlab/stolon/pkg/cluster"
 )
 
-func TestParseTimeLineHistory(t *testing.T) {
+func TestParseTimelineHistory(t *testing.T) {
 	tests := []struct {
 		contents string
-		tlsh     cluster.PostgresTimeLinesHistory
+		tlsh     []*TimelineHistory
 		err      error
 	}{
 		{
 			contents: "",
-			tlsh:     cluster.PostgresTimeLinesHistory{},
+			tlsh:     []*TimelineHistory{},
 			err:      nil,
 		},
 		{
 			contents: `1	0/5000090	no recovery target specified`,
-			tlsh: cluster.PostgresTimeLinesHistory{
+			tlsh: []*TimelineHistory{
 				{
 					TimelineID:  1,
 					SwitchPoint: 83886224,
@@ -47,7 +46,7 @@ func TestParseTimeLineHistory(t *testing.T) {
 	}
 
 	for i, tt := range tests {
-		tlsh, err := parseTimeLinesHistory(tt.contents)
+		tlsh, err := parseTimelinesHistory(tt.contents)
 		t.Logf("test #%d", i)
 		if tt.err != nil {
 			if err == nil {

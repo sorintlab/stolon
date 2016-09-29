@@ -44,8 +44,8 @@ type Manager struct {
 	dataDir         string
 	confDir         string
 	parameters      Parameters
-	localConnString string
-	replConnString  string
+	localConnParams ConnParams
+	replConnParams  ConnParams
 	suUsername      string
 	suPassword      string
 	replUsername    string
@@ -76,15 +76,27 @@ func (s Parameters) Equals(is Parameters) bool {
 	return reflect.DeepEqual(s, is)
 }
 
-func NewManager(name string, pgBinPath string, dataDir string, confDir string, parameters Parameters, localConnString, replConnString, suUsername, suPassword, replUsername, replPassword string, requestTimeout time.Duration) *Manager {
+type SystemData struct {
+	SystemID   string
+	TimelineID uint64
+	XLogPos    uint64
+}
+
+type TimelineHistory struct {
+	TimelineID  uint64
+	SwitchPoint uint64
+	Reason      string
+}
+
+func NewManager(name string, pgBinPath string, dataDir string, confDir string, parameters Parameters, localConnParams, replConnParams ConnParams, suUsername, suPassword, replUsername, replPassword string, requestTimeout time.Duration) *Manager {
 	return &Manager{
 		name:            name,
 		pgBinPath:       pgBinPath,
 		dataDir:         filepath.Join(dataDir, "postgres"),
 		confDir:         confDir,
 		parameters:      parameters,
-		replConnString:  replConnString,
-		localConnString: localConnString,
+		replConnParams:  replConnParams,
+		localConnParams: localConnParams,
 		suUsername:      suUsername,
 		suPassword:      suPassword,
 		replUsername:    replUsername,
@@ -217,7 +229,7 @@ func (p *Manager) Reload() error {
 
 func (p *Manager) Restart(fast bool) error {
 	log.Infof("Restarting database")
-	if err := p.Stop(true); err != nil {
+	if err := p.Stop(fast); err != nil {
 		return err
 	}
 	if err := p.Start(); err != nil {
@@ -242,7 +254,7 @@ func (p *Manager) SetupRoles() error {
 
 	if p.suUsername == p.replUsername {
 		log.Infof("Adding replication role to superuser")
-		if err := AlterRole(ctx, p.localConnString, []string{"replication"}, p.suUsername, p.suPassword); err != nil {
+		if err := alterRole(ctx, p.localConnParams, []string{"replication"}, p.suUsername, p.suPassword); err != nil {
 			return fmt.Errorf("error adding replication role to superuser: %v", err)
 		}
 		log.Debugf("replication role added to superuser")
@@ -250,14 +262,14 @@ func (p *Manager) SetupRoles() error {
 		// Configure superuser role password
 		if p.suPassword != "" {
 			log.Infof("Defining superuser password")
-			if err := SetPassword(ctx, p.localConnString, p.suUsername, p.suPassword); err != nil {
+			if err := setPassword(ctx, p.localConnParams, p.suUsername, p.suPassword); err != nil {
 				return fmt.Errorf("error setting superuser password: %v", err)
 			}
 			log.Debugf("superuser password defined")
 		}
 		roles := []string{"login", "replication"}
 		log.Infof("Creating replication role")
-		if err := CreateRole(ctx, p.localConnString, roles, p.replUsername, p.replPassword); err != nil {
+		if err := createRole(ctx, p.localConnParams, roles, p.replUsername, p.replPassword); err != nil {
 			return fmt.Errorf("error creating replication role: %v", err)
 		}
 		log.Debugf("replication role %s created", p.replUsername)
@@ -268,19 +280,19 @@ func (p *Manager) SetupRoles() error {
 func (p *Manager) GetReplicatinSlots() ([]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), p.requestTimeout)
 	defer cancel()
-	return GetReplicatinSlots(ctx, p.localConnString)
+	return getReplicatinSlots(ctx, p.localConnParams)
 }
 
 func (p *Manager) CreateReplicationSlot(name string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), p.requestTimeout)
 	defer cancel()
-	return CreateReplicationSlot(ctx, p.localConnString, name)
+	return createReplicationSlot(ctx, p.localConnParams, name)
 }
 
 func (p *Manager) DropReplicationSlot(name string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), p.requestTimeout)
 	defer cancel()
-	return DropReplicationSlot(ctx, p.localConnString, name)
+	return dropReplicationSlot(ctx, p.localConnParams, name)
 }
 
 func (p *Manager) IsInitialized() (bool, error) {
@@ -324,7 +336,7 @@ func (p *Manager) IsInitialized() (bool, error) {
 func (p *Manager) GetRoleFromDB() (common.Role, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), p.requestTimeout)
 	defer cancel()
-	return GetRole(ctx, p.localConnString)
+	return getRole(ctx, p.localConnParams)
 }
 
 func (p *Manager) GetRole() (common.Role, error) {
@@ -361,7 +373,7 @@ func (p *Manager) GetPrimaryConninfo() (ConnParams, error) {
 	return nil, nil
 }
 
-func (p *Manager) HasConnString() (bool, error) {
+func (p *Manager) HasConnParams() (bool, error) {
 	regex, err := regexp.Compile(`primary_conninfo`)
 	if err != nil {
 		return false, err
@@ -531,4 +543,16 @@ func (p *Manager) RemoveAll() error {
 		return fmt.Errorf("cannot remove postregsql database. Instance is active")
 	}
 	return os.RemoveAll(p.dataDir)
+}
+
+func (p *Manager) GetSystemData() (*SystemData, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), p.requestTimeout)
+	defer cancel()
+	return getSystemData(ctx, p.replConnParams)
+}
+
+func (p *Manager) GetTimelinesHistory(timeline uint64) ([]*TimelineHistory, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), p.requestTimeout)
+	defer cancel()
+	return getTimelinesHistory(ctx, timeline, p.replConnParams)
 }
