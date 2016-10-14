@@ -1,5 +1,5 @@
-hash: f1a42c7be85ff482748c56a31dedd1be6c03d49942fe5d4593c9fb3aee5907dd
-updated: 2016-09-09T11:46:59.899879255+02:00
+hash: 1214d64d1e03c09752f36816fc095a6a4014496e8628d4b0448632f95d0b052d
+updated: 2016-10-14T15:30:29.012897725+02:00
 imports:
 - name: github.com/cloudfoundry-incubator/candiedyaml
   version: 99c3df83b51532e3615f851d8c2dbb638f5313bf
@@ -12,7 +12,7 @@ imports:
   - pkg/pathutil
   - pkg/types
 - name: github.com/coreos/go-systemd
-  version: 2f344660b11f7285b0af86195c4456e92970f640
+  version: 43e4800a6165b4e02bb2a36673c54b230d6f7b26
   subpackages:
   - journal
 - name: github.com/coreos/pkg
@@ -20,7 +20,7 @@ imports:
   subpackages:
   - capnslog
 - name: github.com/coreos/rkt
-  version: 0491f0f2ddbaa3ad219f93ef03b7877aae7f55cb
+  version: daeae7ea528ff30afe6aaea52df9cacd03e24eb9
   subpackages:
   - pkg/lock
 - name: github.com/davecgh/go-spew
@@ -38,11 +38,11 @@ imports:
 - name: github.com/ghodss/yaml
   version: aa0c862057666179de291b67d9f093d12b5a8473
 - name: github.com/gorilla/context
-  version: 08b5f424b9271eedf6f9f0ce86cb9396ed337a42
+  version: 50c25fb3b2b3b3cc724e9b6ac75fb44b3bccd0da
 - name: github.com/gorilla/mux
-  version: 0a192a193177452756c362c20087ddafcf6829c4
+  version: 0eeaf8392f5b04950925b8a69fe70f110fa7cbfc
 - name: github.com/hashicorp/consul
-  version: 0a34741d7266af34eed36048d1a8e8880a7b17a1
+  version: 41f1764434246ba7ee91625fb9a23d94ae6d6e19
   subpackages:
   - api
 - name: github.com/hashicorp/errwrap
@@ -50,7 +50,7 @@ imports:
 - name: github.com/hashicorp/go-cleanhttp
   version: ad28ea4487f05916463e2423a55166280e8254b5
 - name: github.com/hashicorp/serf
-  version: 9432bc08aa8d486e497e27f84878ebbe8c1eab66
+  version: 1d4fa605f6ff3ed628d7ae5eda7c0e56803e72a5
   subpackages:
   - coordinate
 - name: github.com/inconshreveable/mousetrap
@@ -58,15 +58,15 @@ imports:
 - name: github.com/jmoiron/jsonq
   version: e874b168d07ecc7808bc950a17998a8aa3141d82
 - name: github.com/kballard/go-shellquote
-  version: d8ec1a69a250a17bb0e419c386eac1f3711dc142
+  version: e5c918b80c17694cbc49aab32a759f9a40067f5d
 - name: github.com/kr/pty
-  version: ce7fa45920dc37a92de8377972e52bc55ffa8d57
+  version: f7ee69f31298ecbe5d2b349c711e2547a617d398
 - name: github.com/lib/pq
   version: 50761b0867bd1d9d069276790bcd4a3bccf2324a
   subpackages:
   - oid
 - name: github.com/satori/go.uuid
-  version: 0aa62d5ddceb50dbcb909d790b5345affd3669b6
+  version: 879c5887cd475cd7864858769793b2ceb0d44feb
 - name: github.com/sgotti/gexpect
   version: 81b69f472c22d5a42aefcf07b58015d0ef4da2e1
 - name: github.com/sorintlab/pollon
