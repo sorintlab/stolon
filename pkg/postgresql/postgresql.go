@@ -17,7 +17,6 @@ package postgresql
 import (
 	"bufio"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -285,22 +284,41 @@ func (p *Manager) DropReplicationSlot(name string) error {
 }
 
 func (p *Manager) IsInitialized() (bool, error) {
-	// TODO improve checks
-	dir, err := os.Open(p.dataDir)
-	if err != nil {
-		if os.IsNotExist(err) {
+	// List of required files or directories relative to postgres data dir
+	// From https://www.postgresql.org/docs/9.4/static/storage-file-layout.html
+	// with some additions.
+	// TODO(sgotti) when the code to get the current db version is in place
+	// also add additinal files introduced by releases after 9.4.
+	requiredFiles := []string{
+		"PG_VERSION",
+		"base",
+		"global",
+		"pg_clog",
+		"pg_dynshmem",
+		"pg_logical",
+		"pg_multixact",
+		"pg_notify",
+		"pg_replslot",
+		"pg_serial",
+		"pg_snapshots",
+		"pg_stat",
+		"pg_stat_tmp",
+		"pg_subtrans",
+		"pg_tblspc",
+		"pg_twophase",
+		"pg_xlog",
+		"global/pg_control",
+	}
+	for _, f := range requiredFiles {
+		exists, err := fileExists(filepath.Join(p.dataDir, f))
+		if err != nil {
+			return false, err
+		}
+		if !exists {
 			return false, nil
 		}
-		return false, err
 	}
-	n, err := dir.Readdirnames(1)
-	if err != nil && err != io.EOF {
-		return false, err
-	}
-	if len(n) > 0 {
-		return true, nil
-	}
-	return false, nil
+	return true, nil
 }
 
 func (p *Manager) GetRoleFromDB() (common.Role, error) {
