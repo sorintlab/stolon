@@ -552,15 +552,31 @@ func (p *PostgresKeeper) isDifferentTimelineBranch(fPGState *cluster.PostgresSta
 		log.Infof("followed instance timeline %d < than our timeline %d", fPGState.TimelineID, pgState.TimelineID)
 		return true
 	}
+
+	// if the timelines are the same check that also the switchpoints are the same.
 	if fPGState.TimelineID == pgState.TimelineID {
-		return false
+		if pgState.TimelineID <= 1 {
+			// if timeline <= 1 then no timeline history file exists.
+			return false
+		}
+		ftlh := fPGState.TimelinesHistory.GetTimelineHistory(pgState.TimelineID - 1)
+		tlh := pgState.TimelinesHistory.GetTimelineHistory(pgState.TimelineID - 1)
+		if ftlh == nil || tlh == nil {
+			// No timeline history to check
+			return false
+		}
+		if ftlh.SwitchPoint == tlh.SwitchPoint {
+			return false
+		}
+		log.Infof("followed instance timeline %d forked at a different xlog pos %d then our timeline (timeline %d at xlog pos %d)", fPGState.TimelineID, ftlh.SwitchPoint, pgState.TimelineID, tlh.SwitchPoint)
+		return true
 	}
 
 	// fPGState.TimelineID > pgState.TimelineID
-	tlh := fPGState.TimelinesHistory.GetTimelineHistory(pgState.TimelineID)
-	if tlh != nil {
-		if tlh.SwitchPoint < pgState.XLogPos {
-			log.Infof("followed instance timeline %d forked at xlog pos %d before our current state (timeline %d at xlog pos %d)", fPGState.TimelineID, tlh.SwitchPoint, pgState.TimelineID, pgState.XLogPos)
+	ftlh := fPGState.TimelinesHistory.GetTimelineHistory(pgState.TimelineID)
+	if ftlh != nil {
+		if ftlh.SwitchPoint < pgState.XLogPos {
+			log.Infof("followed instance timeline %d forked at xlog pos %d before our current state (timeline %d at xlog pos %d)", fPGState.TimelineID, ftlh.SwitchPoint, pgState.TimelineID, pgState.XLogPos)
 			return true
 		}
 	}
