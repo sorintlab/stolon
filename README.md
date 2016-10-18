@@ -75,6 +75,30 @@ For our need to forcibly close connections to unelected masters and handle keepe
 
 We are open to alternative solutions (PRs are welcome) like using haproxy if they can met the above requirements. For example, an hypothetical haproxy based proxy needs a way to work with changing ip addresses, get the current cluster information and being able to forcibly close a connection when an haproxy backend is marked as failed (as a note, to achieve the latter, a possible solution that needs testing will be to use the [on-marked-down shutdown-sessions](https://cbonte.github.io/haproxy-dconv/configuration-1.6.html#5.2-on-marked-down) haproxy server option).
 
+### How does Stolon differ from ____?
+
+#### Pure Kubernetes
+
+Stolon does not require a shared volume be attached to whatever node the Postgres container is running on. **Is Stolon faster than K8's pod process?? Is that another reason? I can't imagine it would be that different**. With a pure Kubernetes approach and something like an EBS volume, you can have a single Postgres master and even slave nodes with replication that could serve as read only servers. In the event of a master failure, K8S can move the DB container around and repoint the service as necessary.
+
+#### Pacemaker
+
+Stolon eliminates the fencing/shared storage requirement because:
+1. It can rely on etcd/consul clustering in the event of partitions
+2. It makes more assumptions (consistency) about what to do in these events (see the `testTimelineFork` integration test for some examples.)
+
+### Why is fencing not necessary with Stolon?
+
+First, no shared storage. Then we can have multiple cases of partitioning. So we try to solve this primarily in two ways: 1) The sentinel computes a "wanted" component states (now called cluster view). The keepers and the proxies try to converge to this states. 2) The stolon-proxy is the one that forces clients to the right master and forcibly closes connection to unelected ones. So you have to connect to the master only via the proxy. So, if all the stolon components behave correctly we can avoid fencing.
+
+### What happens if etcd is partitioned?
+
+Etcd isn't a problem. Due to Raft it'll only work with a quorum so there's no way to write to partition without quorum. In this case all the stolon will get an error and then retry in the next interval. Additionally the stolon-proxy, if it cannot talk with etcd, by default will drop all connection to the master since it cannot know if the cluster view has changed (for example if the proxy has problems talking with etcd but the sentinel can talk).
+
+### How are backups handled with Stolon?
+
+**TBD. Explain a little about WAL-E, how to configure Stolon to work with it and what happens when partitions, etc. occur.**
+
 ## Contributing to stolon
 
 stolon is an open source project under the Apache 2.0 license, and contributions are gladly welcomed!
