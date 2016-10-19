@@ -27,6 +27,7 @@ import (
 
 	_ "github.com/lib/pq"
 	"golang.org/x/net/context"
+	"os"
 )
 
 var (
@@ -321,4 +322,14 @@ func GetTimelinesHistory(ctx context.Context, timeline uint64, replConnParams Co
 
 func IsValidReplSlotName(name string) bool {
 	return ValidReplSlotName.MatchString(name)
+}
+
+func fileExists(path string) (bool, error) {
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
