@@ -137,22 +137,6 @@ func (e *StoreManager) GetClusterData() (*cluster.ClusterData, *kvstore.KVPair, 
 	return cd, pair, nil
 }
 
-func (e *StoreManager) GetKeepersState() (cluster.KeepersState, *kvstore.KVPair, error) {
-	cd, pair, err := e.GetClusterData()
-	if err != nil || cd == nil {
-		return nil, pair, err
-	}
-	return cd.KeepersState, pair, nil
-}
-
-func (e *StoreManager) GetClusterView() (*cluster.ClusterView, *kvstore.KVPair, error) {
-	cd, pair, err := e.GetClusterData()
-	if err != nil || cd == nil {
-		return nil, pair, err
-	}
-	return cd.ClusterView, pair, nil
-}
-
 func (e *StoreManager) SetKeeperDiscoveryInfo(id string, ms *cluster.KeeperDiscoveryInfo, ttl time.Duration) error {
 	msj, err := json.Marshal(ms)
 	if err != nil {

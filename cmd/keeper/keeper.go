@@ -432,6 +432,12 @@ func (p *PostgresKeeper) Start() {
 		log.Errorf("error retrieving cluster data: %v", err)
 		time.Sleep(cluster.DefaultSleepInterval)
 	}
+	if cd != nil {
+		if cd.FormatVersion != cluster.CurrentCDFormatVersion {
+			log.Errorf("unsupported clusterdata format version %d", cd.FormatVersion)
+			return
+		}
+	}
 
 	var cv *cluster.ClusterView
 	if cd == nil {
@@ -597,11 +603,21 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 	e := p.e
 	pgm := p.pgm
 
-	cv, _, err := e.GetClusterView()
+	cd, _, err := e.GetClusterData()
 	if err != nil {
-		log.Errorf("error retrieving cluster view: %v", err)
+		log.Errorf("error retrieving cluster data: %v", err)
 		return
 	}
+	if cd == nil {
+		log.Infof("no clusterdata available, waiting for it to appear")
+		return
+	}
+	if cd.FormatVersion != cluster.CurrentCDFormatVersion {
+		log.Errorf("unsupported clusterdata format version %d", cd.FormatVersion)
+		return
+	}
+
+	cv := cd.ClusterView
 	log.Debugf(spew.Sprintf("clusterView: %#v", cv))
 
 	if cv == nil {
@@ -623,11 +639,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 	// update pgm postgres parameters
 	pgm.SetParameters(pgParameters)
 
-	keepersState, _, err := e.GetKeepersState()
-	if err != nil {
-		log.Errorf("err: %v", err)
-		return
-	}
+	keepersState := cd.KeepersState
 	if keepersState == nil {
 		keepersState = cluster.KeepersState{}
 	}

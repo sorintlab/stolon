@@ -38,10 +38,17 @@ func init() {
 }
 
 func getConfig(e *store.StoreManager) (*cluster.NilConfig, error) {
-	cv, _, err := e.GetClusterView()
+	cd, _, err := e.GetClusterData()
 	if err != nil {
-		return nil, fmt.Errorf("cannot get clusterview: %v", err)
+		return nil, fmt.Errorf("cannot get clusterdata: %v", err)
 	}
+	if cd == nil {
+		return nil, fmt.Errorf("nil cluster data: %v", err)
+	}
+	if cd.FormatVersion != cluster.CurrentCDFormatVersion {
+		return nil, fmt.Errorf("unsupported clusterdata format version %d", cd.FormatVersion)
+	}
+	cv := cd.ClusterView
 	if cv == nil {
 		return nil, fmt.Errorf("no clusterview available")
 	}

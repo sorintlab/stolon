@@ -74,7 +74,6 @@ func TestInit(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	t.Logf("database is up")
-
 }
 
 func TestInitUsers(t *testing.T) {
@@ -243,10 +242,11 @@ func TestInitialClusterConfig(t *testing.T) {
 		t.Fatal("expected cluster initialized")
 	}
 
-	cv, _, err := e.GetClusterView()
+	cd, _, err := e.GetClusterData()
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
+	cv := cd.ClusterView
 	if !*cv.Config.SynchronousReplication {
 		t.Fatal("expected cluster config with SynchronousReplication enabled")
 	}

@@ -161,22 +161,34 @@ func (c *ClusterChecker) SetProxyInfo(e *store.StoreManager, cvVersion int, ttl 
 }
 
 func (c *ClusterChecker) Check() error {
-	cv, _, err := c.e.GetClusterView()
+	cd, _, err := c.e.GetClusterData()
 	if err != nil {
-		log.Errorf("cannot get clusterview: %v", err)
+		log.Errorf("cannot get clusterdata: %v", err)
 		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
 		if c.stopListening {
 			c.stopPollonProxy()
 		}
 		return nil
 	}
-	log.Debugf(spew.Sprintf("clusterview: %#v", cv))
+	if cd == nil {
+		log.Infof("no clusterdata available, closing connections to previous master")
+		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
+		return nil
+	}
+	if cd.FormatVersion != cluster.CurrentCDFormatVersion {
+		log.Errorf("unsupported clusterdata format version %d", cd.FormatVersion)
+		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
+		return nil
+	}
 
 	// Start pollon if not active
 	if err = c.startPollonProxy(); err != nil {
 		log.Errorf("failed to start proxy: %v", err)
 		return nil
 	}
+
+	cv := cd.ClusterView
+	log.Debugf(spew.Sprintf("clusterview: %#v", cv))
 
 	if cv == nil {
 		log.Infof("no clusterview available, closing connections to previous master")
