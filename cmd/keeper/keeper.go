@@ -354,6 +354,7 @@ func (p *PostgresKeeper) updatePGState(pctx context.Context) {
 	defer p.pgStateMutex.Unlock()
 	pgState, err := p.GetPGState(pctx)
 	if err != nil {
+		log.Errorf("failed to get pg state: %v", err)
 		return
 	}
 	p.lastPGState = pgState
@@ -372,24 +373,33 @@ func (p *PostgresKeeper) GetPGState(pctx context.Context) (*cluster.PostgresStat
 	if !initialized {
 		pgState.Initialized = false
 	} else {
-		ctx, cancel := context.WithTimeout(pctx, p.clusterConfig.RequestTimeout)
-		pgState, err = pg.GetPGState(ctx, p.getOurReplConnParams())
-		cancel()
+		sd, err := p.pgm.GetSystemData()
 		if err != nil {
 			return nil, fmt.Errorf("error getting pg state: %v", err)
 		}
 		pgState.Initialized = true
+		pgState.SystemID = sd.SystemID
+		pgState.TimelineID = sd.TimelineID
+		pgState.XLogPos = sd.XLogPos
 
 		// if timeline <= 1 then no timeline history file exists.
-		pgState.TimelinesHistory = cluster.PostgresTimeLinesHistory{}
+		pgState.TimelinesHistory = cluster.PostgresTimelinesHistory{}
 		if pgState.TimelineID > 1 {
-			ctx, cancel = context.WithTimeout(pctx, p.clusterConfig.RequestTimeout)
-			tlsh, err := pg.GetTimelinesHistory(ctx, pgState.TimelineID, p.getOurReplConnParams())
-			cancel()
+			tlsh, err := p.pgm.GetTimelinesHistory(pgState.TimelineID)
 			if err != nil {
 				return nil, fmt.Errorf("error getting timeline history: %v", err)
 			}
-			pgState.TimelinesHistory = tlsh
+			ctlsh := cluster.PostgresTimelinesHistory{}
+
+			for _, tlh := range tlsh {
+				ctlh := &cluster.PostgresTimelineHistory{
+					TimelineID:  tlh.TimelineID,
+					SwitchPoint: tlh.SwitchPoint,
+					Reason:      tlh.Reason,
+				}
+				ctlsh = append(ctlsh, ctlh)
+			}
+			pgState.TimelinesHistory = ctlsh
 		}
 	}
 
@@ -443,7 +453,7 @@ func (p *PostgresKeeper) Start() {
 	// (RequestTimeout) after a changed cluster config
 	followersIDs := cv.GetFollowersIDs(p.id)
 	pgParameters := p.createPGParameters(followersIDs)
-	pgm := postgresql.NewManager(p.id, p.pgBinPath, p.dataDir, p.pgConfDir, pgParameters, p.getLocalConnParams().ConnString(), p.getOurReplConnParams().ConnString(), p.pgSUUsername, p.pgSUPassword, p.pgReplUsername, p.pgReplPassword, p.clusterConfig.RequestTimeout)
+	pgm := postgresql.NewManager(p.id, p.pgBinPath, p.dataDir, p.pgConfDir, pgParameters, p.getLocalConnParams(), p.getOurReplConnParams(), p.pgSUUsername, p.pgSUPassword, p.pgReplUsername, p.pgReplPassword, p.clusterConfig.RequestTimeout)
 	p.pgm = pgm
 
 	p.pgm.Stop(true)

@@ -16,10 +16,6 @@ package cluster
 
 import "github.com/sorintlab/stolon/common"
 
-type Keeper struct {
-	ClusterViewVersion int
-}
-
 type KeepersInfo map[string]*KeeperInfo
 
 type KeeperInfo struct {
@@ -39,24 +35,24 @@ func (k *KeeperInfo) Copy() *KeeperInfo {
 	return &nk
 }
 
-type PostgresTimeLinesHistory []*PostgresTimeLineHistory
+type PostgresTimelinesHistory []*PostgresTimelineHistory
 
-func (tlsh PostgresTimeLinesHistory) Copy() PostgresTimeLinesHistory {
+func (tlsh PostgresTimelinesHistory) Copy() PostgresTimelinesHistory {
 	if tlsh == nil {
 		return nil
 	}
-	ntlsh := make(PostgresTimeLinesHistory, len(tlsh))
+	ntlsh := make(PostgresTimelinesHistory, len(tlsh))
 	copy(ntlsh, tlsh)
 	return ntlsh
 }
 
-type PostgresTimeLineHistory struct {
+type PostgresTimelineHistory struct {
 	TimelineID  uint64
 	SwitchPoint uint64
 	Reason      string
 }
 
-func (tlsh PostgresTimeLinesHistory) GetTimelineHistory(id uint64) *PostgresTimeLineHistory {
+func (tlsh PostgresTimelinesHistory) GetTimelineHistory(id uint64) *PostgresTimelineHistory {
 	for _, tlh := range tlsh {
 		if tlh.TimelineID == id {
 			return tlh
@@ -71,7 +67,7 @@ type PostgresState struct {
 	SystemID         string
 	TimelineID       uint64
 	XLogPos          uint64
-	TimelinesHistory PostgresTimeLinesHistory
+	TimelinesHistory PostgresTimelinesHistory
 }
 
 func (p *PostgresState) Copy() *PostgresState {
