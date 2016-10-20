@@ -1,12 +1,15 @@
 package: github.com/sorintlab/stolon
 import:
 - package: github.com/coreos/pkg
+  version: 3ac0863d7acf3bc44daf49afef8919af12f704ef
   subpackages:
   - capnslog
 - package: github.com/coreos/rkt
+  version: v1.16.0
   subpackages:
   - pkg/lock
 - package: github.com/davecgh/go-spew
+  version: 6d212800a42e8ab5c146b8ace3490ee17e5225f9
   subpackages:
   - spew
 - package: github.com/docker/leadership
@@ -18,14 +21,23 @@ import:
   - store/consul
   - store/etcd
 - package: github.com/gorilla/mux
+  version: v1.1
 - package: github.com/jmoiron/jsonq
+  version: e874b168d07ecc7808bc950a17998a8aa3141d82
 - package: github.com/lib/pq
+  version: 50761b0867bd1d9d069276790bcd4a3bccf2324a
 - package: github.com/satori/go.uuid
+  version: v1.1.0
 - package: github.com/sgotti/gexpect
+  version: 81b69f472c22d5a42aefcf07b58015d0ef4da2e1
 - package: github.com/sorintlab/pollon
+  version: 0fc4e27d6290f15d02d35f438ffa58068dee2014
 - package: github.com/spf13/cobra
+  version: 9c28e4bbd74e5c3ed7aacbc552b2cab7cfdfe744
 - package: github.com/spf13/pflag
+  version: 6fd2ff4ff8dfcdf5556fbdc0ac0284408274b1a7
 - package: golang.org/x/net
+  version: 9313baa13d9262e49d07b20ed57dceafcd7240cc
   subpackages:
   - context
 - package: k8s.io/kubernetes
