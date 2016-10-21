@@ -744,10 +744,12 @@ func (ts *TestStore) WaitDown(timeout time.Duration) error {
 func WaitClusterViewWithMaster(e *store.StoreManager, timeout time.Duration) error {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
-		cv, _, err := e.GetClusterView()
-		if err != nil {
+		var cv *cluster.ClusterView
+		cd, _, err := e.GetClusterData()
+		if err != nil || cd == nil {
 			goto end
 		}
+		cv = cd.ClusterView
 		if cv != nil {
 			if cv.Master != "" {
 				return nil
@@ -762,10 +764,12 @@ func WaitClusterViewWithMaster(e *store.StoreManager, timeout time.Duration) err
 func WaitClusterViewMaster(master string, e *store.StoreManager, timeout time.Duration) error {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
-		cv, _, err := e.GetClusterView()
-		if err != nil {
+		var cv *cluster.ClusterView
+		cd, _, err := e.GetClusterData()
+		if err != nil || cd == nil {
 			goto end
 		}
+		cv = cd.ClusterView
 		if cv != nil {
 			if cv.Master == master {
 				return nil
@@ -780,10 +784,12 @@ func WaitClusterViewMaster(master string, e *store.StoreManager, timeout time.Du
 func WaitClusterInitialized(e *store.StoreManager, timeout time.Duration) error {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
-		cv, _, err := e.GetClusterView()
-		if err != nil {
+		var cv *cluster.ClusterView
+		cd, _, err := e.GetClusterData()
+		if err != nil || cd == nil {
 			goto end
 		}
+		cv = cd.ClusterView
 		if cv != nil {
 			if cv.Version > 0 {
 				return nil

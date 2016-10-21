@@ -741,6 +741,12 @@ func (s *Sentinel) clusterSentinelCheck(pctx context.Context) {
 		log.Errorf("error retrieving cluster data: %v", err)
 		return
 	}
+	if cd != nil {
+		if cd.FormatVersion != cluster.CurrentCDFormatVersion {
+			log.Errorf("unsupported clusterdata format version %d", cd.FormatVersion)
+			return
+		}
+	}
 
 	var cv *cluster.ClusterView
 	var keepersState cluster.KeepersState

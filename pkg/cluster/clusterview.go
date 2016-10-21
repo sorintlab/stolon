@@ -21,6 +21,10 @@ import (
 	"time"
 )
 
+const (
+	CurrentCDFormatVersion uint64 = 0
+)
+
 type KeepersState map[string]*KeeperState
 
 func (kss KeepersState) SortedKeys() []string {
@@ -221,6 +225,12 @@ func (cv *ClusterView) GetFollowersIDs(id string) []string {
 
 // A struct containing the KeepersState and the ClusterView since they need to be in sync
 type ClusterData struct {
+	// ClusterData format version. Used to detect incompatible
+	// version and do upgrade. Needs to be bumped when a non
+	// backward compatible change is done to the other struct
+	// members.
+	FormatVersion uint64
+
 	KeepersState KeepersState
 	ClusterView  *ClusterView
 }
