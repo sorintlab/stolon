@@ -411,7 +411,7 @@ func (p *Manager) WriteConf() error {
 	return nil
 }
 
-func (p *Manager) WriteRecoveryConf(followedConnParams ConnParams) error {
+func (p *Manager) WriteRecoveryConf(followedConnParams ConnParams, replSlotName string) error {
 	f, err := ioutil.TempFile(p.dataDir, "recovery.conf")
 	if err != nil {
 		return err
@@ -419,7 +419,9 @@ func (p *Manager) WriteRecoveryConf(followedConnParams ConnParams) error {
 	defer f.Close()
 
 	f.WriteString("standby_mode = 'on'\n")
-	f.WriteString(fmt.Sprintf("primary_slot_name = '%s'\n", p.name))
+	if replSlotName != "" {
+		f.WriteString(fmt.Sprintf("primary_slot_name = '%s'\n", replSlotName))
+	}
 	f.WriteString("recovery_target_timeline = 'latest'\n")
 
 	if followedConnParams != nil {
