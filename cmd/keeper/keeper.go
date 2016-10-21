@@ -107,7 +107,7 @@ func init() {
 	cmdKeeper.PersistentFlags().BoolVar(&cfg.debug, "debug", false, "enable debug logging")
 }
 
-var defaultPGParameters = pg.Parameters{
+var mandatoryPGParameters = pg.Parameters{
 	"unix_socket_directories": "/tmp",
 	"wal_level":               "hot_standby",
 	"wal_keep_segments":       "8",
@@ -178,33 +178,37 @@ func (p *PostgresKeeper) getOurReplConnParams() pg.ConnParams {
 }
 
 func (p *PostgresKeeper) createPGParameters(followersIDs []string) pg.Parameters {
-	pgParameters := p.clusterConfig.PGParameters
-
-	// Merge default PGParameters
-	for k, v := range defaultPGParameters.Copy() {
-		pgParameters[k] = v
+	parameters := pg.Parameters{}
+	// Copy user defined pg parameters
+	for k, v := range p.clusterConfig.PGParameters {
+		parameters[k] = v
 	}
 
-	pgParameters["listen_addresses"] = fmt.Sprintf("127.0.0.1,%s", p.pgListenAddress)
-	pgParameters["port"] = p.pgPort
-	pgParameters["max_replication_slots"] = strconv.FormatUint(uint64(p.clusterConfig.MaxStandbysPerSender), 10)
+	// Add/Replace mandatory PGParameters
+	for k, v := range mandatoryPGParameters {
+		parameters[k] = v
+	}
+
+	parameters["listen_addresses"] = fmt.Sprintf("127.0.0.1,%s", p.pgListenAddress)
+	parameters["port"] = p.pgPort
+	parameters["max_replication_slots"] = strconv.FormatUint(uint64(p.clusterConfig.MaxStandbysPerSender), 10)
 	// Add some more wal senders, since also the keeper will use them
-	pgParameters["max_wal_senders"] = strconv.FormatUint(uint64(p.clusterConfig.MaxStandbysPerSender+2), 10)
+	parameters["max_wal_senders"] = strconv.FormatUint(uint64(p.clusterConfig.MaxStandbysPerSender+2), 10)
 
 	// required by pg_rewind
 	// if database has data checksum enabled it's ignored
 	if p.clusterConfig.UsePGRewind {
-		pgParameters["wal_log_hints"] = "on"
+		parameters["wal_log_hints"] = "on"
 	}
 
 	// Setup synchronous replication
 	if p.clusterConfig.SynchronousReplication {
-		pgParameters["synchronous_standby_names"] = strings.Join(followersIDs, ",")
+		parameters["synchronous_standby_names"] = strings.Join(followersIDs, ",")
 	} else {
-		pgParameters["synchronous_standby_names"] = ""
+		parameters["synchronous_standby_names"] = ""
 	}
 
-	return pgParameters
+	return parameters
 }
 
 type PostgresKeeper struct {

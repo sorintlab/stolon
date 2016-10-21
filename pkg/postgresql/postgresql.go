@@ -55,23 +55,6 @@ type Manager struct {
 
 type Parameters map[string]string
 
-func (s Parameters) Copy() Parameters {
-	parameters := Parameters{}
-	for k, v := range s {
-		parameters[k] = v
-	}
-	return parameters
-}
-
-func (s Parameters) Set(k, v string) {
-	s[k] = v
-}
-
-func (s Parameters) Get(k string) (string, bool) {
-	v, ok := s[k]
-	return v, ok
-}
-
 func (s Parameters) Equals(is Parameters) bool {
 	return reflect.DeepEqual(s, is)
 }
