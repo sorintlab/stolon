@@ -12,7 +12,8 @@ Prebuilt images are available on the dockerhub, the images' tags are their relea
 
 In the [image](examples/kubernetes/image/docker) directory you'll find the Dockerfile to build the image used in this example. Once the image is built you should push it to the docker registry used by your kubernetes infrastructure.
 
-`sorintlab/stolon:v0.4.0` is the one used by the kubernetes definitions in this example.
+`sorintlab/stolon:master` is the one used by the kubernetes definitions in this example.
+For a more stable testing you can use `sorintlab/stolon:latest`
 
 ### Keepers discovery
 

@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
       - name: stolon-sentinel
-        image: sorintlab/stolon:v0.4.0
+        image: sorintlab/stolon:master
         env:
           - name: SENTINEL
             value: "true"
