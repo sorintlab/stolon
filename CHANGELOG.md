@@ -1,3 +1,6 @@
+### v0.4.0
+
+Some cleanups and changes in preparation for release v0.5.0 that will receive a big refactor (with different breaking changes) needed to bring a lot of new features.
 
 ### v0.3.0
 

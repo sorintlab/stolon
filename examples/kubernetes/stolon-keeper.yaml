@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
       - name: stolon-keeper
-        image: sorintlab/stolon:master
+        image: sorintlab/stolon:v0.4.0
         env:
           - name: KEEPER
             value: "true"
