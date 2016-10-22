@@ -16,9 +16,14 @@ spec:
       containers:
       - name: stolon-sentinel
         image: sorintlab/stolon:master
+        command:
+          - "/bin/sh"
+          - "-ec"
+          - |
+            export POD_IP=$(hostname -i)
+            export STSENTINEL_LISTEN_ADDRESS=$POD_IP
+            exec stolon-sentinel
         env:
-          - name: SENTINEL
-            value: "true"
           # Uncomment this if kubernetes discovery doesn't work on your kubernetes cluster (for example no api service certificates configured or https api serving disabled)
           #- name: STSENTINEL_DISCOVERY_TYPE
           #  value: "store"
