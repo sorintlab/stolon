@@ -117,7 +117,13 @@ func TestInitUsers(t *testing.T) {
 	clusterName = uuid.NewV4().String()
 	storePath := filepath.Join(common.StoreBasePath, clusterName)
 
-	kvstore, err := store.NewStore(tstore.storeBackend, storeEndpoints)
+	kvstore, err := store.NewStore(
+		tstore.storeBackend,
+		storeEndpoints,
+		"",
+		"",
+		"",
+	)
 	if err != nil {
 		t.Fatalf("cannot create store: %v", err)
 	}
@@ -153,7 +159,13 @@ func TestInitUsers(t *testing.T) {
 	clusterName = uuid.NewV4().String()
 	storePath = filepath.Join(common.StoreBasePath, clusterName)
 
-	kvstore, err = store.NewStore(tstore.storeBackend, storeEndpoints)
+	kvstore, err = store.NewStore(
+		tstore.storeBackend,
+		storeEndpoints,
+		"",
+		"",
+		"",
+	)
 	if err != nil {
 		t.Fatalf("cannot create store: %v", err)
 	}
@@ -215,7 +227,13 @@ func TestInitialClusterConfig(t *testing.T) {
 	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
 	storePath := filepath.Join(common.StoreBasePath, clusterName)
 
-	kvstore, err := store.NewStore(tstore.storeBackend, storeEndpoints)
+	kvstore, err := store.NewStore(
+		tstore.storeBackend,
+		storeEndpoints,
+		"",
+		"",
+		"",
+	)
 	if err != nil {
 		t.Fatalf("cannot create store: %v", err)
 	}

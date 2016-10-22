@@ -53,7 +53,13 @@ func TestServerParameters(t *testing.T) {
 
 	storePath := filepath.Join(common.StoreBasePath, clusterName)
 
-	kvstore, err := store.NewStore(tstore.storeBackend, storeEndpoints)
+	kvstore, err := store.NewStore(
+		tstore.storeBackend,
+		storeEndpoints,
+		"",
+		"",
+		"",
+	)
 	if err != nil {
 		t.Fatalf("cannot create store: %v", err)
 	}
