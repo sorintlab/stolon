@@ -1,8 +1,6 @@
-hash: 1214d64d1e03c09752f36816fc095a6a4014496e8628d4b0448632f95d0b052d
-updated: 2016-10-14T15:30:29.012897725+02:00
+hash: bd6afb8c3fdfad7dd3445fd3a87234e54f60fd7dea3e7ce619bcb17fc175fa66
+updated: 2016-10-28T16:21:17.123298944+02:00
 imports:
-- name: github.com/cloudfoundry-incubator/candiedyaml
-  version: 99c3df83b51532e3615f851d8c2dbb638f5313bf
 - name: github.com/coreos/etcd
   version: bc9ddf260115d2680191c46977ae72b837785472
   subpackages:
@@ -36,13 +34,11 @@ imports:
   - store/consul
   - store/etcd
 - name: github.com/ghodss/yaml
-  version: aa0c862057666179de291b67d9f093d12b5a8473
-- name: github.com/gorilla/context
-  version: 50c25fb3b2b3b3cc724e9b6ac75fb44b3bccd0da
+  version: bea76d6a4713e18b7f5321a2b020738552def3ea
 - name: github.com/gorilla/mux
   version: 0eeaf8392f5b04950925b8a69fe70f110fa7cbfc
 - name: github.com/hashicorp/consul
-  version: 41f1764434246ba7ee91625fb9a23d94ae6d6e19
+  version: daacc4be8bee214e3fc4b32a6dd385f5ef1b4c36
   subpackages:
   - api
 - name: github.com/hashicorp/errwrap
@@ -65,6 +61,10 @@ imports:
   version: 50761b0867bd1d9d069276790bcd4a3bccf2324a
   subpackages:
   - oid
+- name: github.com/mitchellh/copystructure
+  version: 5af94aef99f597e6a9e1f6ac6be6ce0f3c96b49d
+- name: github.com/mitchellh/reflectwalk
+  version: 9ad27c461a633e32a235a061d523aefe8f18571d
 - name: github.com/satori/go.uuid
   version: 879c5887cd475cd7864858769793b2ceb0d44feb
 - name: github.com/sgotti/gexpect
@@ -86,6 +86,8 @@ imports:
   version: 9313baa13d9262e49d07b20ed57dceafcd7240cc
   subpackages:
   - context
+- name: gopkg.in/yaml.v2
+  version: e4d366fc3c7938e2958e662b4258c7a89e1f0e3e
 - name: k8s.io/kubernetes
   version: 283137936a498aed572ee22af6774b6fb6e9fd94
   subpackages:
