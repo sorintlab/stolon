@@ -6,12 +6,21 @@ This example assumes a running etcd or consul server on localhost
 
 Note: under ubuntu the `initdb` command is not provided in the path. You should updated the exported `PATH` env variable or provide the `--pg-bin-path` command line option to the `stolon-keeper` command.
 
-### Start a sentinel
+### Initialize the cluster
 
-The sentinel will become the sentinels leader for `stolon-cluster` and initialize the first clusterview.
+The first step is to initialize a cluster with a cluster specification. For now we'll just initialize a cluster without providing a cluster specification but using a default one that will just start with an empty database cluster.
 
 ```
-./bin/stolon-sentinel --cluster-name stolon-cluster
+./bin/stolonctl --cluster-name stolon-cluster --store-backend=etcd init
+```
+
+If you want to automate this step you can just pass an initial cluster specification to the sentinels with the `--initial-cluster-spec` option.
+
+### Start a sentinel
+
+The sentinel will become the sentinels leader for the cluster named `stolon-cluster`.
+```
+./bin/stolon-sentinel --cluster-name stolon-cluster --store-backend=etcd
 ```
 
 ```
@@ -23,29 +32,31 @@ sentinel: sentinel leadership acquired
 ### Launch first keeper
 
 ```
-./bin/stolon-keeper --data-dir data/postgres0 --id postgres0 --cluster-name stolon-cluster --pg-repl-username=repluser --pg-repl-password=replpassword
+./bin/stolon-keeper --cluster-name stolon-cluster --store-backend=etcd --id postgres0 --data-dir data/postgres0 --pg-su-password=supassword --pg-repl-username=repluser --pg-repl-password=replpassword
 ```
 
 This will start a stolon keeper with id `postgres0` listening by default on localhost:5431, it will setup and initialize a postgres instance inside `data/postgres0/postgres/`
 
 ```
-keeper: generated id: postgres0
 keeper: id: postgres0
 postgresql: Stopping database
-keeper: Initializing database
+keeper: our keeper data is not available, waiting for it to appear
+keeper: current db UID "" different than cluster data db UID "30376139", initializing the database cluster
 postgresql: Setting required accesses to pg_hba.conf
 postgresql: Starting database
-postgresql: Creating repl user
+postgresql: Setting roles
+postgresql: Defining superuser password
+postgresql: Creating replication role
 postgresql: Stopping database
+keeper: our db requested role is master
 postgresql: Starting database
 ```
 
 The sentinel will elect it as the master instance:
 
 ```
-sentinel: Initializing cluster with master: "postgres0"
-sentinel: updating proxyconf to localhost:5432
-sentinel: I'm the sentinels leader
+sentinel: trying to find initial master
+sentinel: initializing cluster using keeper "postgres0" as master db owner
 ```
 
 ### Start a proxy
@@ -53,12 +64,13 @@ sentinel: I'm the sentinels leader
 Now we can start the proxy
 
 ```
-./bin/stolon-proxy --cluster-name stolon-cluster --port 25432
+./bin/stolon-proxy --cluster-name stolon-cluster --store-backend=etcd --port 25432
 ```
 
 ```
-pgproxy: id: 4b321666
-pgproxy: addr: 127.0.0.1:5432
+proxy: id: a8f586a9
+proxy: Starting proxying
+proxy: master address: 127.0.0.1:5432
 ```
 
 
@@ -67,8 +79,7 @@ pgproxy: addr: 127.0.0.1:5432
 Since this simple cluster is running on localhost, the current user (which started the first keeper) is the same superuser created at db initialization and the default pg_hba.conf trusts it, you can login without a password.
 
 ```
-psql --host 10.247.50.217 --port 5432 postgres
-Password for user stolon:
+psql --host localhost --port 25432 postgres
 psql (9.4.5, server 9.4.4)
 Type "help" for help.
 
@@ -94,7 +105,7 @@ postgres=# select * from test;
 ### Start another keeper:
 
 ```
-./bin/stolon-keeper --data-dir data/postgres1 --id postgres1 --cluster-name stolon-cluster --pg-repl-username=repluser --pg-repl-password=replpassword --port 5433 --pg-port 5435 
+./bin/stolon-keeper --cluster-name stolon-cluster --store-backend=etcd --id postgres1 --data-dir data/postgres1 --pg-su-password=supassword --pg-repl-username=repluser --pg-repl-password=replpassword --port 5433 --pg-port 5435
 ```
 
 This instance will start replicating from the master (postgres0)
@@ -111,11 +122,9 @@ You can now try killing the actual keeper managing the master postgres instance 
 
 
 ```
-sentinel: master is failed
+sentinel: master db "30376139" on keeper "postgres0" is failed
 sentinel: trying to find a standby to replace failed master
-sentinel: electing new master: "postgres1"
-sentinel: deleting proxyconf
-sentinel: updating proxyconf to localhost:5435
+sentinel: electing db "64646634" on keeper "postgres1" as the new master
 ```
 
 Now, inside the previous `psql` session you can redo the last select. The first time `psql` will report that the connection was closed and then it successfully reconnected:
