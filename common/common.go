@@ -20,16 +20,10 @@ const (
 	SentinelLeaderKey = "sentinel-leader"
 )
 
-type Role uint8
+type Role string
 
 const (
-	MasterRole Role = iota
-	StandbyRole
+	RoleUndefined Role = "undefined"
+	RoleMaster    Role = "master"
+	RoleStandby   Role = "standby"
 )
-
-func (r Role) String() string {
-	if r == MasterRole {
-		return "master"
-	}
-	return "standby"
-}

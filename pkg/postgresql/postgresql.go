@@ -338,12 +338,12 @@ func (p *Manager) GetRoleFromDB() (common.Role, error) {
 func (p *Manager) GetRole() (common.Role, error) {
 	curConnParams, err := p.GetPrimaryConninfo()
 	if err != nil {
-		return 0, fmt.Errorf("error retrieving primary conn info: %v", err)
+		return "", fmt.Errorf("error retrieving primary conn info: %v", err)
 	}
 	if curConnParams == nil {
-		return common.MasterRole, nil
+		return common.RoleMaster, nil
 	}
-	return common.StandbyRole, nil
+	return common.RoleStandby, nil
 }
 
 func (p *Manager) GetPrimaryConninfo() (ConnParams, error) {

@@ -703,7 +703,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 		return
 	}
 	isMaster := false
-	if role == common.MasterRole {
+	if role == common.RoleMaster {
 		log.Infof("current pg state: master")
 		isMaster = true
 	} else {
@@ -743,7 +743,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 			}
 		}
 
-		if role != common.MasterRole {
+		if role != common.RoleMaster {
 			log.Infof("promoting to master")
 			if err = pgm.Promote(); err != nil {
 				log.Errorf("err: %v", err)
