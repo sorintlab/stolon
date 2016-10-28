@@ -1,4 +1,4 @@
-// Copyright 2015 Sorint.lab
+// Copyright 2016 Sorint.lab
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,14 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package postgresql
 
-import "github.com/spf13/cobra"
+import (
+	"encoding/binary"
+	"os"
+	"path/filepath"
+	"strconv"
+)
 
-var cmdConfig = &cobra.Command{
-	Use: "config",
-}
-
-func init() {
-	cmdStolonCtl.AddCommand(cmdConfig)
+func (p *Manager) GetSystemdID() (string, error) {
+	pgControl, err := os.Open(filepath.Join(p.dataDir, "global", "pg_control"))
+	if err != nil {
+		return "", err
+	}
+	var systemID uint64
+	err = binary.Read(pgControl, binary.LittleEndian, &systemID)
+	if err != nil {
+		return "", err
+	}
+	return strconv.FormatUint(systemID, 10), nil
 }

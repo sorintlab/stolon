@@ -20,318 +20,1206 @@ import (
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
+	"github.com/sorintlab/stolon/common"
 	"github.com/sorintlab/stolon/pkg/cluster"
+	"reflect"
 )
 
-func TestUpdateClusterView(t *testing.T) {
+func TestUpdateCluster(t *testing.T) {
 	tests := []struct {
-		cv           *cluster.ClusterView
-		keepersState cluster.KeepersState
-		outCV        *cluster.ClusterView
-		err          error
+		cd    *cluster.ClusterData
+		outcd *cluster.ClusterData
+		err   error
 	}{
+		// Init phase, also test dbSpec paramaters copied from clusterSpec.
+		// #0 cluster initialization, no keepers
 		{
-			cv:           cluster.NewClusterView(),
-			keepersState: nil,
-			outCV:        cluster.NewClusterView(),
-			err:          fmt.Errorf("cluster view at version 0 without a defined master. This shouldn't happen!"),
-		},
-		{
-			cv: &cluster.ClusterView{
-				Version:     1,
-				KeepersRole: cluster.KeepersRole{},
-			},
-			keepersState: nil,
-			outCV: &cluster.ClusterView{
-				Version:     1,
-				KeepersRole: cluster.KeepersRole{},
-			},
-			err: fmt.Errorf("cannot choose initial master, no keepers registered"),
-		},
-		// cluster initialization, one keeper
-		{
-			cv: &cluster.ClusterView{
-				Version:     1,
-				KeepersRole: cluster.KeepersRole{},
-			},
-			keepersState: cluster.KeepersState{
-				"01": &cluster.KeeperState{PGState: &cluster.PostgresState{Initialized: true}},
-			},
-			outCV: &cluster.ClusterView{
-				Version: 2,
-				Master:  "01",
-				KeepersRole: cluster.KeepersRole{
-					"01": &cluster.KeeperRole{ID: "01", Follow: ""},
+			cd: &cluster.ClusterData{
+				Cluster: &cluster.Cluster{
+					UID:        "cluster01",
+					Generation: 1,
+					Spec: &cluster.ClusterSpec{
+						ConvergenceTimeout:     cluster.Duration{Duration: cluster.DefaultConvergenceTimeout},
+						InitTimeout:            cluster.Duration{Duration: cluster.DefaultInitTimeout},
+						RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout * 2},
+						MaxStandbys:            cluster.DefaultMaxStandbys * 2,
+						SynchronousReplication: true,
+						UsePgrewind:            true,
+						PGParameters:           cluster.PGParameters{"param01": "value01", "param02": "value02"},
+						InitMode:               cluster.ClusterInitModeNew,
+					},
+					Status: cluster.ClusterStatus{
+						CurrentGeneration: 1,
+						Phase:             cluster.ClusterPhaseInitializing,
+					},
 				},
+				Keepers: cluster.Keepers{},
+				DBs:     cluster.DBs{},
+				Proxy:   &cluster.Proxy{},
 			},
-		},
-		// cluster initialization, too many keepers
-		{
-			cv: &cluster.ClusterView{
-				Version:     1,
-				KeepersRole: cluster.KeepersRole{},
-			},
-			keepersState: cluster.KeepersState{
-				"01": &cluster.KeeperState{},
-				"02": &cluster.KeeperState{},
-			},
-			outCV: &cluster.ClusterView{
-				Version:     1,
-				KeepersRole: cluster.KeepersRole{},
-			},
-			err: fmt.Errorf("cannot choose initial master, more than 1 keeper registered"),
-		},
-		// cluster initialization, more then one keeper but InitWithMultipleKeepers == true
-		{
-			cv: &cluster.ClusterView{
-				Version:     1,
-				KeepersRole: cluster.KeepersRole{},
-				Config:      &cluster.NilConfig{InitWithMultipleKeepers: cluster.BoolP(true)},
-			},
-			keepersState: cluster.KeepersState{
-				"01": &cluster.KeeperState{PGState: &cluster.PostgresState{Initialized: true}},
-				"02": &cluster.KeeperState{PGState: &cluster.PostgresState{Initialized: true}},
-			},
-			outCV: &cluster.ClusterView{
-				Version: 2,
-				KeepersRole: cluster.KeepersRole{
-					"01": &cluster.KeeperRole{ID: "01", Follow: ""},
-					"02": &cluster.KeeperRole{ID: "02", Follow: ""},
+			outcd: &cluster.ClusterData{
+				Cluster: &cluster.Cluster{
+					UID:        "cluster01",
+					Generation: 1,
+					Spec: &cluster.ClusterSpec{
+						ConvergenceTimeout:     cluster.Duration{Duration: cluster.DefaultConvergenceTimeout},
+						InitTimeout:            cluster.Duration{Duration: cluster.DefaultInitTimeout},
+						RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout * 2},
+						MaxStandbys:            cluster.DefaultMaxStandbys * 2,
+						SynchronousReplication: true,
+						UsePgrewind:            true,
+						PGParameters:           cluster.PGParameters{"param01": "value01", "param02": "value02"},
+						InitMode:               cluster.ClusterInitModeNew,
+					},
+					Status: cluster.ClusterStatus{
+						CurrentGeneration: 1,
+						Phase:             cluster.ClusterPhaseInitializing,
+					},
 				},
-				Config: &cluster.NilConfig{InitWithMultipleKeepers: cluster.BoolP(true)},
+				Keepers: cluster.Keepers{},
+				DBs:     cluster.DBs{},
+				Proxy:   &cluster.Proxy{},
+			},
+			err: fmt.Errorf("cannot choose initial master: no keepers registered"),
+		},
+		// #1 cluster initialization, one keeper
+		{
+			cd: &cluster.ClusterData{
+				Cluster: &cluster.Cluster{
+					UID:        "cluster01",
+					Generation: 1,
+					Spec: &cluster.ClusterSpec{
+						ConvergenceTimeout:     cluster.Duration{Duration: cluster.DefaultConvergenceTimeout},
+						InitTimeout:            cluster.Duration{Duration: cluster.DefaultInitTimeout},
+						RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout * 2},
+						MaxStandbys:            cluster.DefaultMaxStandbys * 2,
+						SynchronousReplication: true,
+						UsePgrewind:            true,
+						PGParameters:           cluster.PGParameters{"param01": "value01", "param02": "value02"},
+						InitMode:               cluster.ClusterInitModeNew,
+					},
+					Status: cluster.ClusterStatus{
+						CurrentGeneration: 1,
+						Phase:             cluster.ClusterPhaseInitializing,
+					},
+				},
+				Keepers: cluster.Keepers{
+					"keeper01": &cluster.Keeper{
+						UID:  "keeper01",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy: true,
+						},
+					},
+				},
+				DBs:   cluster.DBs{},
+				Proxy: &cluster.Proxy{},
+			},
+			outcd: &cluster.ClusterData{
+				Cluster: &cluster.Cluster{
+					UID:        "cluster01",
+					Generation: 1,
+					Spec: &cluster.ClusterSpec{
+						ConvergenceTimeout:     cluster.Duration{Duration: cluster.DefaultConvergenceTimeout},
+						InitTimeout:            cluster.Duration{Duration: cluster.DefaultInitTimeout},
+						RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout * 2},
+						MaxStandbys:            cluster.DefaultMaxStandbys * 2,
+						SynchronousReplication: true,
+						UsePgrewind:            true,
+						PGParameters:           cluster.PGParameters{"param01": "value01", "param02": "value02"},
+						InitMode:               cluster.ClusterInitModeNew,
+					},
+					Status: cluster.ClusterStatus{
+						CurrentGeneration: 1,
+						Phase:             cluster.ClusterPhaseInitializing,
+						Master:            "db01",
+					},
+				},
+				Keepers: cluster.Keepers{
+					"keeper01": &cluster.Keeper{
+						UID:  "keeper01",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy: true,
+						},
+					},
+				},
+				DBs: cluster.DBs{
+					"db01": &cluster.DB{
+						UID:        "db01",
+						Generation: 1,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID:              "keeper01",
+							RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout * 2},
+							MaxStandbys:            cluster.DefaultMaxStandbys * 2,
+							SynchronousReplication: true,
+							UsePgrewind:            true,
+							PGParameters:           cluster.PGParameters{"param01": "value01", "param02": "value02"},
+							InitMode:               cluster.DBInitModeNew,
+							Role:                   common.RoleMaster,
+							Followers:              []string{},
+						},
+					},
+				},
+				Proxy: &cluster.Proxy{},
+			},
+		},
+		{
+			// #2 cluster initialization, more than one keeper, the first will be choosen to be the new master.
+			cd: &cluster.ClusterData{
+				Cluster: &cluster.Cluster{
+					UID:        "cluster01",
+					Generation: 1,
+					Spec: &cluster.ClusterSpec{
+						ConvergenceTimeout:     cluster.Duration{Duration: cluster.DefaultConvergenceTimeout},
+						InitTimeout:            cluster.Duration{Duration: cluster.DefaultInitTimeout},
+						RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout * 2},
+						MaxStandbys:            cluster.DefaultMaxStandbys * 2,
+						SynchronousReplication: true,
+						UsePgrewind:            true,
+						PGParameters:           cluster.PGParameters{"param01": "value01", "param02": "value02"},
+						InitMode:               cluster.ClusterInitModeNew,
+					},
+					Status: cluster.ClusterStatus{
+						CurrentGeneration: 1,
+						Phase:             cluster.ClusterPhaseInitializing,
+					},
+				},
+				Keepers: cluster.Keepers{
+					"keeper01": &cluster.Keeper{
+						UID:  "keeper01",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy: true,
+						},
+					},
+					"keeper02": &cluster.Keeper{
+						UID:  "keeper02",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy: true,
+						},
+					},
+				},
+				DBs:   cluster.DBs{},
+				Proxy: &cluster.Proxy{},
+			},
+			outcd: &cluster.ClusterData{
+				Cluster: &cluster.Cluster{
+					UID:        "cluster01",
+					Generation: 1,
+					Spec: &cluster.ClusterSpec{
+						ConvergenceTimeout:     cluster.Duration{Duration: cluster.DefaultConvergenceTimeout},
+						InitTimeout:            cluster.Duration{Duration: cluster.DefaultInitTimeout},
+						RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout * 2},
+						MaxStandbys:            cluster.DefaultMaxStandbys * 2,
+						SynchronousReplication: true,
+						UsePgrewind:            true,
+						PGParameters:           cluster.PGParameters{"param01": "value01", "param02": "value02"},
+						InitMode:               cluster.ClusterInitModeNew,
+					},
+					Status: cluster.ClusterStatus{
+						CurrentGeneration: 1,
+						Phase:             cluster.ClusterPhaseInitializing,
+						Master:            "db01",
+					},
+				},
+				Keepers: cluster.Keepers{
+					"keeper01": &cluster.Keeper{
+						UID:  "keeper01",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy: true,
+						},
+					},
+					"keeper02": &cluster.Keeper{
+						UID:  "keeper02",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy: true,
+						},
+					},
+				},
+				DBs: cluster.DBs{
+					"db01": &cluster.DB{
+						UID:        "db01",
+						Generation: 1,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID:              "keeper01",
+							RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout * 2},
+							MaxStandbys:            cluster.DefaultMaxStandbys * 2,
+							SynchronousReplication: true,
+							UsePgrewind:            true,
+							PGParameters:           cluster.PGParameters{"param01": "value01", "param02": "value02"},
+							InitMode:               cluster.DBInitModeNew,
+							Role:                   common.RoleMaster,
+							Followers:              []string{},
+						},
+					},
+				},
+				Proxy: &cluster.Proxy{},
+			},
+		},
+		// #3 cluster initialization, keeper initialization failed
+		{
+			cd: &cluster.ClusterData{
+				Cluster: &cluster.Cluster{
+					UID:        "cluster01",
+					Generation: 1,
+					Spec: &cluster.ClusterSpec{
+						ConvergenceTimeout: cluster.Duration{Duration: cluster.DefaultConvergenceTimeout},
+						InitTimeout:        cluster.Duration{Duration: cluster.DefaultInitTimeout},
+						InitMode:           cluster.ClusterInitModeNew,
+					},
+					Status: cluster.ClusterStatus{
+						CurrentGeneration: 1,
+						Phase:             cluster.ClusterPhaseInitializing,
+						Master:            "db01",
+					},
+				},
+				Keepers: cluster.Keepers{
+					"keeper01": &cluster.Keeper{
+						UID:  "keeper01",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy: true,
+						},
+					},
+					"keeper02": &cluster.Keeper{
+						UID:  "keeper02",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy: true,
+						},
+					},
+				},
+				DBs: cluster.DBs{
+					"db01": &cluster.DB{
+						UID:        "db01",
+						Generation: 1,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID: "keeper01",
+							InitMode:  cluster.DBInitModeNew,
+							Role:      common.RoleMaster,
+							Followers: []string{},
+						},
+						Status: cluster.DBStatus{
+							CurrentGeneration: 0,
+						},
+					},
+				},
+				Proxy: &cluster.Proxy{},
+			},
+			outcd: &cluster.ClusterData{
+				Cluster: &cluster.Cluster{
+					UID:        "cluster01",
+					Generation: 1,
+					Spec: &cluster.ClusterSpec{
+						ConvergenceTimeout: cluster.Duration{Duration: cluster.DefaultConvergenceTimeout},
+						InitTimeout:        cluster.Duration{Duration: cluster.DefaultInitTimeout},
+						InitMode:           cluster.ClusterInitModeNew,
+					},
+					Status: cluster.ClusterStatus{
+						CurrentGeneration: 1,
+						Phase:             cluster.ClusterPhaseInitializing,
+					},
+				},
+				Keepers: cluster.Keepers{
+					"keeper01": &cluster.Keeper{
+						UID:  "keeper01",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy: true,
+						},
+					},
+					"keeper02": &cluster.Keeper{
+						UID:  "keeper02",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy: true,
+						},
+					},
+				},
+				DBs:   cluster.DBs{},
+				Proxy: &cluster.Proxy{},
 			},
 		},
 
-		// One master and one standby, both healthy: no change from previous cv
+		// Normal phase
+		// #4 One master and one standby, both healthy: no change from previous cd
 		{
-			cv: &cluster.ClusterView{
-				Version: 1,
-				Master:  "01",
-				KeepersRole: cluster.KeepersRole{
-					"01": &cluster.KeeperRole{ID: "01", Follow: ""},
-					"02": &cluster.KeeperRole{ID: "02", Follow: "01"},
-				},
-				ProxyConf: &cluster.ProxyConf{Host: "01", Port: "01"},
-			},
-			keepersState: cluster.KeepersState{
-				"01": &cluster.KeeperState{
-					ClusterViewVersion: 1,
-					PGListenAddress:    "01",
-					PGPort:             "01",
-					ErrorStartTime:     time.Time{},
-					Healthy:            true,
-					PGState: &cluster.PostgresState{
-						TimelineID: 0,
+			cd: &cluster.ClusterData{
+				Cluster: &cluster.Cluster{
+					UID:        "cluster01",
+					Generation: 1,
+					Spec: &cluster.ClusterSpec{
+						ConvergenceTimeout: cluster.Duration{Duration: cluster.DefaultConvergenceTimeout},
+						InitTimeout:        cluster.Duration{Duration: cluster.DefaultInitTimeout},
+					},
+					Status: cluster.ClusterStatus{
+						CurrentGeneration: 1,
+						Phase:             cluster.ClusterPhaseNormal,
+						Master:            "db01",
 					},
 				},
-				"02": &cluster.KeeperState{
-					ClusterViewVersion: 1,
-					PGListenAddress:    "02",
-					PGPort:             "02",
-					ErrorStartTime:     time.Time{},
-					Healthy:            true,
-					PGState: &cluster.PostgresState{
-						TimelineID: 0,
+				Keepers: cluster.Keepers{
+					"keeper01": &cluster.Keeper{
+						UID:  "keeper01",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy: true,
+						},
+					},
+					"keeper02": &cluster.Keeper{
+						UID:  "keeper02",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy: true,
+						},
+					},
+				},
+				DBs: cluster.DBs{
+					"db01": &cluster.DB{
+						UID:        "db01",
+						Generation: 1,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID: "keeper01",
+							Role:      common.RoleMaster,
+							Followers: []string{"db02"},
+						},
+						Status: cluster.DBStatus{
+							Healthy:           true,
+							CurrentGeneration: 1,
+						},
+					},
+					"db02": &cluster.DB{
+						UID:        "db02",
+						Generation: 1,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID: "keeper02",
+							Role:      common.RoleStandby,
+							Followers: []string{},
+							FollowConfig: &cluster.FollowConfig{
+								Type:  cluster.FollowTypeInternal,
+								DBUID: "db01",
+							},
+						},
+						Status: cluster.DBStatus{
+							Healthy:           true,
+							CurrentGeneration: 1,
+						},
+					},
+				},
+				Proxy: &cluster.Proxy{
+					Spec: cluster.ProxySpec{
+						MasterDBUID: "db01",
 					},
 				},
 			},
-			outCV: &cluster.ClusterView{
-				Version: 1,
-				Master:  "01",
-				KeepersRole: cluster.KeepersRole{
-					"01": &cluster.KeeperRole{ID: "01", Follow: ""},
-					"02": &cluster.KeeperRole{ID: "02", Follow: "01"},
+			outcd: &cluster.ClusterData{
+				Cluster: &cluster.Cluster{
+					UID:        "cluster01",
+					Generation: 1,
+					Spec: &cluster.ClusterSpec{
+						ConvergenceTimeout: cluster.Duration{Duration: cluster.DefaultConvergenceTimeout},
+						InitTimeout:        cluster.Duration{Duration: cluster.DefaultInitTimeout},
+					},
+					Status: cluster.ClusterStatus{
+						CurrentGeneration: 1,
+						Phase:             cluster.ClusterPhaseNormal,
+						Master:            "db01",
+					},
 				},
-				ProxyConf: &cluster.ProxyConf{Host: "01", Port: "01"},
+				Keepers: cluster.Keepers{
+					"keeper01": &cluster.Keeper{
+						UID:  "keeper01",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy: true,
+						},
+					},
+					"keeper02": &cluster.Keeper{
+						UID:  "keeper02",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy: true,
+						},
+					},
+				},
+				DBs: cluster.DBs{
+					"db01": &cluster.DB{
+						UID:        "db01",
+						Generation: 1,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID: "keeper01",
+							Role:      common.RoleMaster,
+							Followers: []string{"db02"},
+						},
+						Status: cluster.DBStatus{
+							Healthy:           true,
+							CurrentGeneration: 1,
+						},
+					},
+					"db02": &cluster.DB{
+						UID:        "db02",
+						Generation: 1,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID: "keeper02",
+							Role:      common.RoleStandby,
+							Followers: []string{},
+							FollowConfig: &cluster.FollowConfig{
+								Type:  cluster.FollowTypeInternal,
+								DBUID: "db01",
+							},
+						},
+						Status: cluster.DBStatus{
+							Healthy:           true,
+							CurrentGeneration: 1,
+						},
+					},
+				},
+				Proxy: &cluster.Proxy{
+					Spec: cluster.ProxySpec{
+						MasterDBUID: "db01",
+					},
+				},
 			},
 		},
-		// One master and one standby, master not healthy: standby elected as new master
+		// #5 One master and one standby, master db not healthy: standby elected as new master.
 		{
-			cv: &cluster.ClusterView{
-				Version: 1,
-				Master:  "01",
-				KeepersRole: cluster.KeepersRole{
-					"01": &cluster.KeeperRole{ID: "01", Follow: ""},
-					"02": &cluster.KeeperRole{ID: "02", Follow: "01"},
-				},
-				ProxyConf: &cluster.ProxyConf{Host: "01", Port: "01"},
-			},
-			keepersState: cluster.KeepersState{
-				"01": &cluster.KeeperState{
-					ClusterViewVersion: 1,
-					PGListenAddress:    "01",
-					PGPort:             "01",
-					ErrorStartTime:     time.Unix(0, 0),
-					Healthy:            false,
-					PGState: &cluster.PostgresState{
-						TimelineID: 0,
+			cd: &cluster.ClusterData{
+				Cluster: &cluster.Cluster{
+					UID:        "cluster01",
+					Generation: 1,
+					Spec: &cluster.ClusterSpec{
+						ConvergenceTimeout: cluster.Duration{Duration: cluster.DefaultConvergenceTimeout},
+						InitTimeout:        cluster.Duration{Duration: cluster.DefaultInitTimeout},
+					},
+					Status: cluster.ClusterStatus{
+						CurrentGeneration: 1,
+						Phase:             cluster.ClusterPhaseNormal,
+						Master:            "db01",
 					},
 				},
-				"02": &cluster.KeeperState{
-					ClusterViewVersion: 1,
-					PGListenAddress:    "02",
-					PGPort:             "02",
-					ErrorStartTime:     time.Time{},
-					Healthy:            true,
-					PGState: &cluster.PostgresState{
-						TimelineID: 0,
+				Keepers: cluster.Keepers{
+					"keeper01": &cluster.Keeper{
+						UID:  "keeper01",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy: true,
+						},
+					},
+					"keeper02": &cluster.Keeper{
+						UID:  "keeper02",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy: true,
+						},
+					},
+				},
+				DBs: cluster.DBs{
+					"db01": &cluster.DB{
+						UID:        "db01",
+						Generation: 1,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID: "keeper01",
+							Role:      common.RoleMaster,
+							Followers: []string{"db02"},
+						},
+						Status: cluster.DBStatus{
+							Healthy:           false,
+							CurrentGeneration: 1,
+						},
+					},
+					"db02": &cluster.DB{
+						UID:        "db02",
+						Generation: 1,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID: "keeper02",
+							Role:      common.RoleStandby,
+							Followers: []string{},
+							FollowConfig: &cluster.FollowConfig{
+								Type:  cluster.FollowTypeInternal,
+								DBUID: "db01",
+							},
+						},
+						Status: cluster.DBStatus{
+							Healthy:           true,
+							CurrentGeneration: 1,
+						},
+					},
+				},
+				Proxy: &cluster.Proxy{
+					Spec: cluster.ProxySpec{
+						MasterDBUID: "db01",
 					},
 				},
 			},
-			outCV: &cluster.ClusterView{
-				Version: 2,
-				Master:  "02",
-				KeepersRole: cluster.KeepersRole{
-					"01": &cluster.KeeperRole{ID: "01", Follow: ""},
-					"02": &cluster.KeeperRole{ID: "02", Follow: ""},
+			outcd: &cluster.ClusterData{
+				Cluster: &cluster.Cluster{
+					UID:        "cluster01",
+					Generation: 1,
+					Spec: &cluster.ClusterSpec{
+						ConvergenceTimeout: cluster.Duration{Duration: cluster.DefaultConvergenceTimeout},
+						InitTimeout:        cluster.Duration{Duration: cluster.DefaultInitTimeout},
+					},
+					Status: cluster.ClusterStatus{
+						CurrentGeneration: 1,
+						Phase:             cluster.ClusterPhaseNormal,
+						Master:            "db02",
+					},
 				},
-				ProxyConf: nil,
+				Keepers: cluster.Keepers{
+					"keeper01": &cluster.Keeper{
+						UID:  "keeper01",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy: true,
+						},
+					},
+					"keeper02": &cluster.Keeper{
+						UID:  "keeper02",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy: true,
+						},
+					},
+				},
+				DBs: cluster.DBs{
+					"db01": &cluster.DB{
+						UID:        "db01",
+						Generation: 2,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID: "keeper01",
+							Role:      common.RoleUndefined,
+							Followers: []string{},
+						},
+						Status: cluster.DBStatus{
+							Healthy:           false,
+							CurrentGeneration: 1,
+						},
+					},
+					"db02": &cluster.DB{
+						UID:        "db02",
+						Generation: 2,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID: "keeper02",
+							Role:      common.RoleMaster,
+							Followers: []string{},
+						},
+						Status: cluster.DBStatus{
+							Healthy:           true,
+							CurrentGeneration: 1,
+						},
+					},
+				},
+				Proxy: &cluster.Proxy{},
 			},
 		},
-		// From the previous test, new master (02) converged. Old master setup to follow new master (02).
+		// #6 From the previous test, new master (db02) converged. Old master setup to follow new master (db02).
 		{
-			cv: &cluster.ClusterView{
-				Version: 2,
-				Master:  "02",
-				KeepersRole: cluster.KeepersRole{
-					"01": &cluster.KeeperRole{ID: "01", Follow: ""},
-					"02": &cluster.KeeperRole{ID: "02", Follow: ""},
-				},
-				ProxyConf: nil,
-			},
-			keepersState: cluster.KeepersState{
-				"01": &cluster.KeeperState{
-					ClusterViewVersion: 1,
-					PGListenAddress:    "01",
-					PGPort:             "01",
-					ErrorStartTime:     time.Unix(0, 0),
-					Healthy:            false,
-					PGState: &cluster.PostgresState{
-						TimelineID: 0,
+			cd: &cluster.ClusterData{
+				Cluster: &cluster.Cluster{
+					UID:        "cluster01",
+					Generation: 1,
+					Spec: &cluster.ClusterSpec{
+						ConvergenceTimeout: cluster.Duration{Duration: cluster.DefaultConvergenceTimeout},
+						InitTimeout:        cluster.Duration{Duration: cluster.DefaultInitTimeout},
+					},
+					Status: cluster.ClusterStatus{
+						CurrentGeneration: 1,
+						Phase:             cluster.ClusterPhaseNormal,
+						Master:            "db02",
 					},
 				},
-				"02": &cluster.KeeperState{
-					ClusterViewVersion: 2,
-					PGListenAddress:    "02",
-					PGPort:             "02",
-					ErrorStartTime:     time.Time{},
-					Healthy:            true,
-					PGState: &cluster.PostgresState{
-						TimelineID: 0,
+				Keepers: cluster.Keepers{
+					"keeper01": &cluster.Keeper{
+						UID:  "keeper01",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy: true,
+						},
+					},
+					"keeper02": &cluster.Keeper{
+						UID:  "keeper02",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy: true,
+						},
 					},
 				},
-			},
-			outCV: &cluster.ClusterView{
-				Version: 3,
-				Master:  "02",
-				KeepersRole: cluster.KeepersRole{
-					"01": &cluster.KeeperRole{ID: "01", Follow: "02"},
-					"02": &cluster.KeeperRole{ID: "02", Follow: ""},
+				DBs: cluster.DBs{
+					"db01": &cluster.DB{
+						UID:        "db01",
+						Generation: 1,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID: "keeper01",
+							Role:      common.RoleMaster,
+							Followers: []string{"db02"},
+						},
+						Status: cluster.DBStatus{
+							Healthy:           false,
+							CurrentGeneration: 1,
+						},
+					},
+					"db02": &cluster.DB{
+						UID:        "db02",
+						Generation: 2,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID: "keeper02",
+							Role:      common.RoleMaster,
+							Followers: []string{},
+						},
+						Status: cluster.DBStatus{
+							Healthy:           true,
+							CurrentGeneration: 2,
+						},
+					},
 				},
-				ProxyConf: &cluster.ProxyConf{Host: "02", Port: "02"},
+				Proxy: &cluster.Proxy{},
+			},
+			outcd: &cluster.ClusterData{
+				Cluster: &cluster.Cluster{
+					UID:        "cluster01",
+					Generation: 1,
+					Spec: &cluster.ClusterSpec{
+						ConvergenceTimeout: cluster.Duration{Duration: cluster.DefaultConvergenceTimeout},
+						InitTimeout:        cluster.Duration{Duration: cluster.DefaultInitTimeout},
+					},
+					Status: cluster.ClusterStatus{
+						CurrentGeneration: 1,
+						Phase:             cluster.ClusterPhaseNormal,
+						Master:            "db02",
+					},
+				},
+				Keepers: cluster.Keepers{
+					"keeper01": &cluster.Keeper{
+						UID:  "keeper01",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy: true,
+						},
+					},
+					"keeper02": &cluster.Keeper{
+						UID:  "keeper02",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy: true,
+						},
+					},
+				},
+				DBs: cluster.DBs{
+					"db01": &cluster.DB{
+						UID:        "db01",
+						Generation: 2,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID: "keeper01",
+							Role:      common.RoleStandby,
+							Followers: []string{},
+							FollowConfig: &cluster.FollowConfig{
+								Type:  cluster.FollowTypeInternal,
+								DBUID: "db02",
+							},
+						},
+						Status: cluster.DBStatus{
+							Healthy:           false,
+							CurrentGeneration: 1,
+						},
+					},
+					"db02": &cluster.DB{
+						UID:        "db02",
+						Generation: 3,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID: "keeper02",
+							Role:      common.RoleMaster,
+							Followers: []string{"db01"},
+						},
+						Status: cluster.DBStatus{
+							Healthy:           true,
+							CurrentGeneration: 2,
+						},
+					},
+				},
+				Proxy: &cluster.Proxy{
+					Spec: cluster.ProxySpec{
+						MasterDBUID: "db02",
+					},
+				},
 			},
 		},
-
-		// One master and one standby, master not healthy, standby with old
-		// clusterview: no standby elected as new master.
+		// #7 One master and one standby, master db not healthy, standby not converged (old clusterview): no standby elected as new master, clusterview not changed.
 		{
-			cv: &cluster.ClusterView{
-				Version: 2,
-				Master:  "01",
-				KeepersRole: cluster.KeepersRole{
-					"01": &cluster.KeeperRole{ID: "01", Follow: ""},
-					"02": &cluster.KeeperRole{ID: "02", Follow: "01"},
-				},
-				ProxyConf: &cluster.ProxyConf{Host: "01", Port: "01"},
-			},
-			keepersState: cluster.KeepersState{
-				"01": &cluster.KeeperState{
-					ClusterViewVersion: 2,
-					PGListenAddress:    "01",
-					PGPort:             "01",
-					ErrorStartTime:     time.Unix(0, 0),
-					Healthy:            true,
-					PGState: &cluster.PostgresState{
-						TimelineID: 0,
+			cd: &cluster.ClusterData{
+				Cluster: &cluster.Cluster{
+					UID:        "cluster01",
+					Generation: 1,
+					Spec: &cluster.ClusterSpec{
+						ConvergenceTimeout: cluster.Duration{Duration: cluster.DefaultConvergenceTimeout},
+						InitTimeout:        cluster.Duration{Duration: cluster.DefaultInitTimeout},
+					},
+					Status: cluster.ClusterStatus{
+						CurrentGeneration: 1,
+						Phase:             cluster.ClusterPhaseNormal,
+						Master:            "db01",
 					},
 				},
-				"02": &cluster.KeeperState{
-					ClusterViewVersion: 1,
-					PGListenAddress:    "02",
-					PGPort:             "02",
-					ErrorStartTime:     time.Time{},
-					Healthy:            true,
-					PGState: &cluster.PostgresState{
-						TimelineID: 0,
+				Keepers: cluster.Keepers{
+					"keeper01": &cluster.Keeper{
+						UID:  "keeper01",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy: true,
+						},
+					},
+					"keeper02": &cluster.Keeper{
+						UID:  "keeper02",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy: true,
+						},
+					},
+				},
+				DBs: cluster.DBs{
+					"db01": &cluster.DB{
+						UID:        "db01",
+						Generation: 1,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID: "keeper01",
+							Role:      common.RoleMaster,
+							Followers: []string{"db02"},
+						},
+						Status: cluster.DBStatus{
+							Healthy:           false,
+							CurrentGeneration: 1,
+						},
+					},
+					"db02": &cluster.DB{
+						UID:        "db02",
+						Generation: 1,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID: "keeper02",
+							Role:      common.RoleStandby,
+							Followers: []string{},
+							FollowConfig: &cluster.FollowConfig{
+								Type:  cluster.FollowTypeInternal,
+								DBUID: "db01",
+							},
+						},
+						Status: cluster.DBStatus{
+							Healthy:           true,
+							CurrentGeneration: 0,
+						},
+					},
+				},
+				Proxy: &cluster.Proxy{
+					Spec: cluster.ProxySpec{
+						MasterDBUID: "db01",
 					},
 				},
 			},
-			outCV: &cluster.ClusterView{
-				Version: 2,
-				Master:  "01",
-				KeepersRole: cluster.KeepersRole{
-					"01": &cluster.KeeperRole{ID: "01", Follow: ""},
-					"02": &cluster.KeeperRole{ID: "02", Follow: "01"},
+			outcd: &cluster.ClusterData{
+				Cluster: &cluster.Cluster{
+					UID:        "cluster01",
+					Generation: 1,
+					Spec: &cluster.ClusterSpec{
+						ConvergenceTimeout: cluster.Duration{Duration: cluster.DefaultConvergenceTimeout},
+						InitTimeout:        cluster.Duration{Duration: cluster.DefaultInitTimeout},
+					},
+					Status: cluster.ClusterStatus{
+						CurrentGeneration: 1,
+						Phase:             cluster.ClusterPhaseNormal,
+						Master:            "db01",
+					},
 				},
-				ProxyConf: &cluster.ProxyConf{Host: "01", Port: "01"},
+				Keepers: cluster.Keepers{
+					"keeper01": &cluster.Keeper{
+						UID:  "keeper01",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy: true,
+						},
+					},
+					"keeper02": &cluster.Keeper{
+						UID:  "keeper02",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy: true,
+						},
+					},
+				},
+				DBs: cluster.DBs{
+					"db01": &cluster.DB{
+						UID:        "db01",
+						Generation: 1,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID: "keeper01",
+							Role:      common.RoleMaster,
+							Followers: []string{"db02"},
+						},
+						Status: cluster.DBStatus{
+							Healthy:           false,
+							CurrentGeneration: 1,
+						},
+					},
+					"db02": &cluster.DB{
+						UID:        "db02",
+						Generation: 1,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID: "keeper02",
+							Role:      common.RoleStandby,
+							Followers: []string{},
+							FollowConfig: &cluster.FollowConfig{
+								Type:  cluster.FollowTypeInternal,
+								DBUID: "db01",
+							},
+						},
+						Status: cluster.DBStatus{
+							Healthy:           true,
+							CurrentGeneration: 0,
+						},
+					},
+				},
+				Proxy: &cluster.Proxy{
+					Spec: cluster.ProxySpec{
+						MasterDBUID: "db01",
+					},
+				},
 			},
 		},
-		// One master and one standby, master not converged to current
-		// cv: standby elected as new master.
+		// #8 One master and one standby, master healthy but not converged: standby elected as new master.
 		{
-			cv: &cluster.ClusterView{
-				Version: 2,
-				Master:  "01",
-				KeepersRole: cluster.KeepersRole{
-					"01": &cluster.KeeperRole{ID: "01", Follow: ""},
-					"02": &cluster.KeeperRole{ID: "02", Follow: "01"},
-				},
-				ProxyConf: nil,
-			},
-			keepersState: cluster.KeepersState{
-				"01": &cluster.KeeperState{
-					ClusterViewVersion: 1,
-					PGListenAddress:    "01",
-					PGPort:             "01",
-					ErrorStartTime:     time.Time{},
-					Healthy:            true,
-					PGState: &cluster.PostgresState{
-						TimelineID: 0,
+			cd: &cluster.ClusterData{
+				Cluster: &cluster.Cluster{
+					UID:        "cluster01",
+					Generation: 1,
+					Spec: &cluster.ClusterSpec{
+						ConvergenceTimeout: cluster.Duration{Duration: cluster.DefaultConvergenceTimeout},
+						InitTimeout:        cluster.Duration{Duration: cluster.DefaultInitTimeout},
+					},
+					Status: cluster.ClusterStatus{
+						CurrentGeneration: 1,
+						Phase:             cluster.ClusterPhaseNormal,
+						Master:            "db01",
 					},
 				},
-				"02": &cluster.KeeperState{
-					ClusterViewVersion: 2,
-					PGListenAddress:    "02",
-					PGPort:             "02",
-					ErrorStartTime:     time.Time{},
-					Healthy:            true,
-					PGState: &cluster.PostgresState{
-						TimelineID: 0,
+				Keepers: cluster.Keepers{
+					"keeper01": &cluster.Keeper{
+						UID:  "keeper01",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy: true,
+						},
+					},
+					"keeper02": &cluster.Keeper{
+						UID:  "keeper02",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy: true,
+						},
+					},
+				},
+				DBs: cluster.DBs{
+					"db01": &cluster.DB{
+						UID:        "db01",
+						Generation: 1,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID: "keeper01",
+							Role:      common.RoleMaster,
+							Followers: []string{"db02"},
+						},
+						Status: cluster.DBStatus{
+							Healthy:           true,
+							CurrentGeneration: 0,
+						},
+					},
+					"db02": &cluster.DB{
+						UID:        "db02",
+						Generation: 1,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID: "keeper02",
+							Role:      common.RoleStandby,
+							Followers: []string{},
+							FollowConfig: &cluster.FollowConfig{
+								Type:  cluster.FollowTypeInternal,
+								DBUID: "db01",
+							},
+						},
+						Status: cluster.DBStatus{
+							Healthy:           true,
+							CurrentGeneration: 1,
+						},
+					},
+				},
+				Proxy: &cluster.Proxy{
+					Spec: cluster.ProxySpec{
+						MasterDBUID: "db01",
 					},
 				},
 			},
-			outCV: &cluster.ClusterView{
-				Version: 3,
-				Master:  "02",
-				KeepersRole: cluster.KeepersRole{
-					"01": &cluster.KeeperRole{ID: "01", Follow: ""},
-					"02": &cluster.KeeperRole{ID: "02", Follow: ""},
+			outcd: &cluster.ClusterData{
+				Cluster: &cluster.Cluster{
+					UID:        "cluster01",
+					Generation: 1,
+					Spec: &cluster.ClusterSpec{
+						ConvergenceTimeout: cluster.Duration{Duration: cluster.DefaultConvergenceTimeout},
+						InitTimeout:        cluster.Duration{Duration: cluster.DefaultInitTimeout},
+					},
+					Status: cluster.ClusterStatus{
+						CurrentGeneration: 1,
+						Phase:             cluster.ClusterPhaseNormal,
+						Master:            "db02",
+					},
 				},
-				ProxyConf: nil,
+				Keepers: cluster.Keepers{
+					"keeper01": &cluster.Keeper{
+						UID:  "keeper01",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy: true,
+						},
+					},
+					"keeper02": &cluster.Keeper{
+						UID:  "keeper02",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy: true,
+						},
+					},
+				},
+				DBs: cluster.DBs{
+					"db01": &cluster.DB{
+						UID:        "db01",
+						Generation: 2,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID: "keeper01",
+							Role:      common.RoleUndefined,
+							Followers: []string{},
+						},
+						Status: cluster.DBStatus{
+							Healthy:           true,
+							CurrentGeneration: 0,
+						},
+					},
+					"db02": &cluster.DB{
+						UID:        "db02",
+						Generation: 2,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID: "keeper02",
+							Role:      common.RoleMaster,
+							Followers: []string{},
+						},
+						Status: cluster.DBStatus{
+							Healthy:           true,
+							CurrentGeneration: 1,
+						},
+					},
+				},
+				Proxy: &cluster.Proxy{},
+			},
+		},
+		// #9 Changed clusterSpec parameters. RequestTimeout, MaxStandbys, SynchronousReplication, UsePgrewind, PGParameters should bet updated in the DBSpecs.
+		{
+			cd: &cluster.ClusterData{
+				Cluster: &cluster.Cluster{
+					UID:        "cluster01",
+					Generation: 1,
+					Spec: &cluster.ClusterSpec{
+						ConvergenceTimeout:     cluster.Duration{Duration: cluster.DefaultConvergenceTimeout},
+						InitTimeout:            cluster.Duration{Duration: cluster.DefaultInitTimeout},
+						RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout * 2},
+						MaxStandbys:            cluster.DefaultMaxStandbys * 2,
+						SynchronousReplication: true,
+						UsePgrewind:            true,
+						PGParameters:           cluster.PGParameters{"param01": "value01", "param02": "value02"},
+					},
+					Status: cluster.ClusterStatus{
+						CurrentGeneration: 1,
+						Phase:             cluster.ClusterPhaseNormal,
+						Master:            "db01",
+					},
+				},
+				Keepers: cluster.Keepers{
+					"keeper01": &cluster.Keeper{
+						UID:  "keeper01",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy: true,
+						},
+					},
+					"keeper02": &cluster.Keeper{
+						UID:  "keeper02",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy: true,
+						},
+					},
+				},
+				DBs: cluster.DBs{
+					"db01": &cluster.DB{
+						UID:        "db01",
+						Generation: 1,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID:              "keeper01",
+							RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout},
+							MaxStandbys:            cluster.DefaultMaxStandbys,
+							SynchronousReplication: false,
+							UsePgrewind:            false,
+							PGParameters:           nil,
+							Role:                   common.RoleMaster,
+							Followers:              []string{"db02"},
+						},
+						Status: cluster.DBStatus{
+							Healthy:           true,
+							CurrentGeneration: 1,
+						},
+					},
+					"db02": &cluster.DB{
+						UID:        "db02",
+						Generation: 1,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID:              "keeper02",
+							RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout},
+							MaxStandbys:            cluster.DefaultMaxStandbys,
+							SynchronousReplication: false,
+							UsePgrewind:            false,
+							PGParameters:           nil,
+							Role:                   common.RoleStandby,
+							Followers:              []string{},
+							FollowConfig: &cluster.FollowConfig{
+								Type:  cluster.FollowTypeInternal,
+								DBUID: "db01",
+							},
+						},
+						Status: cluster.DBStatus{
+							Healthy:           true,
+							CurrentGeneration: 1,
+						},
+					},
+				},
+				Proxy: &cluster.Proxy{
+					Spec: cluster.ProxySpec{
+						MasterDBUID: "db01",
+					},
+				},
+			},
+			outcd: &cluster.ClusterData{
+				Cluster: &cluster.Cluster{
+					UID:        "cluster01",
+					Generation: 1,
+					Spec: &cluster.ClusterSpec{
+						ConvergenceTimeout:     cluster.Duration{Duration: cluster.DefaultConvergenceTimeout},
+						InitTimeout:            cluster.Duration{Duration: cluster.DefaultInitTimeout},
+						RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout * 2},
+						MaxStandbys:            cluster.DefaultMaxStandbys * 2,
+						SynchronousReplication: true,
+						UsePgrewind:            true,
+						PGParameters:           cluster.PGParameters{"param01": "value01", "param02": "value02"},
+					},
+					Status: cluster.ClusterStatus{
+						CurrentGeneration: 1,
+						Phase:             cluster.ClusterPhaseNormal,
+						Master:            "db01",
+					},
+				},
+				Keepers: cluster.Keepers{
+					"keeper01": &cluster.Keeper{
+						UID:  "keeper01",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy: true,
+						},
+					},
+					"keeper02": &cluster.Keeper{
+						UID:  "keeper02",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy: true,
+						},
+					},
+				},
+				DBs: cluster.DBs{
+					"db01": &cluster.DB{
+						UID:        "db01",
+						Generation: 1,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID:              "keeper01",
+							RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout * 2},
+							MaxStandbys:            cluster.DefaultMaxStandbys * 2,
+							SynchronousReplication: true,
+							UsePgrewind:            true,
+							PGParameters:           cluster.PGParameters{"param01": "value01", "param02": "value02"},
+							Role:                   common.RoleMaster,
+							Followers:              []string{"db02"},
+						},
+						Status: cluster.DBStatus{
+							Healthy:           true,
+							CurrentGeneration: 1,
+						},
+					},
+					"db02": &cluster.DB{
+						UID:        "db02",
+						Generation: 1,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID:              "keeper02",
+							RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout * 2},
+							MaxStandbys:            cluster.DefaultMaxStandbys * 2,
+							SynchronousReplication: true,
+							UsePgrewind:            true,
+							PGParameters:           cluster.PGParameters{"param01": "value01", "param02": "value02"},
+							Role:                   common.RoleStandby,
+							Followers:              []string{},
+							FollowConfig: &cluster.FollowConfig{
+								Type:  cluster.FollowTypeInternal,
+								DBUID: "db01",
+							},
+						},
+						Status: cluster.DBStatus{
+							Healthy:           true,
+							CurrentGeneration: 1,
+						},
+					},
+				},
+				Proxy: &cluster.Proxy{
+					Spec: cluster.ProxySpec{
+						MasterDBUID: "db01",
+					},
+				},
 			},
 		},
 	}
 
 	for i, tt := range tests {
-		var s *Sentinel
-		if tt.cv.Config == nil {
-			s = &Sentinel{id: "id", clusterConfig: cluster.NewDefaultConfig()}
-		} else {
-			s = &Sentinel{id: "id", clusterConfig: tt.cv.Config.ToConfig()}
-		}
-		outCV, err := s.updateClusterView(tt.cv, tt.keepersState)
+		s := &Sentinel{id: "id", UIDFn: testUIDFn, RandFn: testRandFn}
+
+		outcd, err := s.updateCluster(tt.cd)
 		t.Logf("test #%d", i)
-		t.Logf(spew.Sprintf("outCV: %#v", outCV))
 		if tt.err != nil {
 			if err == nil {
 				t.Errorf("got no error, wanted error: %v", tt.err)
@@ -341,10 +1229,33 @@ func TestUpdateClusterView(t *testing.T) {
 		} else {
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
-			}
-			if !outCV.Equals(tt.outCV) {
-				t.Errorf(spew.Sprintf("#%d: wrong outCV: got: %#v, want: %#v", i, outCV, tt.outCV))
+			} else if !testEqualCD(outcd, tt.outcd) {
+				t.Errorf("wrong outcd: got:\n%s\nwant:\n%s", spew.Sdump(outcd), spew.Sdump(tt.outcd))
 			}
 		}
 	}
+}
+
+func testUIDFn() string {
+	return "db01"
+}
+
+func testRandFn(i int) int {
+	return 0
+}
+
+func testEqualCD(cd1, cd2 *cluster.ClusterData) bool {
+	// ignore times
+	for _, cd := range []*cluster.ClusterData{cd1, cd2} {
+		cd.Cluster.ChangeTime = time.Time{}
+		for _, k := range cd.Keepers {
+			k.ChangeTime = time.Time{}
+		}
+		for _, db := range cd.DBs {
+			db.ChangeTime = time.Time{}
+		}
+		cd.Proxy.ChangeTime = time.Time{}
+	}
+	return reflect.DeepEqual(cd1, cd2)
+
 }

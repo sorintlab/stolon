@@ -84,19 +84,53 @@ func TestProxyListening(t *testing.T) {
 
 	e := store.NewStoreManager(kvstore, storePath)
 
-	pair, err := e.SetClusterData(cluster.KeepersState{},
-		&cluster.ClusterView{
-			Version: 1,
-			Config: &cluster.NilConfig{
-				SleepInterval:      &cluster.Duration{5 * time.Second},
-				KeeperFailInterval: &cluster.Duration{10 * time.Second},
+	cd := &cluster.ClusterData{
+		FormatVersion: cluster.CurrentCDFormatVersion,
+		Cluster: &cluster.Cluster{
+			UID:        "01",
+			Generation: 1,
+			Spec: &cluster.ClusterSpec{
+				InitMode:     cluster.ClusterInitModeNew,
+				FailInterval: cluster.Duration{Duration: 10 * time.Second},
 			},
-			ProxyConf: &cluster.ProxyConf{
-				// fake pg address, not relevant
-				Host: "localhost",
-				Port: "5432",
+			Status: cluster.ClusterStatus{
+				CurrentGeneration: 1,
+				Phase:             cluster.ClusterPhaseNormal,
+				Master:            "01",
 			},
-		}, nil)
+		},
+		Keepers: cluster.Keepers{
+			"01": &cluster.Keeper{
+				UID:  "01",
+				Spec: &cluster.KeeperSpec{},
+				Status: cluster.KeeperStatus{
+					Healthy: true,
+				},
+			},
+		},
+		DBs: cluster.DBs{
+			"01": &cluster.DB{
+				UID:        "01",
+				Generation: 1,
+				ChangeTime: time.Time{},
+				Spec: &cluster.DBSpec{
+					KeeperUID: "01",
+					Role:      common.RoleMaster,
+					Followers: []string{"02"},
+				},
+				Status: cluster.DBStatus{
+					Healthy:           false,
+					CurrentGeneration: 1,
+				},
+			},
+		},
+		Proxy: &cluster.Proxy{
+			Spec: cluster.ProxySpec{
+				MasterDBUID: "01",
+			},
+		},
+	}
+	pair, err := e.AtomicPutClusterData(cd, nil)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -139,15 +173,8 @@ func TestProxyListening(t *testing.T) {
 
 	t.Logf("test proxyConf removed. Should continue listening")
 	// remove proxyConf
-	pair, err = e.SetClusterData(cluster.KeepersState{},
-		&cluster.ClusterView{
-			Version: 1,
-			Config: &cluster.NilConfig{
-				SleepInterval:      &cluster.Duration{5 * time.Second},
-				KeeperFailInterval: &cluster.Duration{10 * time.Second},
-			},
-			ProxyConf: nil,
-		}, pair)
+	cd.Proxy.Spec.MasterDBUID = ""
+	pair, err = e.AtomicPutClusterData(cd, pair)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -159,19 +186,8 @@ func TestProxyListening(t *testing.T) {
 
 	t.Logf("test proxyConf restored. Should continue listening")
 	// Set proxyConf again
-	pair, err = e.SetClusterData(cluster.KeepersState{},
-		&cluster.ClusterView{
-			Version: 1,
-			Config: &cluster.NilConfig{
-				SleepInterval:      &cluster.Duration{5 * time.Second},
-				KeeperFailInterval: &cluster.Duration{10 * time.Second},
-			},
-			ProxyConf: &cluster.ProxyConf{
-				// fake pg address, not relevant
-				Host: "localhost",
-				Port: "5432",
-			},
-		}, pair)
+	cd.Proxy.Spec.MasterDBUID = "01"
+	pair, err = e.AtomicPutClusterData(cd, pair)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -183,7 +199,7 @@ func TestProxyListening(t *testing.T) {
 
 	t.Logf("test clusterView removed. Should continue listening")
 	// remove whole clusterview
-	_, err = e.SetClusterData(cluster.KeepersState{}, nil, pair)
+	_, err = e.AtomicPutClusterData(nil, pair)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}

@@ -29,15 +29,16 @@ import (
 )
 
 var cmdStatus = &cobra.Command{
-	Use: "status",
-	Run: status,
+	Use:   "status",
+	Run:   status,
+	Short: "Display the current cluster status",
 }
 
 func init() {
 	cmdStolonCtl.AddCommand(cmdStatus)
 }
 
-func printTree(id string, cv *cluster.ClusterView, level int, prefix string, tail bool) {
+func printTree(dbuid string, cd *cluster.ClusterData, level int, prefix string, tail bool) {
 	out := prefix
 	if level > 0 {
 		if tail {
@@ -46,14 +47,15 @@ func printTree(id string, cv *cluster.ClusterView, level int, prefix string, tai
 			out += "├─"
 		}
 	}
-	out += id
-	if id == cv.Master {
+	out += cd.DBs[dbuid].Spec.KeeperUID
+	if dbuid == cd.Cluster.Status.Master {
 		out += " (master)"
 	}
 	stdout(out)
-	followersIDs := cv.GetFollowersIDs(id)
-	c := len(followersIDs)
-	for i, f := range cv.GetFollowersIDs(id) {
+	db := cd.DBs[dbuid]
+	followers := db.Spec.Followers
+	c := len(followers)
+	for i, f := range followers {
 		emptyspace := ""
 		if level > 0 {
 			emptyspace = "  "
@@ -61,15 +63,15 @@ func printTree(id string, cv *cluster.ClusterView, level int, prefix string, tai
 		linespace := "│ "
 		if i < c-1 {
 			if tail {
-				printTree(f, cv, level+1, prefix+emptyspace, false)
+				printTree(f, cd, level+1, prefix+emptyspace, false)
 			} else {
-				printTree(f, cv, level+1, prefix+linespace, false)
+				printTree(f, cd, level+1, prefix+linespace, false)
 			}
 		} else {
 			if tail {
-				printTree(f, cv, level+1, prefix+emptyspace, true)
+				printTree(f, cd, level+1, prefix+emptyspace, true)
 			} else {
-				printTree(f, cv, level+1, prefix+linespace, true)
+				printTree(f, cd, level+1, prefix+linespace, true)
 			}
 		}
 	}
@@ -106,15 +108,15 @@ func status(cmd *cobra.Command, args []string) {
 		stdout("No active sentinels")
 	} else {
 		sort.Sort(sentinelsInfo)
-		fmt.Fprintf(tabOut, "ID\tLISTENADDRESS\tLEADER\n")
+		fmt.Fprintf(tabOut, "ID\tLEADER\n")
 		for _, si := range sentinelsInfo {
 			leader := false
 			if lsid != "" {
-				if si.ID == lsid {
+				if si.UID == lsid {
 					leader = true
 				}
 			}
-			fmt.Fprintf(tabOut, "%s\t%s:%s\t%t\n", si.ID, si.ListenAddress, si.Port, leader)
+			fmt.Fprintf(tabOut, "%s\t%t\n", si.UID, leader)
 			tabOut.Flush()
 		}
 	}
@@ -133,52 +135,53 @@ func status(cmd *cobra.Command, args []string) {
 		sort.Sort(proxiesInfo)
 		fmt.Fprintf(tabOut, "ID\tLISTENADDRESS\tCV VERSION\n")
 		for _, pi := range proxiesInfo {
-			fmt.Fprintf(tabOut, "%s\t%s:%s\t%d\n", pi.ID, pi.ListenAddress, pi.Port, pi.ClusterViewVersion)
+			fmt.Fprintf(tabOut, "%s\t%s:%s\t%d\n", pi.UID, pi.ListenAddress, pi.Port, pi.ProxyGeneration)
 			tabOut.Flush()
 		}
 	}
 
-	clusterData, _, err := e.GetClusterData()
+	cd, _, err := e.GetClusterData()
 	if err != nil {
 		die("cannot get cluster data: %v", err)
 	}
-	if clusterData == nil {
+	if cd == nil {
 		die("cluster data not available: %v", err)
 	}
-	cv := clusterData.ClusterView
-	kss := clusterData.KeepersState
+	if cd.FormatVersion != cluster.CurrentCDFormatVersion {
+		die("unsupported cluster data format version %d", cd.FormatVersion)
+	}
 
 	stdout("")
 	stdout("=== Keepers ===")
 	stdout("")
-	if kss == nil {
-		stdout("No keepers state available")
+	if cd.Keepers == nil {
+		stdout("No keepers available")
 		stdout("")
 	} else {
-		kssKeys := kss.SortedKeys()
-		fmt.Fprintf(tabOut, "ID\tLISTENADDRESS\tPG LISTENADDRESS\tCV VERSION\tHEALTHY\n")
-		for _, k := range kssKeys {
-			ks := kss[k]
-			fmt.Fprintf(tabOut, "%s\t%s:%s\t%s:%s\t%d\t%t\n", ks.ID, ks.ListenAddress, ks.Port, ks.PGListenAddress, ks.PGPort, ks.ClusterViewVersion, ks.Healthy)
+		kssKeys := cd.Keepers.SortedKeys()
+		fmt.Fprintf(tabOut, "UID\tLISTENADDRESS\tPG LISTENADDRESS\tHEALTHY\tPGWANTEDGENERATION\tPGCURRENTGENERATION\n")
+		for _, kuid := range kssKeys {
+			k := cd.Keepers[kuid]
+			db := cd.FindDB(k)
+			fmt.Fprintf(tabOut, "%s\t%s:%s\t%s:%s\t%t\t%d\t%d\n", k.UID, k.Status.ListenAddress, k.Status.Port, db.Status.ListenAddress, db.Status.Port, k.Status.Healthy, db.Generation, db.Status.CurrentGeneration)
 		}
 	}
 	tabOut.Flush()
 
 	stdout("")
-	stdout("=== Required Cluster View ===")
+	stdout("=== Required Cluster ===")
 	stdout("")
-	stdout("Version: %d", cv.Version)
-	if cv == nil {
-		stdout("No clusterview available")
-	} else {
-		stdout("Master: %s", cv.Master)
-		stdout("")
-		stdout("===== Keepers tree =====")
-		for _, mr := range cv.KeepersRole {
-			if mr.Follow == "" {
-				stdout("")
-				printTree(mr.ID, cv, 0, "", true)
-			}
+	if cd.Cluster == nil || cd.DBs == nil {
+		stdout("No cluster available")
+		return
+	}
+	stdout("Master: %s", cd.Keepers[cd.DBs[cd.Cluster.Status.Master].Spec.KeeperUID].UID)
+	stdout("")
+	stdout("===== Keepers tree =====")
+	for _, db := range cd.DBs {
+		if db.Spec.Role == common.RoleMaster {
+			stdout("")
+			printTree(db.UID, cd, 0, "", true)
 		}
 	}
 

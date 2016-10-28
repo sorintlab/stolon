@@ -16,50 +16,25 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
-	"os"
 	"path/filepath"
 
 	"github.com/sorintlab/stolon/common"
-	"github.com/sorintlab/stolon/pkg/cluster"
 	"github.com/sorintlab/stolon/pkg/store"
 
 	"github.com/spf13/cobra"
 )
 
-var cmdConfigGet = &cobra.Command{
-	Use:   "get",
-	Run:   configGet,
-	Short: "get configuration",
+var cmdSpec = &cobra.Command{
+	Use:   "spec",
+	Run:   spec,
+	Short: "Retrieve the current cluster specification",
 }
 
 func init() {
-	cmdConfig.AddCommand(cmdConfigGet)
+	cmdStolonCtl.AddCommand(cmdSpec)
 }
 
-func getConfig(e *store.StoreManager) (*cluster.NilConfig, error) {
-	cd, _, err := e.GetClusterData()
-	if err != nil {
-		return nil, fmt.Errorf("cannot get clusterdata: %v", err)
-	}
-	if cd == nil {
-		return nil, fmt.Errorf("nil cluster data: %v", err)
-	}
-	if cd.FormatVersion != cluster.CurrentCDFormatVersion {
-		return nil, fmt.Errorf("unsupported clusterdata format version %d", cd.FormatVersion)
-	}
-	cv := cd.ClusterView
-	if cv == nil {
-		return nil, fmt.Errorf("no clusterview available")
-	}
-	cfg := cv.Config
-	if cfg == nil {
-		return nil, nil
-	}
-	return cfg, nil
-}
-
-func configGet(cmd *cobra.Command, args []string) {
+func spec(cmd *cobra.Command, args []string) {
 	storePath := filepath.Join(common.StoreBasePath, cfg.clusterName)
 
 	kvstore, err := store.NewStore(store.Backend(cfg.storeBackend), cfg.storeEndpoints)
@@ -68,20 +43,20 @@ func configGet(cmd *cobra.Command, args []string) {
 	}
 	e := store.NewStoreManager(kvstore, storePath)
 
-	cfg, err := getConfig(e)
+	cd, _, err := getClusterData(e)
 	if err != nil {
-		die("error: %v", err)
+		die("%v", err)
 	}
-
-	if cfg == nil {
-		stdout("config is not defined")
-		os.Exit(0)
+	if cd.Cluster == nil {
+		die("no cluster spec available")
 	}
-
-	cfgj, err := json.MarshalIndent(cfg, "", "\t")
+	if cd.Cluster.Spec == nil {
+		die("no cluster spec available")
+	}
+	specj, err := json.MarshalIndent(cd.Cluster.Spec, "", "\t")
 	if err != nil {
-		die("failed to marshall config: %v", err)
+		die("failed to marshall spec: %v", err)
 	}
 
-	stdout(string(cfgj))
+	stdout("%s", specj)
 }

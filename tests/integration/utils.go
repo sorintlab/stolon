@@ -176,7 +176,9 @@ func NewTestKeeperWithID(t *testing.T, dir, id, clusterName, pgSUUsername, pgSUP
 	}
 	args = append(args, fmt.Sprintf("--pg-repl-username=%s", pgReplUsername))
 	args = append(args, fmt.Sprintf("--pg-repl-password=%s", pgReplPassword))
-	args = append(args, "--debug")
+	if os.Getenv("DEBUG") != "" {
+		args = append(args, "--debug")
+	}
 	args = append(args, a...)
 
 	connParams := pg.ConnParams{
@@ -252,7 +254,6 @@ func (tk *TestKeeper) WaitDBUp(timeout time.Duration) error {
 		tk.t.Logf("tk: %v, error: %v", tk.id, err)
 		time.Sleep(2 * time.Second)
 	}
-
 	return fmt.Errorf("timeout")
 }
 
@@ -265,7 +266,6 @@ func (tk *TestKeeper) WaitDBDown(timeout time.Duration) error {
 		}
 		time.Sleep(2 * time.Second)
 	}
-
 	return fmt.Errorf("timeout")
 }
 
@@ -279,7 +279,6 @@ func (tk *TestKeeper) WaitUp(timeout time.Duration) error {
 		tk.t.Logf("tk: %v, error: %v", tk.id, err)
 		time.Sleep(1 * time.Second)
 	}
-
 	return fmt.Errorf("timeout")
 }
 
@@ -292,7 +291,6 @@ func (tk *TestKeeper) WaitDown(timeout time.Duration) error {
 		}
 		time.Sleep(2 * time.Second)
 	}
-
 	return fmt.Errorf("timeout")
 }
 
@@ -394,10 +392,10 @@ func (tk *TestKeeper) WaitRole(r common.Role, timeout time.Duration) error {
 		if err != nil {
 			continue
 		}
-		if ok && r == common.MasterRole {
+		if ok && r == common.RoleMaster {
 			return nil
 		}
-		if !ok && r == common.StandbyRole {
+		if !ok && r == common.RoleStandby {
 			return nil
 		}
 	}
@@ -430,30 +428,19 @@ func waitChecks(timeout time.Duration, fns ...CheckFunc) error {
 type TestSentinel struct {
 	t *testing.T
 	Process
-	listenAddress string
-	port          string
 }
 
 func NewTestSentinel(t *testing.T, dir string, clusterName string, storeBackend store.Backend, storeEndpoints string, a ...string) (*TestSentinel, error) {
 	u := uuid.NewV4()
 	id := fmt.Sprintf("%x", u[:4])
 
-	// Hack to find a free tcp port
-	ln, err := net.Listen("tcp", "localhost:0")
-	if err != nil {
-		return nil, err
-	}
-	defer ln.Close()
-
-	listenAddress := ln.Addr().(*net.TCPAddr).IP.String()
-	port := strconv.Itoa(ln.Addr().(*net.TCPAddr).Port)
-
 	args := []string{}
 	args = append(args, fmt.Sprintf("--cluster-name=%s", clusterName))
-	args = append(args, fmt.Sprintf("--port=%s", port))
 	args = append(args, fmt.Sprintf("--store-backend=%s", storeBackend))
 	args = append(args, fmt.Sprintf("--store-endpoints=%s", storeEndpoints))
-	args = append(args, "--debug")
+	if os.Getenv("DEBUG") != "" {
+		args = append(args, "--debug")
+	}
 	args = append(args, a...)
 
 	bin := os.Getenv("STSENTINEL_BIN")
@@ -469,8 +456,6 @@ func NewTestSentinel(t *testing.T, dir string, clusterName string, storeBackend 
 			bin:  bin,
 			args: args,
 		},
-		listenAddress: listenAddress,
-		port:          port,
 	}
 	return ts, nil
 }
@@ -501,7 +486,9 @@ func NewTestProxy(t *testing.T, dir string, clusterName string, storeBackend sto
 	args = append(args, fmt.Sprintf("--port=%s", port))
 	args = append(args, fmt.Sprintf("--store-backend=%s", storeBackend))
 	args = append(args, fmt.Sprintf("--store-endpoints=%s", storeEndpoints))
-	args = append(args, "--debug")
+	if os.Getenv("DEBUG") != "" {
+		args = append(args, "--debug")
+	}
 	args = append(args, a...)
 
 	bin := os.Getenv("STPROXY_BIN")
@@ -742,37 +729,31 @@ func (ts *TestStore) WaitDown(timeout time.Duration) error {
 	return fmt.Errorf("timeout")
 }
 
-func WaitClusterViewWithMaster(e *store.StoreManager, timeout time.Duration) error {
+func WaitClusterDataWithMaster(e *store.StoreManager, timeout time.Duration) (string, error) {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
-		var cv *cluster.ClusterView
 		cd, _, err := e.GetClusterData()
 		if err != nil || cd == nil {
 			goto end
 		}
-		cv = cd.ClusterView
-		if cv != nil {
-			if cv.Master != "" {
-				return nil
-			}
+		if cd.Cluster.Status.Master != "" {
+			return cd.DBs[cd.Cluster.Status.Master].Spec.KeeperUID, nil
 		}
 	end:
 		time.Sleep(2 * time.Second)
 	}
-	return fmt.Errorf("timeout")
+	return "", fmt.Errorf("timeout")
 }
 
-func WaitClusterViewMaster(master string, e *store.StoreManager, timeout time.Duration) error {
+func WaitClusterDataMaster(master string, e *store.StoreManager, timeout time.Duration) error {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
-		var cv *cluster.ClusterView
 		cd, _, err := e.GetClusterData()
 		if err != nil || cd == nil {
 			goto end
 		}
-		cv = cd.ClusterView
-		if cv != nil {
-			if cv.Master == master {
+		if cd.Cluster.Status.Master != "" {
+			if cd.DBs[cd.Cluster.Status.Master].Spec.KeeperUID == master {
 				return nil
 			}
 		}
@@ -785,16 +766,26 @@ func WaitClusterViewMaster(master string, e *store.StoreManager, timeout time.Du
 func WaitClusterInitialized(e *store.StoreManager, timeout time.Duration) error {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
-		var cv *cluster.ClusterView
 		cd, _, err := e.GetClusterData()
 		if err != nil || cd == nil {
 			goto end
 		}
-		cv = cd.ClusterView
-		if cv != nil {
-			if cv.Version > 0 {
-				return nil
-			}
+		return nil
+	end:
+		time.Sleep(2 * time.Second)
+	}
+	return fmt.Errorf("timeout")
+}
+
+func WaitClusterPhaseNormal(e *store.StoreManager, timeout time.Duration) error {
+	start := time.Now()
+	for time.Now().Add(-timeout).Before(start) {
+		cd, _, err := e.GetClusterData()
+		if err != nil || cd == nil {
+			goto end
+		}
+		if cd.Cluster.Status.Phase == cluster.ClusterPhaseNormal {
+			return nil
 		}
 	end:
 		time.Sleep(2 * time.Second)
@@ -836,4 +827,21 @@ func getFreeTCPUDPPort() (string, string, error) {
 		return listenAddress, port, nil
 	}
 	return "", "", fmt.Errorf("failed to find free tcp and udp port")
+}
+
+func writeClusterSpec(dir string, cs *cluster.ClusterSpec) (string, error) {
+	csj, err := json.Marshal(cs)
+	if err != nil {
+		return "", err
+	}
+	tmpFile, err := ioutil.TempFile(dir, "initial-cluster-spec.json")
+	if err != nil {
+		return "", err
+	}
+	defer tmpFile.Close()
+	if _, err := tmpFile.Write(csj); err != nil {
+		return "", err
+	}
+	return tmpFile.Name(), nil
+
 }

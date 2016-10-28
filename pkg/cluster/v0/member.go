@@ -12,15 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cluster
+package v0
+
+import "github.com/sorintlab/stolon/common"
 
 type KeepersInfo map[string]*KeeperInfo
 
 type KeeperInfo struct {
-	UID           string
-	Generation    int64
-	ListenAddress string
-	Port          string
+	ID                 string
+	ClusterViewVersion int
+	ListenAddress      string
+	Port               string
+	PGListenAddress    string
+	PGPort             string
 }
 
 func (k *KeeperInfo) Copy() *KeeperInfo {
@@ -58,13 +62,8 @@ func (tlsh PostgresTimelinesHistory) GetTimelineHistory(id uint64) *PostgresTime
 }
 
 type PostgresState struct {
-	UID        string
-	Generation int64
-
-	ListenAddress string `json:"listenAddress,omitempty"`
-	Port          string `json:"port,omitempty"`
-
-	Healthy          bool
+	Initialized      bool
+	Role             common.Role
 	SystemID         string
 	TimelineID       uint64
 	XLogPos          uint64
@@ -90,23 +89,24 @@ type KeeperDiscoveryInfo struct {
 type SentinelsInfo []*SentinelInfo
 
 func (s SentinelsInfo) Len() int           { return len(s) }
-func (s SentinelsInfo) Less(i, j int) bool { return s[i].UID < s[j].UID }
+func (s SentinelsInfo) Less(i, j int) bool { return s[i].ID < s[j].ID }
 func (s SentinelsInfo) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 
 type SentinelInfo struct {
-	UID string
+	ID            string
+	ListenAddress string
+	Port          string
 }
 
 type ProxiesInfo []*ProxyInfo
 
 func (p ProxiesInfo) Len() int           { return len(p) }
-func (p ProxiesInfo) Less(i, j int) bool { return p[i].UID < p[j].UID }
+func (p ProxiesInfo) Less(i, j int) bool { return p[i].ID < p[j].ID }
 func (p ProxiesInfo) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 
 type ProxyInfo struct {
-	UID             string
-	ListenAddress   string
-	Port            string
-	ProxyUID        string
-	ProxyGeneration int64
+	ID                 string
+	ListenAddress      string
+	Port               string
+	ClusterViewVersion int
 }

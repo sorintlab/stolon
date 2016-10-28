@@ -106,12 +106,7 @@ func NewStoreManager(kvStore kvstore.Store, path string) *StoreManager {
 	}
 }
 
-func (e *StoreManager) SetClusterData(mss cluster.KeepersState, cv *cluster.ClusterView, previous *kvstore.KVPair) (*kvstore.KVPair, error) {
-	// write cluster view
-	cd := &cluster.ClusterData{
-		KeepersState: mss,
-		ClusterView:  cv,
-	}
+func (e *StoreManager) AtomicPutClusterData(cd *cluster.ClusterData, previous *kvstore.KVPair) (*kvstore.KVPair, error) {
 	cdj, err := json.Marshal(cd)
 	if err != nil {
 		return nil, err
@@ -119,6 +114,15 @@ func (e *StoreManager) SetClusterData(mss cluster.KeepersState, cv *cluster.Clus
 	path := filepath.Join(e.clusterPath, clusterDataFile)
 	_, pair, err := e.store.AtomicPut(path, cdj, previous, nil)
 	return pair, err
+}
+
+func (e *StoreManager) PutClusterData(cd *cluster.ClusterData) error {
+	cdj, err := json.Marshal(cd)
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(e.clusterPath, clusterDataFile)
+	return e.store.Put(path, cdj, nil)
 }
 
 func (e *StoreManager) GetClusterData() (*cluster.ClusterData, *kvstore.KVPair, error) {
@@ -194,7 +198,7 @@ func (e *StoreManager) SetSentinelInfo(si *cluster.SentinelInfo, ttl time.Durati
 	if ttl < MinTTL {
 		ttl = MinTTL
 	}
-	return e.store.Put(filepath.Join(e.clusterPath, sentinelsInfoDir, si.ID), sij, &kvstore.WriteOptions{TTL: ttl})
+	return e.store.Put(filepath.Join(e.clusterPath, sentinelsInfoDir, si.UID), sij, &kvstore.WriteOptions{TTL: ttl})
 }
 
 func (e *StoreManager) GetSentinelInfo(id string) (*cluster.SentinelInfo, bool, error) {
@@ -255,7 +259,7 @@ func (e *StoreManager) SetProxyInfo(pi *cluster.ProxyInfo, ttl time.Duration) er
 	if ttl < MinTTL {
 		ttl = MinTTL
 	}
-	return e.store.Put(filepath.Join(e.clusterPath, proxiesInfoDir, pi.ID), pij, &kvstore.WriteOptions{TTL: ttl})
+	return e.store.Put(filepath.Join(e.clusterPath, proxiesInfoDir, pi.UID), pij, &kvstore.WriteOptions{TTL: ttl})
 }
 
 func (e *StoreManager) GetProxyInfo(id string) (*cluster.ProxyInfo, bool, error) {
