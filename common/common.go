@@ -16,6 +16,7 @@ package common
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/satori/go.uuid"
@@ -53,4 +54,10 @@ func NameFromStolonName(stolonName string) string {
 
 func IsStolonName(name string) bool {
 	return strings.HasPrefix(name, stolonPrefix)
+}
+
+type Parameters map[string]string
+
+func (s Parameters) Equals(is Parameters) bool {
+	return reflect.DeepEqual(s, is)
 }

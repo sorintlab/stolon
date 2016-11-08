@@ -21,7 +21,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"reflect"
 	"regexp"
 	"strings"
 	"syscall"
@@ -38,11 +37,14 @@ var (
 	log = capnslog.NewPackageLogger("github.com/sorintlab/stolon/pkg", "postgresql")
 )
 
+const (
+	stolonInitPostgresConf = "postgresql-stolon-init.conf"
+)
+
 type Manager struct {
 	pgBinPath       string
 	dataDir         string
-	confDir         string
-	parameters      Parameters
+	parameters      common.Parameters
 	localConnParams ConnParams
 	replConnParams  ConnParams
 	suUsername      string
@@ -50,12 +52,7 @@ type Manager struct {
 	replUsername    string
 	replPassword    string
 	requestTimeout  time.Duration
-}
-
-type Parameters map[string]string
-
-func (s Parameters) Equals(is Parameters) bool {
-	return reflect.DeepEqual(s, is)
+	includeConfig   bool
 }
 
 type SystemData struct {
@@ -70,11 +67,10 @@ type TimelineHistory struct {
 	Reason      string
 }
 
-func NewManager(pgBinPath string, dataDir string, confDir string, parameters Parameters, localConnParams, replConnParams ConnParams, suUsername, suPassword, replUsername, replPassword string, requestTimeout time.Duration) *Manager {
+func NewManager(pgBinPath string, dataDir string, parameters common.Parameters, localConnParams, replConnParams ConnParams, suUsername, suPassword, replUsername, replPassword string, requestTimeout time.Duration) *Manager {
 	return &Manager{
 		pgBinPath:       pgBinPath,
 		dataDir:         filepath.Join(dataDir, "postgres"),
-		confDir:         confDir,
 		parameters:      parameters,
 		replConnParams:  replConnParams,
 		localConnParams: localConnParams,
@@ -86,12 +82,16 @@ func NewManager(pgBinPath string, dataDir string, confDir string, parameters Par
 	}
 }
 
-func (p *Manager) SetParameters(parameters Parameters) {
+func (p *Manager) SetParameters(parameters common.Parameters) {
 	p.parameters = parameters
 }
 
-func (p *Manager) GetParameters() Parameters {
+func (p *Manager) GetParameters() common.Parameters {
 	return p.parameters
+}
+
+func (p *Manager) SetIncludeConfig(includeConfig bool) {
+	p.includeConfig = includeConfig
 }
 
 func (p *Manager) Init() error {
@@ -111,14 +111,9 @@ func (p *Manager) Init() error {
 		err = fmt.Errorf("error: %v, output: %s", err, out)
 		goto out
 	}
-	// Move current (initdb generated) postgresql.conf to postgresql-base.conf
-	if err = os.Rename(filepath.Join(p.dataDir, "postgresql.conf"), filepath.Join(p.dataDir, "postgresql-base.conf")); err != nil {
-		err = fmt.Errorf("error moving postgresql.conf file to postgresql-base.conf: %v", err)
-		goto out
-	}
-	// Create default confDir
-	if err = os.Mkdir(filepath.Join(p.dataDir, "conf.d"), 0700); err != nil {
-		err = fmt.Errorf("error creating conf.d inside dataDir: %v", err)
+	// Rename current (initdb generated) postgresql.conf
+	if err = os.Rename(filepath.Join(p.dataDir, "postgresql.conf"), filepath.Join(p.dataDir, stolonInitPostgresConf)); err != nil {
+		err = fmt.Errorf("error moving postgresql.conf file to %s: %v", stolonInitPostgresConf, err)
 		goto out
 	}
 	if err = p.WriteConf(); err != nil {
@@ -396,11 +391,8 @@ func (p *Manager) WriteConf() error {
 	}
 	defer f.Close()
 
-	f.WriteString("include 'postgresql-base.conf'\n")
-	if p.confDir != "" {
-		f.WriteString(fmt.Sprintf("include_dir '%s'\n", p.confDir))
-	} else {
-		f.WriteString("include_dir 'conf.d'\n")
+	if p.includeConfig {
+		f.WriteString(fmt.Sprintf("include '%s'\n", stolonInitPostgresConf))
 	}
 	for k, v := range p.parameters {
 		// Single quotes needs to be doubled
@@ -557,4 +549,10 @@ func (p *Manager) GetTimelinesHistory(timeline uint64) ([]*TimelineHistory, erro
 	ctx, cancel := context.WithTimeout(context.Background(), p.requestTimeout)
 	defer cancel()
 	return getTimelinesHistory(ctx, timeline, p.replConnParams)
+}
+
+func (p *Manager) GetConfigFilePGParameters() (common.Parameters, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), p.requestTimeout)
+	defer cancel()
+	return getConfigFilePGParameters(ctx, p.localConnParams)
 }

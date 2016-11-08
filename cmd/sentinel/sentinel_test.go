@@ -25,6 +25,8 @@ import (
 	"reflect"
 )
 
+var valTrue = true
+
 func TestUpdateCluster(t *testing.T) {
 	tests := []struct {
 		cd    *cluster.ClusterData
@@ -47,6 +49,7 @@ func TestUpdateCluster(t *testing.T) {
 						UsePgrewind:            true,
 						PGParameters:           cluster.PGParameters{"param01": "value01", "param02": "value02"},
 						InitMode:               cluster.ClusterInitModeNew,
+						MergePgParameters:      &valTrue,
 					},
 					Status: cluster.ClusterStatus{
 						CurrentGeneration: 1,
@@ -70,6 +73,7 @@ func TestUpdateCluster(t *testing.T) {
 						UsePgrewind:            true,
 						PGParameters:           cluster.PGParameters{"param01": "value01", "param02": "value02"},
 						InitMode:               cluster.ClusterInitModeNew,
+						MergePgParameters:      &valTrue,
 					},
 					Status: cluster.ClusterStatus{
 						CurrentGeneration: 1,
@@ -97,6 +101,7 @@ func TestUpdateCluster(t *testing.T) {
 						UsePgrewind:            true,
 						PGParameters:           cluster.PGParameters{"param01": "value01", "param02": "value02"},
 						InitMode:               cluster.ClusterInitModeNew,
+						MergePgParameters:      &valTrue,
 					},
 					Status: cluster.ClusterStatus{
 						CurrentGeneration: 1,
@@ -128,6 +133,7 @@ func TestUpdateCluster(t *testing.T) {
 						UsePgrewind:            true,
 						PGParameters:           cluster.PGParameters{"param01": "value01", "param02": "value02"},
 						InitMode:               cluster.ClusterInitModeNew,
+						MergePgParameters:      &valTrue,
 					},
 					Status: cluster.ClusterStatus{
 						CurrentGeneration: 1,
@@ -159,6 +165,7 @@ func TestUpdateCluster(t *testing.T) {
 							InitMode:               cluster.DBInitModeNew,
 							Role:                   common.RoleMaster,
 							Followers:              []string{},
+							IncludeConfig:          true,
 						},
 					},
 				},
@@ -180,6 +187,7 @@ func TestUpdateCluster(t *testing.T) {
 						UsePgrewind:            true,
 						PGParameters:           cluster.PGParameters{"param01": "value01", "param02": "value02"},
 						InitMode:               cluster.ClusterInitModeNew,
+						MergePgParameters:      &valTrue,
 					},
 					Status: cluster.ClusterStatus{
 						CurrentGeneration: 1,
@@ -218,6 +226,7 @@ func TestUpdateCluster(t *testing.T) {
 						UsePgrewind:            true,
 						PGParameters:           cluster.PGParameters{"param01": "value01", "param02": "value02"},
 						InitMode:               cluster.ClusterInitModeNew,
+						MergePgParameters:      &valTrue,
 					},
 					Status: cluster.ClusterStatus{
 						CurrentGeneration: 1,
@@ -256,6 +265,7 @@ func TestUpdateCluster(t *testing.T) {
 							InitMode:               cluster.DBInitModeNew,
 							Role:                   common.RoleMaster,
 							Followers:              []string{},
+							IncludeConfig:          true,
 						},
 					},
 				},
@@ -272,6 +282,7 @@ func TestUpdateCluster(t *testing.T) {
 						ConvergenceTimeout: cluster.Duration{Duration: cluster.DefaultConvergenceTimeout},
 						InitTimeout:        cluster.Duration{Duration: cluster.DefaultInitTimeout},
 						InitMode:           cluster.ClusterInitModeNew,
+						MergePgParameters:  &valTrue,
 					},
 					Status: cluster.ClusterStatus{
 						CurrentGeneration: 1,
@@ -321,6 +332,7 @@ func TestUpdateCluster(t *testing.T) {
 						ConvergenceTimeout: cluster.Duration{Duration: cluster.DefaultConvergenceTimeout},
 						InitTimeout:        cluster.Duration{Duration: cluster.DefaultInitTimeout},
 						InitMode:           cluster.ClusterInitModeNew,
+						MergePgParameters:  &valTrue,
 					},
 					Status: cluster.ClusterStatus{
 						CurrentGeneration: 1,

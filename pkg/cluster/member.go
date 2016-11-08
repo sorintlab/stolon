@@ -14,6 +14,8 @@
 
 package cluster
 
+import "github.com/sorintlab/stolon/common"
+
 type KeepersInfo map[string]*KeeperInfo
 
 type KeeperInfo struct {
@@ -69,6 +71,7 @@ type PostgresState struct {
 	TimelineID       uint64
 	XLogPos          uint64
 	TimelinesHistory PostgresTimelinesHistory
+	PGParameters     common.Parameters
 }
 
 func (p *PostgresState) Copy() *PostgresState {
