@@ -97,8 +97,18 @@ func (p *Manager) GetParameters() Parameters {
 }
 
 func (p *Manager) Init() error {
+	// ioutil.Tempfile already creates files with 0600 permissions
+	pwfile, err := ioutil.TempFile("", "pwfile")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(pwfile.Name())
+	defer pwfile.Close()
+
+	pwfile.WriteString(p.suPassword)
+
 	name := filepath.Join(p.pgBinPath, "initdb")
-	out, err := exec.Command(name, "-D", p.dataDir, "-U", p.suUsername).CombinedOutput()
+	out, err := exec.Command(name, "-D", p.dataDir, "-U", p.suUsername, "--pwfile", pwfile.Name()).CombinedOutput()
 	if err != nil {
 		err = fmt.Errorf("error: %v, output: %s", err, out)
 		goto out
@@ -151,6 +161,9 @@ out:
 func (p *Manager) Start() error {
 	log.Infof("Starting database")
 	if err := p.WriteConf(); err != nil {
+		return fmt.Errorf("error writing conf file: %v", err)
+	}
+	if err := p.writePgHba(); err != nil {
 		return fmt.Errorf("error writing conf file: %v", err)
 	}
 	name := filepath.Join(p.pgBinPath, "pg_ctl")
@@ -439,18 +452,24 @@ func (p *Manager) WriteRecoveryConf(followedConnParams ConnParams, replSlotName 
 }
 
 func (p *Manager) writePgHba() error {
-	f, err := os.OpenFile(filepath.Join(p.dataDir, "pg_hba.conf"), os.O_APPEND|os.O_RDWR, 0)
+	f, err := ioutil.TempFile(p.dataDir, "pg_hba.conf")
 	if err != nil {
 		return err
 	}
 	defer f.Close()
 
-	// TODO(sgotti) Do not set this but let the user provide its ph_hba.conf file/entries
+	f.WriteString("local all all md5\n")
+	// TODO(sgotti) Do not set this but let the user provide its pg_hba.conf file/entries
 	f.WriteString("host all all 0.0.0.0/0 md5\n")
 	f.WriteString("host all all ::0/0 md5\n")
 	// TODO(sgotti) Configure this dynamically based on our followers provided by the clusterview
 	f.WriteString(fmt.Sprintf("host replication %s %s md5\n", p.replUsername, "0.0.0.0/0"))
 	f.WriteString(fmt.Sprintf("host replication %s %s md5\n", p.replUsername, "::0/0"))
+
+	if err = os.Rename(f.Name(), filepath.Join(p.dataDir, "pg_hba.conf")); err != nil {
+		os.Remove(f.Name())
+		return err
+	}
 	return nil
 }
 
