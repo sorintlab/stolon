@@ -180,11 +180,12 @@ func NewTestKeeperWithID(t *testing.T, dir, id, clusterName, pgSUUsername, pgSUP
 	args = append(args, a...)
 
 	connParams := pg.ConnParams{
-		"user":    pgSUUsername,
-		"host":    pgListenAddress,
-		"port":    pgPort,
-		"dbname":  "postgres",
-		"sslmode": "disable",
+		"user":     pgSUUsername,
+		"password": pgSUPassword,
+		"host":     pgListenAddress,
+		"port":     pgPort,
+		"dbname":   "postgres",
+		"sslmode":  "disable",
 	}
 
 	connString := connParams.ConnString()
