@@ -28,7 +28,6 @@ import (
 
 	"github.com/coreos/pkg/capnslog"
 	"github.com/davecgh/go-spew/spew"
-	"github.com/satori/go.uuid"
 	"github.com/sorintlab/pollon"
 	"github.com/spf13/cobra"
 )
@@ -145,12 +144,13 @@ func (c *ClusterChecker) sendPollonConfData(confData pollon.ConfData) {
 	}
 }
 
-func (c *ClusterChecker) SetProxyInfo(e *store.StoreManager, cvVersion int, ttl time.Duration) error {
+func (c *ClusterChecker) SetProxyInfo(e *store.StoreManager, uid string, generation int64, ttl time.Duration) error {
 	proxyInfo := &cluster.ProxyInfo{
-		ID:                 c.id,
-		ListenAddress:      c.listenAddress,
-		Port:               c.port,
-		ClusterViewVersion: cvVersion,
+		UID:             c.id,
+		ListenAddress:   c.listenAddress,
+		Port:            c.port,
+		ProxyUID:        uid,
+		ProxyGeneration: generation,
 	}
 	log.Debugf(spew.Sprintf("proxyInfo: %#v", proxyInfo))
 
@@ -163,13 +163,14 @@ func (c *ClusterChecker) SetProxyInfo(e *store.StoreManager, cvVersion int, ttl 
 func (c *ClusterChecker) Check() error {
 	cd, _, err := c.e.GetClusterData()
 	if err != nil {
-		log.Errorf("cannot get clusterdata: %v", err)
+		log.Errorf("cannot get cluster data: %v", err)
 		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
 		if c.stopListening {
 			c.stopPollonProxy()
 		}
 		return nil
 	}
+	log.Debugf(spew.Sprintf("cluster data: %#v", cd))
 	if cd == nil {
 		log.Infof("no clusterdata available, closing connections to previous master")
 		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
@@ -187,31 +188,34 @@ func (c *ClusterChecker) Check() error {
 		return nil
 	}
 
-	cv := cd.ClusterView
-	log.Debugf(spew.Sprintf("clusterview: %#v", cv))
-
-	if cv == nil {
-		log.Infof("no clusterview available, closing connections to previous master")
+	proxy := cd.Proxy
+	if proxy == nil {
+		log.Infof("no proxy object available, closing connections to previous master")
 		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
-		return nil
-	}
-	pc := cv.ProxyConf
-	if pc == nil {
-		log.Infof("no proxyconf available, closing connections to previous master")
-		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
-		if err = c.SetProxyInfo(c.e, cv.Version, 2*cluster.DefaultProxyCheckInterval); err != nil {
+		if err = c.SetProxyInfo(c.e, proxy.UID, proxy.Generation, 2*cluster.DefaultProxyCheckInterval); err != nil {
 			log.Errorf("failed to update proxyInfo: %v", err)
 		}
 		return nil
 	}
-	addr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%s", pc.Host, pc.Port))
+
+	db, ok := cd.DBs[proxy.Spec.MasterDBUID]
+	if !ok {
+		log.Infof("no db object with uid %q available, closing connections to previous master", proxy.Spec.MasterDBUID)
+		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
+		if err = c.SetProxyInfo(c.e, proxy.UID, proxy.Generation, 2*cluster.DefaultProxyCheckInterval); err != nil {
+			log.Errorf("failed to update proxyInfo: %v", err)
+		}
+		return nil
+	}
+
+	addr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%s", db.Status.ListenAddress, db.Status.Port))
 	if err != nil {
 		log.Errorf("err: %v", err)
 		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
 		return nil
 	}
 	log.Infof("master address: %v", addr)
-	if err = c.SetProxyInfo(c.e, cv.Version, 2*cluster.DefaultProxyCheckInterval); err != nil {
+	if err = c.SetProxyInfo(c.e, proxy.UID, proxy.Generation, 2*cluster.DefaultProxyCheckInterval); err != nil {
 		log.Errorf("failed to update proxyInfo: %v", err)
 	}
 
@@ -265,8 +269,7 @@ func proxy(cmd *cobra.Command, args []string) {
 		log.Fatalf("store backend type required")
 	}
 
-	u := uuid.NewV4()
-	id := fmt.Sprintf("%x", u[:4])
+	id := common.UID()
 	log.Infof("id: %s", id)
 
 	clusterChecker, err := NewClusterChecker(id, cfg)

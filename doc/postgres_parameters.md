@@ -10,11 +10,11 @@ wal_keep_segments
 hot_standby
 ```
 
-All the other parameters can be provided by the users in different ways: using an externally managed configuration and/or using a centralized configuration define in the [cluster_config](cluster_config.md).
+All the other parameters can be provided by the users in different ways: using an externally managed configuration and/or using a centralized configuration defined in the [cluster_specification](cluster_spec.md).
 
 The externally managed configuration is useful when the user wants to manually control or use external tools to handle the postgres server parameters and is more suitable for "static" infrastructures.
 
-The centralized configuration is suited when the user doesn't want to set for every postgres instance its  parameters but it prefers to keep them the same for all the instances and handle them in an centralized configuration. This fits well with "dynamic infrastructures" like cloud native environments (for example on `kubernetes` when you can easily scale the number of keepers, since manually setting the configuration, connecting to every keeper's pod and triggering instance reload/restart becomes complex and probably it's an anti-pattern).
+The centralized configuration is suited when the user doesn't want to set for every postgres instance its parameters but it prefers to keep them the same for all the instances and handle them in an centralized configuration. This fits well with "dynamic infrastructures" like cloud native environments (for example on `kubernetes` when you can easily scale the number of keepers, since manually setting the configuration, connecting to every keeper's pod and triggering instance reload/restart becomes complex and probably it's an anti-pattern).
 
 ### Externally managed configuration
 
@@ -30,7 +30,7 @@ It's up to the user to keep the configuration synced (if wanted) between all the
 
 ### Centralized configuration
 
-The user can provide the required server parameters inside the [cluster config](cluster_config.md). The keeper will read the new config, generate the new configuration file and reload the instance. If some parameters needs an instance restart to be applied this should be manually done by the user.
+The user can provide the required server parameters inside the [cluster specification](cluster_spec.md). The keeper will read the new config, generate the new configuration file and reload the instance. If some parameters needs an instance restart to be applied this should be manually done by the user.
 
 A stolonctl function to trigger instances reload/restart will also be added.
 

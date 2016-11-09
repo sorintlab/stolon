@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/sorintlab/stolon/common"
+	"github.com/sorintlab/stolon/pkg/cluster"
 	"github.com/sorintlab/stolon/pkg/store"
 
 	"github.com/satori/go.uuid"
@@ -37,22 +38,24 @@ func TestInit(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 
-	tstore, err := NewTestStore(t, dir)
-	if err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
-	if err := tstore.Start(); err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
-	if err := tstore.WaitUp(10 * time.Second); err != nil {
-		t.Fatalf("error waiting on store up: %v", err)
-	}
-	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
+	tstore := setupStore(t, dir)
 	defer tstore.Stop()
+
+	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
 
 	clusterName := uuid.NewV4().String()
 
-	ts, err := NewTestSentinel(t, dir, clusterName, tstore.storeBackend, storeEndpoints)
+	initialClusterSpec := &cluster.ClusterSpec{
+		InitMode:           cluster.ClusterInitModeNew,
+		FailInterval:       cluster.Duration{Duration: 10 * time.Second},
+		ConvergenceTimeout: cluster.Duration{Duration: 30 * time.Second},
+	}
+	initialClusterSpecFile, err := writeClusterSpec(dir, initialClusterSpec)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	ts, err := NewTestSentinel(t, dir, clusterName, tstore.storeBackend, storeEndpoints, fmt.Sprintf("--initial-cluster-spec=%s", initialClusterSpecFile))
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -76,6 +79,129 @@ func TestInit(t *testing.T) {
 	t.Logf("database is up")
 }
 
+func TestInitExistingWithRestart(t *testing.T) {
+	t.Parallel()
+
+	clusterName := uuid.NewV4().String()
+
+	dir, err := ioutil.TempDir("", "")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer os.RemoveAll(dir)
+
+	tstore := setupStore(t, dir)
+	defer tstore.Stop()
+
+	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
+	storePath := filepath.Join(common.StoreBasePath, clusterName)
+
+	kvstore, err := store.NewStore(tstore.storeBackend, storeEndpoints)
+	if err != nil {
+		t.Fatalf("cannot create store: %v", err)
+	}
+	e := store.NewStoreManager(kvstore, storePath)
+
+	initialClusterSpec := &cluster.ClusterSpec{
+		InitMode:           cluster.ClusterInitModeNew,
+		FailInterval:       cluster.Duration{Duration: 10 * time.Second},
+		ConvergenceTimeout: cluster.Duration{Duration: 30 * time.Second},
+	}
+	initialClusterSpecFile, err := writeClusterSpec(dir, initialClusterSpec)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	ts, err := NewTestSentinel(t, dir, clusterName, tstore.storeBackend, storeEndpoints, fmt.Sprintf("--initial-cluster-spec=%s", initialClusterSpecFile))
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := ts.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	tk, err := NewTestKeeper(t, dir, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, tstore.storeBackend, storeEndpoints)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	if err := tk.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	if err := WaitClusterPhaseNormal(e, 60*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	if err := tk.WaitDBUp(60 * time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	if err := populate(t, tk); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := write(t, tk, 1, 1); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	tk.Stop()
+	ts.Stop()
+
+	// Delete the current cluster data
+	if err := tstore.store.Delete(filepath.Join(storePath, "clusterdata")); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	// Delete sentinel leader key to just speedup new election
+	if err := tstore.store.Delete(filepath.Join(storePath, common.SentinelLeaderKey)); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// Now initialize a new cluster with the existing keeper
+	initialClusterSpec = &cluster.ClusterSpec{
+		InitMode:           cluster.ClusterInitModeExisting,
+		FailInterval:       cluster.Duration{Duration: 10 * time.Second},
+		ConvergenceTimeout: cluster.Duration{Duration: 30 * time.Second},
+		ExistingConfig: &cluster.ExistingConfig{
+			KeeperUID: tk.id,
+		},
+	}
+	initialClusterSpecFile, err = writeClusterSpec(dir, initialClusterSpec)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	ts, err = NewTestSentinel(t, dir, clusterName, tstore.storeBackend, storeEndpoints, fmt.Sprintf("--initial-cluster-spec=%s", initialClusterSpecFile))
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := ts.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer ts.Stop()
+
+	if err := tk.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	if err := WaitClusterPhaseNormal(e, 60*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	if err := tk.WaitDBUp(60 * time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	c, err := getLines(t, tk)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if c != 1 {
+		t.Fatalf("wrong number of lines, want: %d, got: %d", 1, c)
+	}
+
+	tk.Stop()
+	t.Logf("database is up")
+}
+
 func TestInitUsers(t *testing.T) {
 	t.Parallel()
 
@@ -85,16 +211,7 @@ func TestInitUsers(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 
-	tstore, err := NewTestStore(t, dir)
-	if err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
-	if err := tstore.Start(); err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
-	if err := tstore.WaitUp(10 * time.Second); err != nil {
-		t.Fatalf("error waiting on store up: %v", err)
-	}
+	tstore := setupStore(t, dir)
 	defer tstore.Stop()
 
 	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
@@ -121,10 +238,19 @@ func TestInitUsers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("cannot create store: %v", err)
 	}
-
 	e := store.NewStoreManager(kvstore, storePath)
 
-	ts, err := NewTestSentinel(t, dir, clusterName, tstore.storeBackend, storeEndpoints)
+	initialClusterSpec := &cluster.ClusterSpec{
+		InitMode:           cluster.ClusterInitModeNew,
+		FailInterval:       cluster.Duration{Duration: 10 * time.Second},
+		ConvergenceTimeout: cluster.Duration{Duration: 30 * time.Second},
+	}
+	initialClusterSpecFile, err := writeClusterSpec(dir, initialClusterSpec)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	ts, err := NewTestSentinel(t, dir, clusterName, tstore.storeBackend, storeEndpoints, fmt.Sprintf("--initial-cluster-spec=%s", initialClusterSpecFile))
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -160,7 +286,7 @@ func TestInitUsers(t *testing.T) {
 
 	e = store.NewStoreManager(kvstore, storePath)
 
-	ts2, err := NewTestSentinel(t, dir, clusterName, tstore.storeBackend, storeEndpoints)
+	ts2, err := NewTestSentinel(t, dir, clusterName, tstore.storeBackend, storeEndpoints, fmt.Sprintf("--initial-cluster-spec=%s", initialClusterSpecFile))
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -181,15 +307,15 @@ func TestInitUsers(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	defer tk3.Stop()
-	if err := tk3.cmd.ExpectTimeout("postgresql: superuser password defined", 60*time.Second); err != nil {
-		t.Fatalf("expecting keeper reporting superuser password defined")
+	if err := tk3.cmd.ExpectTimeout("postgresql: superuser password set", 60*time.Second); err != nil {
+		t.Fatalf("expecting keeper reporting superuser password set")
 	}
 	if err := tk3.cmd.ExpectTimeout("postgresql: replication role user02 created", 60*time.Second); err != nil {
 		t.Fatalf("expecting keeper reporting replication role user02 created")
 	}
 }
 
-func TestInitialClusterConfig(t *testing.T) {
+func TestInitialClusterSpec(t *testing.T) {
 	t.Parallel()
 
 	dir, err := ioutil.TempDir("", "")
@@ -198,16 +324,7 @@ func TestInitialClusterConfig(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 
-	tstore, err := NewTestStore(t, dir)
-	if err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
-	if err := tstore.Start(); err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
-	if err := tstore.WaitUp(10 * time.Second); err != nil {
-		t.Fatalf("error waiting on store up: %v", err)
-	}
+	tstore := setupStore(t, dir)
 	defer tstore.Stop()
 
 	clusterName := uuid.NewV4().String()
@@ -222,14 +339,18 @@ func TestInitialClusterConfig(t *testing.T) {
 
 	e := store.NewStoreManager(kvstore, storePath)
 
-	tmpFile, err := ioutil.TempFile(dir, "initial-cluster-config.json")
+	initialClusterSpec := &cluster.ClusterSpec{
+		InitMode:               cluster.ClusterInitModeNew,
+		FailInterval:           cluster.Duration{Duration: 10 * time.Second},
+		ConvergenceTimeout:     cluster.Duration{Duration: 30 * time.Second},
+		SynchronousReplication: true,
+	}
+	initialClusterSpecFile, err := writeClusterSpec(dir, initialClusterSpec)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	defer tmpFile.Close()
-	tmpFile.WriteString(`{ "synchronous_replication": true }`)
 
-	ts, err := NewTestSentinel(t, dir, clusterName, tstore.storeBackend, storeEndpoints, fmt.Sprintf("--initial-cluster-config=%s", tmpFile.Name()))
+	ts, err := NewTestSentinel(t, dir, clusterName, tstore.storeBackend, storeEndpoints, fmt.Sprintf("--initial-cluster-spec=%s", initialClusterSpecFile))
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -246,9 +367,8 @@ func TestInitialClusterConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	cv := cd.ClusterView
-	if !*cv.Config.SynchronousReplication {
-		t.Fatal("expected cluster config with SynchronousReplication enabled")
+	if !cd.Cluster.Spec.SynchronousReplication {
+		t.Fatal("expected cluster spec with SynchronousReplication enabled")
 	}
 }
 
@@ -320,10 +440,9 @@ func TestKeeperPGConfDirBad(t *testing.T) {
 
 	clusterName := uuid.NewV4().String()
 
-	tstore, err := NewTestStore(t, dir)
-	if err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
+	tstore := setupStore(t, dir)
+	defer tstore.Stop()
+
 	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
 
 	// Test pgConfDir not absolute path
@@ -385,20 +504,22 @@ func TestKeeperPGConfDirGood(t *testing.T) {
 
 	clusterName := uuid.NewV4().String()
 
-	tstore, err := NewTestStore(t, dir)
+	tstore := setupStore(t, dir)
+	defer tstore.Stop()
+
+	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
+
+	initialClusterSpec := &cluster.ClusterSpec{
+		InitMode:           cluster.ClusterInitModeNew,
+		FailInterval:       cluster.Duration{Duration: 10 * time.Second},
+		ConvergenceTimeout: cluster.Duration{Duration: 30 * time.Second},
+	}
+	initialClusterSpecFile, err := writeClusterSpec(dir, initialClusterSpec)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	if err := tstore.Start(); err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
-	if err := tstore.WaitUp(10 * time.Second); err != nil {
-		t.Fatalf("error waiting on store up: %v", err)
-	}
-	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
-	defer tstore.Stop()
 
-	ts, err := NewTestSentinel(t, dir, clusterName, tstore.storeBackend, storeEndpoints)
+	ts, err := NewTestSentinel(t, dir, clusterName, tstore.storeBackend, storeEndpoints, fmt.Sprintf("--initial-cluster-spec=%s", initialClusterSpecFile))
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -422,7 +543,7 @@ func TestKeeperPGConfDirGood(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	defer tk.Stop()
-	if err := tk.cmd.ExpectTimeout("keeper: masterID: \""+tk.id+"\"", 60*time.Second); err != nil {
+	if err := tk.cmd.ExpectTimeout("our db requested role is master", 60*time.Second); err != nil {
 		t.Fatalf("expecting keeper active and being elected as master")
 	}
 }

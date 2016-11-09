@@ -14,22 +14,43 @@
 
 package common
 
+import (
+	"fmt"
+	"strings"
+
+	"github.com/satori/go.uuid"
+)
+
 const (
 	StoreBasePath = "stolon/cluster"
 
 	SentinelLeaderKey = "sentinel-leader"
 )
 
-type Role uint8
+type Role string
 
 const (
-	MasterRole Role = iota
-	StandbyRole
+	RoleUndefined Role = "undefined"
+	RoleMaster    Role = "master"
+	RoleStandby   Role = "standby"
 )
 
-func (r Role) String() string {
-	if r == MasterRole {
-		return "master"
-	}
-	return "standby"
+func UID() string {
+	return fmt.Sprintf("%x", uuid.NewV4().String()[:4])
+}
+
+const (
+	stolonPrefix = "stolon_"
+)
+
+func StolonName(name string) string {
+	return stolonPrefix + name
+}
+
+func NameFromStolonName(stolonName string) string {
+	return strings.TrimPrefix(stolonName, stolonPrefix)
+}
+
+func IsStolonName(name string) bool {
+	return strings.HasPrefix(name, stolonPrefix)
 }

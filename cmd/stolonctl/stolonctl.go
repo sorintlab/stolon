@@ -15,13 +15,21 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"strings"
 
+	"github.com/sorintlab/stolon/pkg/cluster"
 	"github.com/sorintlab/stolon/pkg/flagutil"
+	"github.com/sorintlab/stolon/pkg/store"
 
+	kvstore "github.com/docker/libkv/store"
 	"github.com/spf13/cobra"
+)
+
+const (
+	maxRetries = 3
 )
 
 var cmdStolonCtl = &cobra.Command{
@@ -70,4 +78,37 @@ func stdout(format string, a ...interface{}) {
 func die(format string, a ...interface{}) {
 	stderr(format, a...)
 	os.Exit(1)
+}
+
+func getClusterData(e *store.StoreManager) (*cluster.ClusterData, *kvstore.KVPair, error) {
+	cd, pair, err := e.GetClusterData()
+	if err != nil {
+		return nil, nil, fmt.Errorf("cannot get cluster data: %v", err)
+	}
+	if cd == nil {
+		return nil, nil, fmt.Errorf("nil cluster data: %v", err)
+	}
+	if cd.FormatVersion != cluster.CurrentCDFormatVersion {
+		return nil, nil, fmt.Errorf("unsupported cluster data format version %d", cd.FormatVersion)
+	}
+	return cd, pair, nil
+}
+
+func askConfirmation(message string) (bool, error) {
+	in := bufio.NewReader(os.Stdin)
+	for {
+		fmt.Fprint(os.Stdout, message)
+		input, err := in.ReadString('\n')
+		if err != nil {
+			return false, fmt.Errorf("error reading input: %v", err)
+		}
+		switch input {
+		case "yes\n":
+			return true, nil
+		case "no\n":
+			return false, nil
+		default:
+			stdout("Please enter 'yes' or 'no'")
+		}
+	}
 }

@@ -1,0 +1,93 @@
+## Cluster Specification ##
+
+Stolon has a declarative model where you specify the desired cluster state, this is called cluster specification and it's saved inside the cluster data in the store.
+
+A cluster needs to be initialized providing a cluster specification.
+This can be achieved using `stolonctl init`.
+
+A cluster specification is updatable using `stolonctl update`.
+
+Some options in a running cluster specification can be changed to update the desired state. Sometimes a cluster state can be updated only in some directions, this means that some options cannot be updated on a running cluster but will require a new cluster initialization.
+
+
+### Cluster Specification Format.
+
+| Name                   | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | Required                  | Type              | Default |
+|------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------|-------------------|---------|
+| sleepInterval          | interval to wait before next check (for every component: keeper, sentinel, proxy).                                                                                                                                                                                                                                                                                                                                                                                                | no                        | string (duration) | 5s      |
+| requestTimeout         | time after which any request (keepers checks from sentinel etc...) will fail.                                                                                                                                                                                                                                                                                                                                                                                                     | no                        | string (duration) | 10s     |
+| failInterval           | interval after the first fail to declare a keeper as not healthy.                                                                                                                                                                                                                                                                                                                                                                                                                 | no                        | string (duration) | 20s     |
+| maxStandbys            | max number of standbys. This needs to be greater enough to cover both standby managed by stolon and additional standbys configured by the user. Its value affect different postgres parameters like max_replication_slots and max_wal_senders. Setting this to a number lower than the sum of stolon managed standbys and user managed standbys will have unpredicatable effects due to problems creating replication slots or replication problems due to exhausted wal senders. | no                        | uint16            | 20      |
+| maxStandbysPerSender   | max number of standbys for every sender. A sender can be a master or another standby (with cascading replication).                                                                                                                                                                                                                                                                                                                                                                | no                        | uint16            | 3       |
+| synchronousReplication | use synchronous replication between the master and its standbys                                                                                                                                                                                                                                                                                                                                                                                                                   | no                        | bool              | false   |
+| usePgrewind            | try to use pg_rewind for faster instance resyncronization.                                                                                                                                                                                                                                                                                                                                                                                                                        | no                        | bool              | false   |
+| initMode               | The cluster initialization mode. Can be *new* or *existing*. *new* means that a new db cluster will be created on a random keeper and the other keepers will sync with it. *existing* means that a keeper (that needs to have an already created db cluster) will be choosed as the initial master and the other keepers will sync with it. In this case the `existingConfig` object needs to be populated.                                                                       | yes                       | string            |         |
+| existingConfig         | configuration for initMode of type "existing"                                                                                                                                                                                                                                                                                                                                                                                                                                     | if initMode is "existing" | ExistingConfig    |         |
+| pgParameters           | a map containing the postgres server parameters and their values.                                                                                                                                                                                                                                                                                                                                                                                                                 | no                        | map[string]string |         |
+
+#### ExistingConfig
+
+| Name      | Description                                            | Required | Type   | Default |
+|-----------|--------------------------------------------------------|----------|--------|---------|
+| keeperUID | the keeperUID to use as the initial master db cluster. | yes      | string | 5s      |
+
+#### Special Types
+duration types (as described in https://golang.org/pkg/time/#ParseDuration) are signed sequence of decimal numbers, each with optional fraction and a unit suffix, such as "300ms", "-1.5h" or "2h45m". Valid time units are "ns", "us" (or "µs"), "ms", "s", "m", "h".
+
+
+### Cluster Specification management
+
+It's possible to replace the whole current cluster specification or patch only some parts of it (see https://tools.ietf.org/html/rfc7386).
+Currently the specification must be provided in json format.
+
+
+### Cluster Specification patching
+
+``` bash
+stolonctl --cluster-name=mycluster update --patch '{ "synchronousReplication" : true }'
+```
+
+You can also pass the cluster specification or a patch as a file using the `-f` option:
+
+``` bash
+stolonctl --cluster-name=mycluster update --patch -f spec.json
+```
+
+Using `-` as the file name means stdin:
+
+``` bash
+echo '{ "synchronousReplication" : true }' | stolonctl --cluster-name=mycluster update --patch -f -
+```
+
+### Cluster Specification replace
+
+This command will replace the whole cluster specification. The unspecificed options will be populated with their defaults.
+``` bash
+stolonctl --cluster-name=mycluster update '{ "requestTimeout": "10s", "sleepInterval": "10s" }'
+```
+
+## Examples
+
+### Set some postgres parameters:
+
+You can patch the cluster specification providing postgres parameters. For example, if you want to set `log_min_duration_statement = 1s` you can do:
+
+``` bash
+stolonctl --cluster-name=mycluster update --patch '{ "pgParameters" : {"log_min_duration_statement" : "1s" } }'
+```
+
+### Remove some postgres parameters
+
+To remove a postgres parameter just patch the cluster spec setting the parameter's value to `null`:
+
+``` bash
+stolonctl --cluster-name=mycluster update --patch '{ "pgParameters" : {"log_min_duration_statement" : null } }'
+```
+
+### Remove all the postgres parameters
+
+To remove all the postgres parameters just patch the cluster spec setting `pgParameters` value to `null`:
+
+``` bash
+stolonctl --cluster-name=mycluster update --patch '{ "pgParameters" : null }'
+```

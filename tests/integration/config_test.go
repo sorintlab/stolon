@@ -30,6 +30,8 @@ import (
 )
 
 func TestServerParameters(t *testing.T) {
+	t.Parallel()
+
 	dir, err := ioutil.TempDir("", "")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -59,19 +61,53 @@ func TestServerParameters(t *testing.T) {
 	}
 	e := store.NewStoreManager(kvstore, storePath)
 
-	pair, err := e.SetClusterData(cluster.KeepersState{},
-		&cluster.ClusterView{
-			Version: 1,
-			Config: &cluster.NilConfig{
-				SleepInterval:      &cluster.Duration{5 * time.Second},
-				KeeperFailInterval: &cluster.Duration{10 * time.Second},
-			},
-		}, nil)
+	tk, err := NewTestKeeper(t, dir, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, tstore.storeBackend, storeEndpoints)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	tk, err := NewTestKeeper(t, dir, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, tstore.storeBackend, storeEndpoints)
+	cd := &cluster.ClusterData{
+		FormatVersion: cluster.CurrentCDFormatVersion,
+		Cluster: &cluster.Cluster{
+			UID:        "01",
+			Generation: 1,
+			Spec: &cluster.ClusterSpec{
+				FailInterval: cluster.Duration{Duration: 10 * time.Second},
+			},
+			Status: cluster.ClusterStatus{
+				CurrentGeneration: 1,
+				Phase:             cluster.ClusterPhaseNormal,
+				Master:            tk.id,
+			},
+		},
+		Keepers: cluster.Keepers{
+			tk.id: &cluster.Keeper{
+				UID:  tk.id,
+				Spec: &cluster.KeeperSpec{},
+				Status: cluster.KeeperStatus{
+					Healthy: true,
+				},
+			},
+		},
+		DBs: cluster.DBs{
+			"01": &cluster.DB{
+				UID:        "01",
+				Generation: 1,
+				ChangeTime: time.Time{},
+				Spec: &cluster.DBSpec{
+					KeeperUID: tk.id,
+					InitMode:  cluster.DBInitModeNew,
+					Role:      common.RoleMaster,
+				},
+				Status: cluster.DBStatus{
+					Healthy:           false,
+					CurrentGeneration: 1,
+				},
+			},
+		},
+	}
+	cd.Cluster.Spec.SetDefaults()
+	pair, err := e.AtomicPutClusterData(cd, nil)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -85,29 +121,22 @@ func TestServerParameters(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	pair, err = e.SetClusterData(cluster.KeepersState{},
-		&cluster.ClusterView{
-			Version: 2,
-			Master:  tk.id,
-			KeepersRole: cluster.KeepersRole{
-				tk.id: &cluster.KeeperRole{ID: tk.id, Follow: ""},
-			},
-			Config: &cluster.NilConfig{
-				SleepInterval:      &cluster.Duration{5 * time.Second},
-				KeeperFailInterval: &cluster.Duration{10 * time.Second},
-				PGParameters: &map[string]string{
-					"unexistent_parameter": "value",
-				},
-			},
-		}, pair)
+	cd.DBs["01"].Spec.PGParameters = map[string]string{
+		"unexistent_parameter": "value",
+	}
+	pair, err = e.AtomicPutClusterData(cd, pair)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	tk.cmd.ExpectTimeout("postgres parameters changed, reloading postgres instance", 30*time.Second)
+	if err := tk.cmd.ExpectTimeout("postgres parameters changed, reloading postgres instance", 30*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
 
 	// On the next keeper check they shouldn't be changed
-	tk.cmd.ExpectTimeout("postgres parameters not changed", 30*time.Second)
+	if err := tk.cmd.ExpectTimeout("postgres parameters not changed", 30*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
 
 	tk.Stop()
 
@@ -116,22 +145,13 @@ func TestServerParameters(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	tk.cmd.ExpectTimeout("failed to start postgres:", 30*time.Second)
+	if err := tk.cmd.ExpectTimeout("failed to start postgres:", 30*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
 
 	// Fix wrong parameters
-	pair, err = e.SetClusterData(cluster.KeepersState{},
-		&cluster.ClusterView{
-			Version: 2,
-			Master:  tk.id,
-			KeepersRole: cluster.KeepersRole{
-				tk.id: &cluster.KeeperRole{ID: tk.id, Follow: ""},
-			},
-			Config: &cluster.NilConfig{
-				SleepInterval:      &cluster.Duration{5 * time.Second},
-				KeeperFailInterval: &cluster.Duration{10 * time.Second},
-				PGParameters:       &map[string]string{},
-			},
-		}, pair)
+	cd.DBs["01"].Spec.PGParameters = map[string]string{}
+	pair, err = e.AtomicPutClusterData(cd, pair)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}

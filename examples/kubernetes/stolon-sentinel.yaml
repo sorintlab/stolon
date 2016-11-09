@@ -35,5 +35,3 @@ spec:
             value: "true"
           - name: STSENTINEL_KUBERNETES_NAMESPACE
             value: "default"
-        ports:
-          - containerPort: 6431

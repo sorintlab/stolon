@@ -21,8 +21,20 @@ When running inside a kubernetes cluster then sentinels will use the kubernetes 
 
 ## Cluster setup and tests
 
-These example points to a single node etcd cluster on `10.245.1.1:2379` without tls. You can change the ST${COMPONENT}_STORE_ENDPOINTS environment variables in the definitions to point to the right etcd cluster.
+This example has some predefined values that you'd like to change:
+* The cluster name is `kube-cluster`
+* It points to a single node etcd cluster on `10.245.1.1:2379` without tls. You can change the ST${COMPONENT}_STORE_ENDPOINTS environment variables in the definitions to point to the right etcd cluster.
 
+
+### Initialize the cluster
+
+The first step is to initialize a cluster with a cluster specification. For now we'll just initialize a cluster without providing a cluster specification but using a default one that will just start with an empty database cluster.
+
+```
+./bin/stolonctl --cluster-name=kube-stolon --store-backend=etcd init
+```
+
+If you want to automate this step you can just pass an initial cluster specification to the sentinels with the `--initial-cluster-spec` option.
 
 ### Create the sentinel(s)
 

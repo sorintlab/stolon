@@ -39,7 +39,6 @@ var (
 )
 
 type Manager struct {
-	name            string
 	pgBinPath       string
 	dataDir         string
 	confDir         string
@@ -71,9 +70,8 @@ type TimelineHistory struct {
 	Reason      string
 }
 
-func NewManager(name string, pgBinPath string, dataDir string, confDir string, parameters Parameters, localConnParams, replConnParams ConnParams, suUsername, suPassword, replUsername, replPassword string, requestTimeout time.Duration) *Manager {
+func NewManager(pgBinPath string, dataDir string, confDir string, parameters Parameters, localConnParams, replConnParams ConnParams, suUsername, suPassword, replUsername, replPassword string, requestTimeout time.Duration) *Manager {
 	return &Manager{
-		name:            name,
 		pgBinPath:       pgBinPath,
 		dataDir:         filepath.Join(dataDir, "postgres"),
 		confDir:         confDir,
@@ -128,7 +126,7 @@ func (p *Manager) Init() error {
 		goto out
 	}
 
-	log.Infof("Setting required accesses to pg_hba.conf")
+	log.Infof("setting required accesses to pg_hba.conf")
 	if err = p.writePgHba(); err != nil {
 		err = fmt.Errorf("error setting requires accesses to pg_hba.conf: %v", err)
 		goto out
@@ -139,7 +137,7 @@ func (p *Manager) Init() error {
 		goto out
 	}
 
-	log.Infof("Setting roles")
+	log.Infof("setting roles")
 	if err = p.SetupRoles(); err != nil {
 		err = fmt.Errorf("error setting roles: %v", err)
 		goto out
@@ -159,7 +157,7 @@ out:
 }
 
 func (p *Manager) Start() error {
-	log.Infof("Starting database")
+	log.Infof("starting database")
 	if err := p.WriteConf(); err != nil {
 		return fmt.Errorf("error writing conf file: %v", err)
 	}
@@ -181,7 +179,7 @@ func (p *Manager) Start() error {
 }
 
 func (p *Manager) Stop(fast bool) error {
-	log.Infof("Stopping database")
+	log.Infof("stopping database")
 	name := filepath.Join(p.pgBinPath, "pg_ctl")
 	cmd := exec.Command(name, "stop", "-w", "-D", p.dataDir, "-o", "-c unix_socket_directories=/tmp")
 	if fast {
@@ -211,7 +209,7 @@ func (p *Manager) IsStarted() (bool, error) {
 }
 
 func (p *Manager) Reload() error {
-	log.Infof("Reloading database configuration")
+	log.Infof("reloading database configuration")
 	if err := p.WriteConf(); err != nil {
 		return fmt.Errorf("error writing conf file: %v", err)
 	}
@@ -224,7 +222,7 @@ func (p *Manager) Reload() error {
 }
 
 func (p *Manager) Restart(fast bool) error {
-	log.Infof("Restarting database")
+	log.Infof("restarting database")
 	if err := p.Stop(fast); err != nil {
 		return err
 	}
@@ -235,7 +233,7 @@ func (p *Manager) Restart(fast bool) error {
 }
 
 func (p *Manager) Promote() error {
-	log.Infof("Promoting database")
+	log.Infof("promoting database")
 	name := filepath.Join(p.pgBinPath, "pg_ctl")
 	cmd := exec.Command(name, "promote", "-w", "-D", p.dataDir)
 	if out, err := cmd.CombinedOutput(); err != nil {
@@ -249,26 +247,26 @@ func (p *Manager) SetupRoles() error {
 	defer cancel()
 
 	if p.suUsername == p.replUsername {
-		log.Infof("Adding replication role to superuser")
+		log.Infof("adding replication role to superuser")
 		if err := alterRole(ctx, p.localConnParams, []string{"replication"}, p.suUsername, p.suPassword); err != nil {
 			return fmt.Errorf("error adding replication role to superuser: %v", err)
 		}
-		log.Debugf("replication role added to superuser")
+		log.Info("replication role added to superuser")
 	} else {
 		// Configure superuser role password
 		if p.suPassword != "" {
-			log.Infof("Defining superuser password")
+			log.Infof("setting superuser password")
 			if err := setPassword(ctx, p.localConnParams, p.suUsername, p.suPassword); err != nil {
 				return fmt.Errorf("error setting superuser password: %v", err)
 			}
-			log.Debugf("superuser password defined")
+			log.Info("superuser password set")
 		}
 		roles := []string{"login", "replication"}
-		log.Infof("Creating replication role")
+		log.Infof("creating replication role")
 		if err := createRole(ctx, p.localConnParams, roles, p.replUsername, p.replPassword); err != nil {
 			return fmt.Errorf("error creating replication role: %v", err)
 		}
-		log.Debugf("replication role %s created", p.replUsername)
+		log.Infof("replication role %s created", p.replUsername)
 	}
 	return nil
 }
@@ -338,12 +336,12 @@ func (p *Manager) GetRoleFromDB() (common.Role, error) {
 func (p *Manager) GetRole() (common.Role, error) {
 	curConnParams, err := p.GetPrimaryConninfo()
 	if err != nil {
-		return 0, fmt.Errorf("error retrieving primary conn info: %v", err)
+		return "", fmt.Errorf("error retrieving primary conn info: %v", err)
 	}
 	if curConnParams == nil {
-		return common.MasterRole, nil
+		return common.RoleMaster, nil
 	}
-	return common.StandbyRole, nil
+	return common.RoleStandby, nil
 }
 
 func (p *Manager) GetPrimaryConninfo() (ConnParams, error) {
@@ -493,7 +491,7 @@ func (p *Manager) SyncFromFollowedPGRewind(followedConnParams ConnParams, passwo
 	followedConnParams.Set("options", "-c synchronous_commit=off")
 	followedConnString := followedConnParams.ConnString()
 
-	log.Infof("Running pg_rewind")
+	log.Infof("running pg_rewind")
 	name := filepath.Join(p.pgBinPath, "pg_rewind")
 	cmd := exec.Command(name, "--debug", "-D", p.dataDir, "--source-server="+followedConnString)
 	cmd.Env = append(cmd.Env, fmt.Sprintf("PGPASSFILE=%s", pgpass.Name()))
@@ -519,7 +517,7 @@ func (p *Manager) SyncFromFollowed(followedConnParams ConnParams) error {
 	password := followedConnParams.Get("password")
 	pgpass.WriteString(fmt.Sprintf("%s:%s:*:%s:%s\n", host, port, user, password))
 
-	log.Infof("Running pg_basebackup")
+	log.Infof("running pg_basebackup")
 	name := filepath.Join(p.pgBinPath, "pg_basebackup")
 	cmd := exec.Command(name, "-R", "-D", p.dataDir, "--host="+host, "--port="+port, "-U", user)
 	cmd.Env = append(cmd.Env, fmt.Sprintf("PGPASSFILE=%s", pgpass.Name()))

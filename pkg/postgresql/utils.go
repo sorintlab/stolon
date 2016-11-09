@@ -172,26 +172,26 @@ func dropReplicationSlot(ctx context.Context, connParams ConnParams, name string
 func getRole(ctx context.Context, connParams ConnParams) (common.Role, error) {
 	db, err := sql.Open("postgres", connParams.ConnString())
 	if err != nil {
-		return 0, err
+		return "", err
 	}
 	defer db.Close()
 
 	rows, err := query(ctx, db, "select pg_is_in_recovery from pg_is_in_recovery()")
 	if err != nil {
-		return 0, err
+		return "", err
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var isInRecovery bool
 		if err := rows.Scan(&isInRecovery); err != nil {
-			return 0, err
+			return "", err
 		}
 		if isInRecovery {
-			return common.StandbyRole, nil
+			return common.RoleStandby, nil
 		}
-		return common.MasterRole, nil
+		return common.RoleMaster, nil
 	}
-	return 0, fmt.Errorf("no rows returned")
+	return "", fmt.Errorf("no rows returned")
 }
 
 func getPGMasterLocation(ctx context.Context, connParams ConnParams) (uint64, error) {

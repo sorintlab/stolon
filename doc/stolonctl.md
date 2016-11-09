@@ -22,8 +22,8 @@ Retrieve the current cluster status
 stolonctl --cluster-name mycluster status
 === Active sentinels ===
 
-ID              LISTENADDRESS   LEADER
-2051827f        localhost:6431  true
+ID              LEADER
+2051827f        true
 
 === Active proxies ===
 
@@ -32,13 +32,12 @@ fc6b8f04        127.0.0.1:25432 43
 
 === Keepers ===
 
-ID              LISTENADDRESS   PG LISTENADDRESS        CV VERSION      HEALTHY
-postgres0       localhost:5431  localhost:5432          43              true
-postgres1       localhost:5433  localhost:5435          41              false
+UID             LISTENADDRESS   PG LISTENADDRESS        HEALTHY PGWANTEDGENERATION      PGCURRENTGENERATION
+postgres0       localhost:5431  localhost:5432          true    3                       3
+postgres1       localhost:5433  localhost:5435          true    4                       4
 
-=== Required Cluster View ===
+=== Required Cluster ===
 
-Version: 43
 Master: postgres0
 
 ===== Keepers tree =====
@@ -52,17 +51,17 @@ postgres0 (master)
 
 List all the cluster available under the default store base path
 
-### config ###
+### init ###
 
-See [cluster config](cluster_config.md)
-### config get ###
+Initialize a new cluster
+See [initialization](initialization.md)
 
-Get the current cluster config
+### update ###
 
-### config replace ###
+Update a cluster specification
+See [cluster spec](cluster_spec.md)
 
-Replace the current cluster config
+### spec  ###
 
-### config patch ###
+Get the current cluster specification
 
-Patch the current cluster config
