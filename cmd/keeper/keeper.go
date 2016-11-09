@@ -79,7 +79,6 @@ type config struct {
 	pgListenAddress         string
 	pgPort                  string
 	pgBinPath               string
-	pgConfDir               string
 	pgReplUsername          string
 	pgReplPassword          string
 	pgReplPasswordFile      string
@@ -108,7 +107,6 @@ func init() {
 	cmdKeeper.PersistentFlags().StringVar(&cfg.pgListenAddress, "pg-listen-address", "localhost", "postgresql instance listening address")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.pgPort, "pg-port", "5432", "postgresql instance listening port")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.pgBinPath, "pg-bin-path", "", "absolute path to postgresql binaries. If empty they will be searched in the current PATH")
-	cmdKeeper.PersistentFlags().StringVar(&cfg.pgConfDir, "pg-conf-dir", "", "absolute path to user provided postgres configuration. If empty a default dir under $dataDir/postgres/conf.d will be used")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.pgReplUsername, "pg-repl-username", "", "postgres replication user name. Required. It'll be created on db initialization. Requires --pg-repl-password or --pg-repl-passwordfile. Must be the same for all keepers.")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.pgReplPassword, "pg-repl-password", "", "postgres replication user password. Required. Only one of --pg-repl-password or --pg-repl-passwordfile is required. Must be the same for all keepers.")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.pgReplPasswordFile, "pg-repl-passwordfile", "", "postgres replication user password file. Only one of --pg-repl-password or --pg-repl-passwordfile is required. Must be the same for all keepers.")
@@ -118,11 +116,24 @@ func init() {
 	cmdKeeper.PersistentFlags().BoolVar(&cfg.debug, "debug", false, "enable debug logging")
 }
 
-var mandatoryPGParameters = pg.Parameters{
+var mandatoryPGParameters = common.Parameters{
 	"unix_socket_directories": "/tmp",
 	"wal_level":               "hot_standby",
 	"wal_keep_segments":       "8",
 	"hot_standby":             "on",
+}
+
+var managedPGParameters = []string{
+	"unix_socket_directories",
+	"wal_level",
+	"wal_keep_segments",
+	"hot_standby",
+	"listen_addresses",
+	"port",
+	"max_replication_slots",
+	"max_wal_senders",
+	"wal_log_hints",
+	"synchronous_standby_names",
 }
 
 func readPasswordFromFile(filepath string) (string, error) {
@@ -188,8 +199,8 @@ func (p *PostgresKeeper) getOurReplConnParams() pg.ConnParams {
 	}
 }
 
-func (p *PostgresKeeper) createPGParameters(db *cluster.DB) pg.Parameters {
-	parameters := pg.Parameters{}
+func (p *PostgresKeeper) createPGParameters(db *cluster.DB) common.Parameters {
+	parameters := common.Parameters{}
 	// Copy user defined pg parameters
 	for k, v := range db.Spec.PGParameters {
 		parameters[k] = v
@@ -243,7 +254,6 @@ type PostgresKeeper struct {
 	pgListenAddress     string
 	pgPort              string
 	pgBinPath           string
-	pgConfDir           string
 	pgReplUsername      string
 	pgReplPassword      string
 	pgSUUsername        string
@@ -289,7 +299,6 @@ func NewPostgresKeeper(cfg *config, stop chan bool, end chan error) (*PostgresKe
 		pgListenAddress:     cfg.pgListenAddress,
 		pgPort:              cfg.pgPort,
 		pgBinPath:           cfg.pgBinPath,
-		pgConfDir:           cfg.pgConfDir,
 		pgReplUsername:      cfg.pgReplUsername,
 		pgReplPassword:      cfg.pgReplPassword,
 		pgSUUsername:        cfg.pgSUUsername,
@@ -414,6 +423,21 @@ func (p *PostgresKeeper) GetPGState(pctx context.Context) (*cluster.PostgresStat
 		return nil, err
 	}
 	if initialized {
+		pgParameters, err := p.pgm.GetConfigFilePGParameters()
+		if err != nil {
+			log.Errorf("error: %v", err)
+			return pgState, nil
+		}
+		log.Debugf("pgParameters: %v", pgParameters)
+		filteredPGParameters := common.Parameters{}
+		for k, v := range pgParameters {
+			if !util.StringInSlice(managedPGParameters, k) {
+				filteredPGParameters[k] = v
+			}
+		}
+		log.Debugf("filteredPGParameters: %v", filteredPGParameters)
+		pgState.PGParameters = filteredPGParameters
+
 		sd, err := p.pgm.GetSystemData()
 		if err != nil {
 			pgState.Healthy = false
@@ -482,8 +506,8 @@ func (p *PostgresKeeper) Start() {
 
 	// TODO(sgotti) reconfigure the various configurations options
 	// (RequestTimeout) after a changed cluster config
-	pgParameters := make(postgresql.Parameters)
-	pgm := postgresql.NewManager(p.pgBinPath, p.dataDir, p.pgConfDir, pgParameters, p.getLocalConnParams(), p.getOurReplConnParams(), p.pgSUUsername, p.pgSUPassword, p.pgReplUsername, p.pgReplPassword, p.requestTimeout)
+	pgParameters := make(common.Parameters)
+	pgm := postgresql.NewManager(p.pgBinPath, p.dataDir, pgParameters, p.getLocalConnParams(), p.getOurReplConnParams(), p.pgSUUsername, p.pgSUPassword, p.pgReplUsername, p.pgReplPassword, p.requestTimeout)
 	p.pgm = pgm
 
 	p.pgm.Stop(true)
@@ -668,6 +692,8 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 	pgParameters := p.createPGParameters(db)
 	// update pgm postgres parameters
 	pgm.SetParameters(pgParameters)
+
+	pgm.SetIncludeConfig(db.Spec.IncludeConfig)
 
 	dbls := p.dbLocalState
 	if dbls.Initializing {
@@ -1125,20 +1151,6 @@ func keeper(cmd *cobra.Command, args []string) {
 
 	if err = os.MkdirAll(cfg.dataDir, 0700); err != nil {
 		log.Fatalf("error: %v", err)
-	}
-
-	if cfg.pgConfDir != "" {
-		if !filepath.IsAbs(cfg.pgConfDir) {
-			log.Fatalf("pg-conf-dir must be an absolute path")
-		}
-		var fi os.FileInfo
-		fi, err = os.Stat(cfg.pgConfDir)
-		if err != nil {
-			log.Fatalf("cannot stat pg-conf-dir: %v", err)
-		}
-		if !fi.IsDir() {
-			log.Fatalf("pg-conf-dir is not a directory")
-		}
 	}
 
 	if cfg.pgReplUsername == "" {

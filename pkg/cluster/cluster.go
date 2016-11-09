@@ -41,6 +41,7 @@ const (
 	DefaultFailInterval                = 20 * time.Second
 	DefaultMaxStandbys          uint16 = 20
 	DefaultMaxStandbysPerSender uint16 = 3
+	DefaultMergePGParameter            = true
 )
 
 const (
@@ -164,6 +165,10 @@ type ClusterSpec struct {
 	UsePgrewind bool `json:"usePgrewind,omitempty"`
 	// InitMode defines the cluster initialization mode. Current modes are: new, existing, pitr
 	InitMode ClusterInitMode `json:"initMode,omitempty"`
+	// Whether to merge pgParameters of the initialized db cluster, useful
+	// the retain initdb generated parameters when InitMode is new, retain
+	// current parameters when initMode is existing or pitr.
+	MergePgParameters *bool `json:"mergePgParameters,omitempty"`
 	// Role defines the cluster operating role (master or standby of an external database)
 	Role ClusterRole `json:"role,omitempty"`
 	// Point in time recovery init configuration used when InitMode is "pitr"
@@ -223,6 +228,10 @@ func (s *ClusterSpec) SetDefaults() {
 	}
 	if s.MaxStandbysPerSender == 0 {
 		s.MaxStandbysPerSender = DefaultMaxStandbysPerSender
+	}
+	if s.MergePgParameters == nil {
+		v := DefaultMergePGParameter
+		s.MergePgParameters = &v
 	}
 }
 
@@ -360,6 +369,8 @@ type DBSpec struct {
 	FollowConfig *FollowConfig `json:"followConfig,omitempty"`
 	// Followers DB UIDs
 	Followers []string `json:"followers"`
+	// Whether to include previous postgresql.conf
+	IncludeConfig bool `json:"includePreviousConfig,omitempty"`
 }
 
 type DBStatus struct {
@@ -375,6 +386,8 @@ type DBStatus struct {
 	TimelineID       uint64                   `json:"timelineID,omitempty"`
 	XLogPos          uint64                   `json:"xLogPos,omitempty"`
 	TimelinesHistory PostgresTimelinesHistory `json:"timelinesHistory,omitempty"`
+
+	PGParameters PGParameters `json:"pgParameters,omitempty"`
 }
 
 type DB struct {

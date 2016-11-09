@@ -332,3 +332,28 @@ func fileExists(path string) (bool, error) {
 	}
 	return true, nil
 }
+
+func getConfigFilePGParameters(ctx context.Context, connParams ConnParams) (common.Parameters, error) {
+	var pgParameters = common.Parameters{}
+	db, err := sql.Open("postgres", connParams.ConnString())
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+
+	rows, err := query(ctx, db, "select name, setting, source from pg_settings")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name, setting, source string
+		if err = rows.Scan(&name, &setting, &source); err != nil {
+			return nil, err
+		}
+		if source == "configuration file" {
+			pgParameters[name] = setting
+		}
+	}
+	return pgParameters, nil
+}

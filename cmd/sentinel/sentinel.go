@@ -472,6 +472,7 @@ func (s *Sentinel) updateDBsStatus(cd *cluster.ClusterData, dbStates map[string]
 		db.Status.ListenAddress = dbs.ListenAddress
 		db.Status.Port = dbs.Port
 		db.Status.CurrentGeneration = dbs.Generation
+		db.Status.PGParameters = cluster.PGParameters(dbs.PGParameters)
 		if dbs.Healthy {
 			db.CleanError()
 			db.Status.SystemID = dbs.SystemID
@@ -532,10 +533,11 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 					Generation: cluster.InitialGeneration,
 					ChangeTime: time.Now(),
 					Spec: &cluster.DBSpec{
-						KeeperUID: k.UID,
-						InitMode:  cluster.DBInitModeNew,
-						Role:      common.RoleMaster,
-						Followers: []string{},
+						KeeperUID:     k.UID,
+						InitMode:      cluster.DBInitModeNew,
+						Role:          common.RoleMaster,
+						Followers:     []string{},
+						IncludeConfig: *cd.Cluster.Spec.MergePgParameters,
 					},
 				}
 				newcd.DBs[db.UID] = db
@@ -553,6 +555,12 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 					log.Infof("db %q on keeper %q initialized", db.UID, db.Spec.KeeperUID)
 					// Set db initMode to none, not needed but just a security measure
 					db.Spec.InitMode = cluster.DBInitModeNone
+					// Don't include previous config anymore
+					db.Spec.IncludeConfig = false
+					// Replace reported pg parameters in cluster spec
+					if *cd.Cluster.Spec.MergePgParameters {
+						newcd.Cluster.Spec.PGParameters = db.Status.PGParameters
+					}
 					// Cluster initialized, switch to Normal state
 					newcd.Cluster.Status.Phase = cluster.ClusterPhaseNormal
 				case Converging:
@@ -582,10 +590,11 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 					Generation: cluster.InitialGeneration,
 					ChangeTime: time.Now(),
 					Spec: &cluster.DBSpec{
-						KeeperUID: k.UID,
-						InitMode:  cluster.DBInitModeNone,
-						Role:      common.RoleMaster,
-						Followers: []string{},
+						KeeperUID:     k.UID,
+						InitMode:      cluster.DBInitModeNone,
+						Role:          common.RoleMaster,
+						Followers:     []string{},
+						IncludeConfig: *cd.Cluster.Spec.MergePgParameters,
 					},
 				}
 				newcd.DBs[db.UID] = db
@@ -600,6 +609,12 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 				// TODO(sgotti) set a timeout (the max time for a noop operation, just a start/restart)
 				if s.dbConvergenceState(cd, db, 0) == Converged {
 					log.Infof("db %q on keeper %q initialized", db.UID, db.Spec.KeeperUID)
+					// Don't include previous config anymore
+					db.Spec.IncludeConfig = false
+					// Replace reported pg parameters in cluster spec
+					if *cd.Cluster.Spec.MergePgParameters {
+						newcd.Cluster.Spec.PGParameters = db.Status.PGParameters
+					}
 					// Cluster initialized, switch to Normal state
 					newcd.Cluster.Status.Phase = cluster.ClusterPhaseNormal
 				}
