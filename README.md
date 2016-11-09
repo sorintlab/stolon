@@ -31,6 +31,15 @@ Stolon is composed of 3 main components
 
 ![Stolon architecture](doc/architecture_small.png)
 
+## Documentation
+
+[Documentation Index](doc/README.md)
+
+## Quick start and examples
+
+* [simple cluster example](doc/simplecluster.md)
+* [kubernetes example](examples/kubernetes/README.md)
+
 ## Project Status
 
 Stolon is under active development and used in different environments. Probably its on disk format (store hierarchy and key contents) will change in future to support new features. If a breaking change is needed it'll be documented in the release notes and an upgrade path will be provided.
@@ -48,16 +57,6 @@ Anyway it's quite easy to reset a cluster from scratch keeping the current maste
 ```
 ./build
 ```
-
-## Quick start and examples
-
-* [simple cluster example](doc/simplecluster.md)
-* [kubernetes example](examples/kubernetes/README.md)
-
-## Documentation
-
-* [stolon client (stolonctl)](doc/stolonctl.md)
-* [cluster configuration](doc/cluster_config.md)
 
 ## High availability
 
