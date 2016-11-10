@@ -96,8 +96,9 @@ const (
 type DBInitMode string
 
 const (
-	// No db initialization
 	DBInitModeNone DBInitMode = "none"
+	// Use existing db cluster data
+	DBInitModeExisting DBInitMode = "existing"
 	// Initialize a db starting from a freshly initialized database cluster
 	DBInitModeNew DBInitMode = "new"
 	// Initialize a db doing a point in time recovery.

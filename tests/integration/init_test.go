@@ -79,9 +79,17 @@ func TestInit(t *testing.T) {
 	t.Logf("database is up")
 }
 
-func TestInitExistingWithRestart(t *testing.T) {
+func TestInitExistingMerge(t *testing.T) {
 	t.Parallel()
+	testInitExisting(t, true)
+}
 
+func TestInitExistingNoMerge(t *testing.T) {
+	t.Parallel()
+	testInitExisting(t, false)
+}
+
+func testInitExisting(t *testing.T, merge bool) {
 	clusterName := uuid.NewV4().String()
 
 	dir, err := ioutil.TempDir("", "")
@@ -106,6 +114,9 @@ func TestInitExistingWithRestart(t *testing.T) {
 		InitMode:           cluster.ClusterInitModeNew,
 		FailInterval:       cluster.Duration{Duration: 10 * time.Second},
 		ConvergenceTimeout: cluster.Duration{Duration: 30 * time.Second},
+		PGParameters: cluster.PGParameters{
+			"archive_mode": "on",
+		},
 	}
 	initialClusterSpecFile, err := writeClusterSpec(dir, initialClusterSpec)
 	if err != nil {
@@ -128,7 +139,7 @@ func TestInitExistingWithRestart(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	if err := WaitClusterPhaseNormal(e, 60*time.Second); err != nil {
+	if err := WaitClusterPhase(e, cluster.ClusterPhaseNormal, 60*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
@@ -143,23 +154,12 @@ func TestInitExistingWithRestart(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	tk.Stop()
-	ts.Stop()
-
-	// Delete the current cluster data
-	if err := tstore.store.Delete(filepath.Join(storePath, "clusterdata")); err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
-	// Delete sentinel leader key to just speedup new election
-	if err := tstore.store.Delete(filepath.Join(storePath, common.SentinelLeaderKey)); err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
-
 	// Now initialize a new cluster with the existing keeper
 	initialClusterSpec = &cluster.ClusterSpec{
 		InitMode:           cluster.ClusterInitModeExisting,
 		FailInterval:       cluster.Duration{Duration: 10 * time.Second},
 		ConvergenceTimeout: cluster.Duration{Duration: 30 * time.Second},
+		MergePgParameters:  &merge,
 		ExistingConfig: &cluster.ExistingConfig{
 			KeeperUID: tk.id,
 		},
@@ -169,23 +169,20 @@ func TestInitExistingWithRestart(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	ts, err = NewTestSentinel(t, dir, clusterName, tstore.storeBackend, storeEndpoints, fmt.Sprintf("--initial-cluster-spec=%s", initialClusterSpecFile))
+	//	time.Sleep(1 * time.Hour)
+	t.Logf("reinitializing cluster")
+	// Initialize cluster with new spec
+	err = StolonCtl(clusterName, tstore.storeBackend, storeEndpoints, "init", "-y", "-f", initialClusterSpecFile)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	if err := ts.Start(); err != nil {
+
+	if err := WaitClusterPhase(e, cluster.ClusterPhaseInitializing, 60*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	defer ts.Stop()
-
-	if err := tk.Start(); err != nil {
+	if err := WaitClusterPhase(e, cluster.ClusterPhaseNormal, 60*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-
-	if err := WaitClusterPhaseNormal(e, 60*time.Second); err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
-
 	if err := tk.WaitDBUp(60 * time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -198,8 +195,19 @@ func TestInitExistingWithRestart(t *testing.T) {
 		t.Fatalf("wrong number of lines, want: %d, got: %d", 1, c)
 	}
 
+	pgParameters, err := tk.GetPGParameters()
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	v, ok := pgParameters["archive_mode"]
+	if merge && v != "on" {
+		t.Fatalf("expected archive_mode == on got %q", v)
+	}
+	if !merge && ok {
+		t.Fatalf("expected archive_mode empty")
+	}
+
 	tk.Stop()
-	t.Logf("database is up")
 }
 
 func TestInitUsers(t *testing.T) {
@@ -259,8 +267,8 @@ func TestInitUsers(t *testing.T) {
 	}
 	defer ts.Stop()
 
-	if err := WaitClusterInitialized(e, 30*time.Second); err != nil {
-		t.Fatal("expected cluster initialized")
+	if err := WaitClusterPhase(e, cluster.ClusterPhaseInitializing, 30*time.Second); err != nil {
+		t.Fatal("expected cluster in initializing phase")
 	}
 
 	tk2, err := NewTestKeeper(t, dir, clusterName, "user01", "password", "user01", "password", tstore.storeBackend, storeEndpoints)
@@ -295,8 +303,8 @@ func TestInitUsers(t *testing.T) {
 	}
 	defer ts2.Stop()
 
-	if err := WaitClusterInitialized(e, 30*time.Second); err != nil {
-		t.Fatal("expected cluster initialized")
+	if err := WaitClusterPhase(e, cluster.ClusterPhaseInitializing, 60*time.Second); err != nil {
+		t.Fatal("expected cluster in initializing phase")
 	}
 
 	tk3, err := NewTestKeeper(t, dir, clusterName, "user01", "password", "user02", "password", tstore.storeBackend, storeEndpoints)
@@ -359,8 +367,8 @@ func TestInitialClusterSpec(t *testing.T) {
 	}
 	defer ts.Stop()
 
-	if err := WaitClusterInitialized(e, 30*time.Second); err != nil {
-		t.Fatal("expected cluster initialized")
+	if err := WaitClusterPhase(e, cluster.ClusterPhaseInitializing, 60*time.Second); err != nil {
+		t.Fatal("expected cluster in initializing phase")
 	}
 
 	cd, _, err := e.GetClusterData()

@@ -96,6 +96,7 @@ if [ -n "$INTEGRATION" ]; then
 	export STKEEPER_BIN=${BINDIR}/stolon-keeper
 	export STSENTINEL_BIN=${BINDIR}/stolon-sentinel
 	export STPROXY_BIN=${BINDIR}/stolon-proxy
+	export STCTL_BIN=${BINDIR}/stolonctl
 	if [ "${STOLON_TEST_STORE_BACKEND}" == "etcd" ]; then
 		if [ -z ${ETCD_BIN} ]; then
 			if [ -z $(which etcd) ]; then

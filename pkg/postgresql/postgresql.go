@@ -34,7 +34,8 @@ import (
 )
 
 const (
-	stolonInitPostgresConf = "postgresql-stolon-init.conf"
+	postgresConf    = "postgresql.conf"
+	tmpPostgresConf = "stolon-temp-postgresql.conf"
 )
 
 var log = zap.New(zap.NullEncoder())
@@ -54,7 +55,6 @@ type Manager struct {
 	replUsername    string
 	replPassword    string
 	requestTimeout  time.Duration
-	includeConfig   bool
 }
 
 type SystemData struct {
@@ -92,10 +92,6 @@ func (p *Manager) GetParameters() common.Parameters {
 	return p.parameters
 }
 
-func (p *Manager) SetIncludeConfig(includeConfig bool) {
-	p.includeConfig = includeConfig
-}
-
 func (p *Manager) Init() error {
 	// ioutil.Tempfile already creates files with 0600 permissions
 	pwfile, err := ioutil.TempFile("", "pwfile")
@@ -113,37 +109,6 @@ func (p *Manager) Init() error {
 		err = fmt.Errorf("error: %v, output: %s", err, out)
 		goto out
 	}
-	// Rename current (initdb generated) postgresql.conf
-	if err = os.Rename(filepath.Join(p.dataDir, "postgresql.conf"), filepath.Join(p.dataDir, stolonInitPostgresConf)); err != nil {
-		err = fmt.Errorf("error moving postgresql.conf file to %s: %v", stolonInitPostgresConf, err)
-		goto out
-	}
-	if err = p.WriteConf(); err != nil {
-		err = fmt.Errorf("error writing postgresql.conf file: %v", err)
-		goto out
-	}
-
-	log.Info("setting required accesses to pg_hba.conf")
-	if err = p.writePgHba(); err != nil {
-		err = fmt.Errorf("error setting requires accesses to pg_hba.conf: %v", err)
-		goto out
-	}
-
-	if err = p.Start(); err != nil {
-		err = fmt.Errorf("error starting instance: %v", err)
-		goto out
-	}
-
-	log.Info("setting roles")
-	if err = p.SetupRoles(); err != nil {
-		err = fmt.Errorf("error setting roles: %v", err)
-		goto out
-	}
-	if err = p.Stop(true); err != nil {
-		err = fmt.Errorf("error stopping instance: %v", err)
-		goto out
-	}
-
 	// On every error remove the dataDir, so we don't end with an half initialized database
 out:
 	if err != nil {
@@ -177,16 +142,60 @@ out:
 	return nil
 }
 
-func (p *Manager) Start() error {
-	log.Info("starting database")
+func (p *Manager) StartTmpMerged(args ...string) error {
+	// start postgres with a conf file different then postgresql.conf so we don't have to touch it
+	f, err := os.Create(filepath.Join(p.dataDir, tmpPostgresConf))
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	// include postgresql.conf if it exists
+	_, err = os.Stat(filepath.Join(p.dataDir, postgresConf))
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if !os.IsNotExist(err) {
+		f.WriteString(fmt.Sprintf("include '%s'\n", postgresConf))
+	}
+	for k, v := range p.parameters {
+		// Single quotes needs to be doubled
+		ev := strings.Replace(v, `'`, `''`, -1)
+		_, err = f.WriteString(fmt.Sprintf("%s = '%s'\n", k, ev))
+		if err != nil {
+			os.Remove(f.Name())
+			return err
+		}
+	}
+	if err = f.Sync(); err != nil {
+		return err
+	}
+
 	if err := p.WriteConf(); err != nil {
 		return fmt.Errorf("error writing conf file: %v", err)
 	}
 	if err := p.writePgHba(); err != nil {
 		return fmt.Errorf("error writing conf file: %v", err)
 	}
+	return p.start("-o", fmt.Sprintf("-c config_file=%s", f.Name()))
+}
+
+func (p *Manager) Start() error {
+	if err := p.WriteConf(); err != nil {
+		return fmt.Errorf("error writing conf file: %v", err)
+	}
+	if err := p.writePgHba(); err != nil {
+		return fmt.Errorf("error writing conf file: %v", err)
+	}
+	return p.start()
+}
+
+func (p *Manager) start(args ...string) error {
+	log.Info("starting database")
 	name := filepath.Join(p.pgBinPath, "pg_ctl")
-	cmd := exec.Command(name, "start", "-w", "-D", p.dataDir)
+	args = append([]string{"start", "-w", "-D", p.dataDir, "-o", "-c unix_socket_directories=/tmp"}, args...)
+	cmd := exec.Command(name, args...)
+	log.Debug("execing cmd", zap.Object("cmd", cmd))
 	// TODO(sgotti) attaching a pipe to sdtout/stderr makes the postgres
 	// process executed by pg_ctl inheriting it's file descriptors. So
 	// cmd.Wait() will block and waiting on them to be closed (will happend
@@ -232,6 +241,9 @@ func (p *Manager) IsStarted() (bool, error) {
 func (p *Manager) Reload() error {
 	log.Info("reloading database configuration")
 	if err := p.WriteConf(); err != nil {
+		return fmt.Errorf("error writing conf file: %v", err)
+	}
+	if err := p.writePgHba(); err != nil {
 		return fmt.Errorf("error writing conf file: %v", err)
 	}
 	name := filepath.Join(p.pgBinPath, "pg_ctl")
@@ -411,15 +423,12 @@ func (p *Manager) HasConnParams() (bool, error) {
 }
 
 func (p *Manager) WriteConf() error {
-	f, err := ioutil.TempFile(p.dataDir, "postgresql.conf")
+	f, err := ioutil.TempFile(p.dataDir, postgresConf)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
 
-	if p.includeConfig {
-		f.WriteString(fmt.Sprintf("include '%s'\n", stolonInitPostgresConf))
-	}
 	for k, v := range p.parameters {
 		// Single quotes needs to be doubled
 		ev := strings.Replace(v, `'`, `''`, -1)
@@ -432,7 +441,7 @@ func (p *Manager) WriteConf() error {
 	if err = f.Sync(); err != nil {
 		return err
 	}
-	if err = os.Rename(f.Name(), filepath.Join(p.dataDir, "postgresql.conf")); err != nil {
+	if err = os.Rename(f.Name(), filepath.Join(p.dataDir, postgresConf)); err != nil {
 		os.Remove(f.Name())
 		return err
 	}

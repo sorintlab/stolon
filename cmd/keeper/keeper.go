@@ -60,6 +60,9 @@ type DBLocalState struct {
 	// Initializing registers when the db is initializing. Needed to detect
 	// when the initialization has failed.
 	Initializing bool
+	// InitPGParameters contains the postgres parameter after the
+	// initialization
+	InitPGParameters common.Parameters
 }
 
 type config struct {
@@ -197,6 +200,14 @@ func (p *PostgresKeeper) getOurReplConnParams() pg.ConnParams {
 
 func (p *PostgresKeeper) createPGParameters(db *cluster.DB) common.Parameters {
 	parameters := common.Parameters{}
+
+	// Include init parameters if include config is required
+	if db.Spec.IncludeConfig {
+		for k, v := range p.dbLocalState.InitPGParameters {
+			parameters[k] = v
+		}
+	}
+
 	// Copy user defined pg parameters
 	for k, v := range db.Spec.PGParameters {
 		parameters[k] = v
@@ -443,6 +454,7 @@ func (p *PostgresKeeper) GetPGState(pctx context.Context) (*cluster.PostgresStat
 	if initialized {
 		pgParameters, err := p.pgm.GetConfigFilePGParameters()
 		if err != nil {
+			pgState.Healthy = false
 			log.Error("cannot get configured pg parameters", zap.Error(err))
 			return pgState, nil
 		}
@@ -716,8 +728,6 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 	// update pgm postgres parameters
 	pgm.SetParameters(pgParameters)
 
-	pgm.SetIncludeConfig(db.Spec.IncludeConfig)
-
 	dbls := p.dbLocalState
 	if dbls.Initializing {
 		// If we are here this means that the db initialization or
@@ -762,6 +772,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 		p.localStateMutex.Lock()
 		dbls.UID = common.UID()
 		dbls.Generation = cluster.NoGeneration
+		dbls.InitPGParameters = nil
 		dbls.Initializing = false
 		p.localStateMutex.Unlock()
 		if err = p.saveDBLocalState(); err != nil {
@@ -779,6 +790,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 			dbls.UID = db.UID
 			// Set a no generation since we aren't already converged.
 			dbls.Generation = cluster.NoGeneration
+			dbls.InitPGParameters = nil
 			dbls.Initializing = true
 			p.localStateMutex.Unlock()
 			if err = p.saveDBLocalState(); err != nil {
@@ -801,12 +813,48 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				return
 			}
 			initialized = true
+
+			if db.Spec.IncludeConfig {
+				if err = pgm.StartTmpMerged(); err != nil {
+					log.Error("failed to start instance", zap.Error(err))
+					return
+				}
+				pgParameters, err = pgm.GetConfigFilePGParameters()
+				if err != nil {
+					log.Error("failed to rename previous postgresql.conf", zap.Error(err))
+					return
+				}
+				p.localStateMutex.Lock()
+				dbls.InitPGParameters = pgParameters
+				p.localStateMutex.Unlock()
+			} else {
+				if err = pgm.StartTmpMerged(); err != nil {
+					log.Error("failed to start instance", zap.Error(err))
+					return
+				}
+			}
+
+			log.Info("setting roles")
+			if err = pgm.SetupRoles(); err != nil {
+				log.Error("failed to setup roles", zap.Error(err))
+				return
+			}
+
+			if err = p.saveDBLocalState(); err != nil {
+				log.Error("error", zap.Error(err))
+				return
+			}
+			if err = pgm.Stop(true); err != nil {
+				log.Error("failed to stop pg instance", zap.Error(err))
+				return
+			}
 		case cluster.DBInitModePITR:
 			log.Info("restoring the database cluster")
 			p.localStateMutex.Lock()
 			dbls.UID = db.UID
 			// Set a no generation since we aren't already converged.
 			dbls.Generation = cluster.NoGeneration
+			dbls.InitPGParameters = nil
 			dbls.Initializing = true
 			p.localStateMutex.Unlock()
 			if err = p.saveDBLocalState(); err != nil {
@@ -828,29 +876,110 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				log.Error("failed to restore postgres database cluster", zap.Error(err))
 				return
 			}
-			initialized = true
 			if err = pgm.WriteRecoveryConf(p.createRecoveryParameters(nil, db.Spec.PITRConfig.ArchiveRecoverySettings)); err != nil {
 				log.Error("err", zap.Error(err))
 				return
 			}
-		case cluster.DBInitModeNone:
-			log.Info("updating our db UID with the cluster data provided db UID")
-			// If no init mode is required just replace our current
-			// db uid with the required one.
+			if db.Spec.IncludeConfig {
+				if err = pgm.StartTmpMerged(); err != nil {
+					log.Error("failed to start instance", zap.Error(err))
+					return
+				}
+				pgParameters, err = pgm.GetConfigFilePGParameters()
+				if err != nil {
+					log.Error("failed to rename previous postgresql.conf", zap.Error(err))
+					return
+				}
+				p.localStateMutex.Lock()
+				dbls.InitPGParameters = pgParameters
+				p.localStateMutex.Unlock()
+			} else {
+				if err = pgm.StartTmpMerged(); err != nil {
+					log.Error("failed to start instance", zap.Error(err))
+					return
+				}
+			}
+			initialized = true
+
+			if err = p.saveDBLocalState(); err != nil {
+				log.Error("error", zap.Error(err))
+				return
+			}
+			if err = pgm.Stop(true); err != nil {
+				log.Error("failed to stop pg instance", zap.Error(err))
+				return
+			}
+		case cluster.DBInitModeExisting:
+			// replace our current db uid with the required one.
 			p.localStateMutex.Lock()
 			dbls.UID = db.UID
 			// Set a no generation since we aren't already converged.
 			dbls.Generation = cluster.NoGeneration
+			dbls.InitPGParameters = nil
 			p.localStateMutex.Unlock()
 			if err = p.saveDBLocalState(); err != nil {
 				log.Error("error", zap.Error(err))
 				return
 			}
+			if started {
+				if err = pgm.Stop(true); err != nil {
+					log.Error("failed to stop pg instance", zap.Error(err))
+					return
+				}
+				started = false
+			}
+			if db.Spec.IncludeConfig {
+				if err = pgm.StartTmpMerged(); err != nil {
+					log.Error("failed to start instance", zap.Error(err))
+					return
+				}
+				pgParameters, err = pgm.GetConfigFilePGParameters()
+				if err != nil {
+					log.Error("failed to rename previous postgresql.conf", zap.Error(err))
+					return
+				}
+				p.localStateMutex.Lock()
+				dbls.InitPGParameters = pgParameters
+				p.localStateMutex.Unlock()
+			} else {
+				if err = pgm.StartTmpMerged(); err != nil {
+					log.Error("failed to start instance", zap.Error(err))
+					return
+				}
+			}
+			log.Info("updating our db UID with the cluster data provided db UID")
+			// replace our current db uid with the required one.
+			p.localStateMutex.Lock()
+			dbls.InitPGParameters = pgParameters
+			p.localStateMutex.Unlock()
+			if err = p.saveDBLocalState(); err != nil {
+				log.Error("error", zap.Error(err))
+				return
+			}
+			if err = pgm.Stop(true); err != nil {
+				log.Error("failed to stop pg instance", zap.Error(err))
+				return
+			}
+		case cluster.DBInitModeNone:
+			// replace our current db uid with the required one.
+			p.localStateMutex.Lock()
+			dbls.UID = db.UID
+			// Set a no generation since we aren't already converged.
+			dbls.Generation = cluster.NoGeneration
+			dbls.InitPGParameters = nil
+			p.localStateMutex.Unlock()
+			if err = p.saveDBLocalState(); err != nil {
+				log.Error("error", zap.Error(err))
+				return
+			}
+			return
 		default:
 			log.Error("unknown db init mode", zap.String("initMode", string(db.Spec.InitMode)))
 			return
 		}
 	}
+
+	pgm.SetParameters(pgParameters)
 
 	var localRole common.Role
 	var systemID string
