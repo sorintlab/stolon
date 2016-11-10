@@ -67,7 +67,7 @@ func (p *Process) start() error {
 	go func() {
 		scanner := bufio.NewScanner(pr)
 		for scanner.Scan() {
-			p.t.Logf("[%s]: %s", p.id, scanner.Text())
+			p.t.Logf("[%s %s]: %s", p.name, p.id, scanner.Text())
 		}
 	}()
 

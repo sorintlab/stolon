@@ -19,11 +19,7 @@ import (
 	"io"
 	"net"
 	"sync"
-
-	"github.com/coreos/pkg/capnslog"
 )
-
-var log = capnslog.NewPackageLogger("github.com/sorintlab/pollon", "pollon")
 
 type ConfData struct {
 	DestAddr *net.TCPAddr
@@ -57,7 +53,7 @@ func (p *Proxy) proxyConn(conn *net.TCPConn) {
 	destAddr := p.destAddr
 	p.connMutex.Unlock()
 	defer func() {
-		log.Debugf("closing source connection: %v", conn)
+		log.Printf("closing source connection: %v", conn)
 		conn.Close()
 	}()
 	defer conn.Close()
@@ -72,7 +68,7 @@ func (p *Proxy) proxyConn(conn *net.TCPConn) {
 		return
 	}
 	defer func() {
-		log.Debugf("closing destination connection: %v", destConn)
+		log.Printf("closing destination connection: %v", destConn)
 		destConn.Close()
 	}()
 
@@ -86,7 +82,7 @@ func (p *Proxy) proxyConn(conn *net.TCPConn) {
 		}
 		conn.Close()
 		destConn.CloseRead()
-		log.Debugf("ending. copied %d bytes from source to dest", n)
+		log.Printf("ending. copied %d bytes from source to dest", n)
 	}()
 	wg.Add(1)
 	go func() {
@@ -96,7 +92,7 @@ func (p *Proxy) proxyConn(conn *net.TCPConn) {
 		}
 		destConn.Close()
 		conn.CloseRead()
-		log.Debugf("ending. copied %d bytes from dest to source", n)
+		log.Printf("ending. copied %d bytes from dest to source", n)
 	}()
 
 	go func() {
@@ -106,10 +102,10 @@ func (p *Proxy) proxyConn(conn *net.TCPConn) {
 
 	select {
 	case <-end:
-		log.Debugf("all io copy goroutines done")
+		log.Printf("all io copy goroutines done")
 		return
 	case <-closeConns:
-		log.Debugf("closing all connections")
+		log.Printf("closing all connections")
 		return
 	}
 }

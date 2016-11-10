@@ -28,18 +28,20 @@ import (
 
 	"github.com/sorintlab/stolon/common"
 
-	"github.com/coreos/pkg/capnslog"
 	_ "github.com/lib/pq"
+	"github.com/uber-go/zap"
 	"golang.org/x/net/context"
-)
-
-var (
-	log = capnslog.NewPackageLogger("github.com/sorintlab/stolon/pkg", "postgresql")
 )
 
 const (
 	stolonInitPostgresConf = "postgresql-stolon-init.conf"
 )
+
+var log = zap.New(zap.NullEncoder())
+
+func SetLogger(l zap.Logger) {
+	log = l
+}
 
 type Manager struct {
 	pgBinPath       string
@@ -121,7 +123,7 @@ func (p *Manager) Init() error {
 		goto out
 	}
 
-	log.Infof("setting required accesses to pg_hba.conf")
+	log.Info("setting required accesses to pg_hba.conf")
 	if err = p.writePgHba(); err != nil {
 		err = fmt.Errorf("error setting requires accesses to pg_hba.conf: %v", err)
 		goto out
@@ -132,7 +134,7 @@ func (p *Manager) Init() error {
 		goto out
 	}
 
-	log.Infof("setting roles")
+	log.Info("setting roles")
 	if err = p.SetupRoles(); err != nil {
 		err = fmt.Errorf("error setting roles: %v", err)
 		goto out
@@ -176,7 +178,7 @@ out:
 }
 
 func (p *Manager) Start() error {
-	log.Infof("starting database")
+	log.Info("starting database")
 	if err := p.WriteConf(); err != nil {
 		return fmt.Errorf("error writing conf file: %v", err)
 	}
@@ -198,7 +200,7 @@ func (p *Manager) Start() error {
 }
 
 func (p *Manager) Stop(fast bool) error {
-	log.Infof("stopping database")
+	log.Info("stopping database")
 	name := filepath.Join(p.pgBinPath, "pg_ctl")
 	cmd := exec.Command(name, "stop", "-w", "-D", p.dataDir, "-o", "-c unix_socket_directories=/tmp")
 	if fast {
@@ -228,7 +230,7 @@ func (p *Manager) IsStarted() (bool, error) {
 }
 
 func (p *Manager) Reload() error {
-	log.Infof("reloading database configuration")
+	log.Info("reloading database configuration")
 	if err := p.WriteConf(); err != nil {
 		return fmt.Errorf("error writing conf file: %v", err)
 	}
@@ -241,7 +243,7 @@ func (p *Manager) Reload() error {
 }
 
 func (p *Manager) Restart(fast bool) error {
-	log.Infof("restarting database")
+	log.Info("restarting database")
 	if err := p.Stop(fast); err != nil {
 		return err
 	}
@@ -252,7 +254,7 @@ func (p *Manager) Restart(fast bool) error {
 }
 
 func (p *Manager) Promote() error {
-	log.Infof("promoting database")
+	log.Info("promoting database")
 	name := filepath.Join(p.pgBinPath, "pg_ctl")
 	cmd := exec.Command(name, "promote", "-w", "-D", p.dataDir)
 	if out, err := cmd.CombinedOutput(); err != nil {
@@ -266,7 +268,7 @@ func (p *Manager) SetupRoles() error {
 	defer cancel()
 
 	if p.suUsername == p.replUsername {
-		log.Infof("adding replication role to superuser")
+		log.Info("adding replication role to superuser")
 		if err := alterRole(ctx, p.localConnParams, []string{"replication"}, p.suUsername, p.suPassword); err != nil {
 			return fmt.Errorf("error adding replication role to superuser: %v", err)
 		}
@@ -274,18 +276,18 @@ func (p *Manager) SetupRoles() error {
 	} else {
 		// Configure superuser role password
 		if p.suPassword != "" {
-			log.Infof("setting superuser password")
+			log.Info("setting superuser password")
 			if err := setPassword(ctx, p.localConnParams, p.suUsername, p.suPassword); err != nil {
 				return fmt.Errorf("error setting superuser password: %v", err)
 			}
 			log.Info("superuser password set")
 		}
 		roles := []string{"login", "replication"}
-		log.Infof("creating replication role")
+		log.Info("creating replication role")
 		if err := createRole(ctx, p.localConnParams, roles, p.replUsername, p.replPassword); err != nil {
 			return fmt.Errorf("error creating replication role: %v", err)
 		}
-		log.Infof("replication role %s created", p.replUsername)
+		log.Info("replication role created", zap.String("role", p.replUsername))
 	}
 	return nil
 }
@@ -502,11 +504,11 @@ func (p *Manager) SyncFromFollowedPGRewind(followedConnParams ConnParams, passwo
 	followedConnParams.Set("options", "-c synchronous_commit=off")
 	followedConnString := followedConnParams.ConnString()
 
-	log.Infof("running pg_rewind")
+	log.Info("running pg_rewind")
 	name := filepath.Join(p.pgBinPath, "pg_rewind")
 	cmd := exec.Command(name, "--debug", "-D", p.dataDir, "--source-server="+followedConnString)
 	cmd.Env = append(cmd.Env, fmt.Sprintf("PGPASSFILE=%s", pgpass.Name()))
-	log.Debugf("execing cmd: %s", cmd)
+	log.Debug("execing cmd", zap.Object("cmd", cmd))
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("error: %v, output: %s", err, string(out))
 	}
@@ -528,11 +530,11 @@ func (p *Manager) SyncFromFollowed(followedConnParams ConnParams) error {
 	password := followedConnParams.Get("password")
 	pgpass.WriteString(fmt.Sprintf("%s:%s:*:%s:%s\n", host, port, user, password))
 
-	log.Infof("running pg_basebackup")
+	log.Info("running pg_basebackup")
 	name := filepath.Join(p.pgBinPath, "pg_basebackup")
 	cmd := exec.Command(name, "-R", "-D", p.dataDir, "--host="+host, "--port="+port, "-U", user)
 	cmd.Env = append(cmd.Env, fmt.Sprintf("PGPASSFILE=%s", pgpass.Name()))
-	log.Debugf("execing cmd: %s", cmd)
+	log.Debug("execing cmd", zap.Object("cmd", cmd))
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("error: %v, output: %s", err, string(out))
 	}

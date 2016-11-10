@@ -1,9 +1,5 @@
 package: github.com/sorintlab/stolon
 import:
-- package: github.com/coreos/pkg
-  version: 3ac0863d7acf3bc44daf49afef8919af12f704ef
-  subpackages:
-  - capnslog
 - package: github.com/coreos/rkt
   version: v1.16.0
   subpackages:
@@ -31,7 +27,7 @@ import:
 - package: github.com/sgotti/gexpect
   version: 81b69f472c22d5a42aefcf07b58015d0ef4da2e1
 - package: github.com/sorintlab/pollon
-  version: 0fc4e27d6290f15d02d35f438ffa58068dee2014
+  version: 279eb94a1432a0656f6da72d36f133dc68c2e064
 - package: github.com/spf13/cobra
   version: 9c28e4bbd74e5c3ed7aacbc552b2cab7cfdfe744
 - package: github.com/spf13/pflag
@@ -52,5 +48,11 @@ import:
   version: v2.2.5
   subpackages:
   - client
+- package: github.com/hashicorp/consul
+  version: daacc4be8bee214e3fc4b32a6dd385f5ef1b4c36
+  subpackages:
+  - api
 - package: github.com/mitchellh/copystructure
   version: 5af94aef99f597e6a9e1f6ac6be6ce0f3c96b49d
+- package: github.com/uber-go/zap
+  version: 9c9a580ac83fe7208a472eb27262817825ddcd77

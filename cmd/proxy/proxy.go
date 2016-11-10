@@ -26,18 +26,14 @@ import (
 	"github.com/sorintlab/stolon/pkg/flagutil"
 	"github.com/sorintlab/stolon/pkg/store"
 
-	"github.com/coreos/pkg/capnslog"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/sorintlab/pollon"
 	"github.com/spf13/cobra"
+	"github.com/uber-go/zap"
+	"github.com/uber-go/zap/zwrap"
 )
 
-var log = capnslog.NewPackageLogger("github.com/sorintlab/stolon/cmd", "proxy")
-
-func init() {
-	capnslog.SetFormatter(capnslog.NewPrettyFormatter(os.Stderr, true))
-	capnslog.SetGlobalLogLevel(capnslog.DEBUG)
-}
+var log = zap.New(zap.NewTextEncoder(), zap.AddCaller())
 
 var cmdProxy = &cobra.Command{
 	Use: "stolon-proxy",
@@ -103,7 +99,7 @@ func (c *ClusterChecker) startPollonProxy() error {
 		return nil
 	}
 
-	log.Infof("Starting proxying")
+	log.Info("Starting proxying")
 	addr, err := net.ResolveTCPAddr("tcp", net.JoinHostPort(cfg.listenAddress, cfg.port))
 	if err != nil {
 		return fmt.Errorf("error resolving tcp addr %q: %v", addr.String(), err)
@@ -130,7 +126,7 @@ func (c *ClusterChecker) startPollonProxy() error {
 
 func (c *ClusterChecker) stopPollonProxy() {
 	if c.pp != nil {
-		log.Infof("Stopping listening")
+		log.Info("Stopping listening")
 		c.pp.Stop()
 		c.pp = nil
 		c.listener.Close()
@@ -152,7 +148,7 @@ func (c *ClusterChecker) SetProxyInfo(e *store.StoreManager, uid string, generat
 		ProxyUID:        uid,
 		ProxyGeneration: generation,
 	}
-	log.Debugf(spew.Sprintf("proxyInfo: %#v", proxyInfo))
+	log.Debug("proxyInfo dump", zap.String("proxyInfo", spew.Sdump(proxyInfo)))
 
 	if err := c.e.SetProxyInfo(proxyInfo, ttl); err != nil {
 		return err
@@ -163,60 +159,60 @@ func (c *ClusterChecker) SetProxyInfo(e *store.StoreManager, uid string, generat
 func (c *ClusterChecker) Check() error {
 	cd, _, err := c.e.GetClusterData()
 	if err != nil {
-		log.Errorf("cannot get cluster data: %v", err)
+		log.Error("cannot get cluster data", zap.Error(err))
 		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
 		if c.stopListening {
 			c.stopPollonProxy()
 		}
 		return nil
 	}
-	log.Debugf(spew.Sprintf("cluster data: %#v", cd))
+	log.Debug("cd dump", zap.String("cd", spew.Sdump(cd)))
 	if cd == nil {
-		log.Infof("no clusterdata available, closing connections to previous master")
+		log.Info("no clusterdata available, closing connections to previous master")
 		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
 		return nil
 	}
 	if cd.FormatVersion != cluster.CurrentCDFormatVersion {
-		log.Errorf("unsupported clusterdata format version %d", cd.FormatVersion)
+		log.Error("unsupported clusterdata format version", zap.Uint64("version", cd.FormatVersion))
 		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
 		return nil
 	}
 
 	// Start pollon if not active
 	if err = c.startPollonProxy(); err != nil {
-		log.Errorf("failed to start proxy: %v", err)
+		log.Error("failed to start proxy", zap.Error(err))
 		return nil
 	}
 
 	proxy := cd.Proxy
 	if proxy == nil {
-		log.Infof("no proxy object available, closing connections to previous master")
+		log.Info("no proxy object available, closing connections to previous master")
 		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
 		if err = c.SetProxyInfo(c.e, proxy.UID, proxy.Generation, 2*cluster.DefaultProxyCheckInterval); err != nil {
-			log.Errorf("failed to update proxyInfo: %v", err)
+			log.Error("failed to update proxyInfo", zap.Error(err))
 		}
 		return nil
 	}
 
 	db, ok := cd.DBs[proxy.Spec.MasterDBUID]
 	if !ok {
-		log.Infof("no db object with uid %q available, closing connections to previous master", proxy.Spec.MasterDBUID)
+		log.Info("no db object available, closing connections to previous master", zap.String("db", proxy.Spec.MasterDBUID))
 		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
 		if err = c.SetProxyInfo(c.e, proxy.UID, proxy.Generation, 2*cluster.DefaultProxyCheckInterval); err != nil {
-			log.Errorf("failed to update proxyInfo: %v", err)
+			log.Error("failed to update proxyInfo", zap.Error(err))
 		}
 		return nil
 	}
 
 	addr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%s", db.Status.ListenAddress, db.Status.Port))
 	if err != nil {
-		log.Errorf("err: %v", err)
+		log.Error("error", zap.Error(err))
 		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
 		return nil
 	}
-	log.Infof("master address: %v", addr)
+	log.Info("master address", zap.Stringer("address", addr))
 	if err = c.SetProxyInfo(c.e, proxy.UID, proxy.Generation, 2*cluster.DefaultProxyCheckInterval); err != nil {
-		log.Errorf("failed to update proxyInfo: %v", err)
+		log.Error("failed to update proxyInfo", zap.Error(err))
 	}
 
 	c.sendPollonConfData(pollon.ConfData{DestAddr: addr})
@@ -236,7 +232,7 @@ func (c *ClusterChecker) Start() error {
 			}()
 		case err := <-checkCh:
 			if err != nil {
-				log.Debugf("check reported error: %v", err)
+				log.Debug("check reported error", zap.Error(err))
 			}
 			if err != nil {
 				return fmt.Errorf("checker fatal error: %v", err)
@@ -258,23 +254,28 @@ func main() {
 }
 
 func proxy(cmd *cobra.Command, args []string) {
-	capnslog.SetGlobalLogLevel(capnslog.INFO)
 	if cfg.debug {
-		capnslog.SetGlobalLogLevel(capnslog.DEBUG)
+		log.SetLevel(zap.DebugLevel)
 	}
+	stdlog, _ := zwrap.Standardize(log, zap.DebugLevel)
+	pollon.SetLogger(stdlog)
+
 	if cfg.clusterName == "" {
-		log.Fatalf("cluster name required")
+		fmt.Printf("cluster name required")
+		os.Exit(1)
 	}
 	if cfg.storeBackend == "" {
-		log.Fatalf("store backend type required")
+		fmt.Printf("store backend type required")
+		os.Exit(1)
 	}
 
 	id := common.UID()
-	log.Infof("id: %s", id)
+	log.Info("proxy id", zap.String("id", id))
 
 	clusterChecker, err := NewClusterChecker(id, cfg)
 	if err != nil {
-		log.Fatalf("cannot create cluster checker: %v", err)
+		fmt.Printf("cannot create cluster checker: %v", err)
+		os.Exit(1)
 	}
 	clusterChecker.Start()
 }
