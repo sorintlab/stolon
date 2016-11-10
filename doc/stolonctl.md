@@ -27,8 +27,8 @@ ID              LEADER
 
 === Active proxies ===
 
-ID              LISTENADDRESS   CV VERSION
-fc6b8f04        127.0.0.1:25432 43
+ID
+fc6b8f04
 
 === Keepers ===
 
