@@ -4,6 +4,8 @@
 * [Cluster Initialization](initialization.md)
 * [Setting instance parameters](postgres_parameters.md)
 * [Stolon Client](stolonctl.md)
+* Backup/Restore
+ * [Point In Time Recovery](pitr.md)
 * Examples
  * [Simple test cluster](simplecluster.md)
  * [Kubernetes](../examples/kubernetes/README.md)

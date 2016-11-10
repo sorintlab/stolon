@@ -24,6 +24,7 @@ Some options in a running cluster specification can be changed to update the des
 | initMode               | The cluster initialization mode. Can be *new* or *existing*. *new* means that a new db cluster will be created on a random keeper and the other keepers will sync with it. *existing* means that a keeper (that needs to have an already created db cluster) will be choosed as the initial master and the other keepers will sync with it. In this case the `existingConfig` object needs to be populated.                                                                       | yes                       | string            |         |
 | existingConfig         | configuration for initMode of type "existing"                                                                                                                                                                                                                                                                                                                                                                                                                                     | if initMode is "existing" | ExistingConfig    |         |
 | mergePgParameters      | merge pgParameters of the initialized db cluster, useful the retain initdb generated parameters when InitMode is new, retain current parameters when initMode is existing or pitr.                                                                                                                                                                                                                                                                                     | no                        | bool              | true    |
+| pitrConfig             | configuration for initMode of type "pitr"                                                                                                                                                                                                                                                                                                                                                                                                                                         | if initMode is "pitr"     | PITRConfig        |         |
 | pgParameters           | a map containing the postgres server parameters and their values. The parameters value don't have to be quoted and single quotes don't have to be doubled since this is already done by the keeper when writing the postgresql.conf file                                                                                                                                                                                                                                          | no                        | map[string]string |         |
 
 #### ExistingConfig
@@ -31,6 +32,20 @@ Some options in a running cluster specification can be changed to update the des
 | Name      | Description                                            | Required | Type   | Default |
 |-----------|--------------------------------------------------------|----------|--------|---------|
 | keeperUID | the keeperUID to use as the initial master db cluster. | yes      | string | 5s      |
+
+
+#### PITRConfig
+
+| Name                    | Description                                                                                                                                                                                                      | Required | Type                    | Default |
+|-------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------|-------------------------|---------|
+| DataRestoreCommand      | defines the command to execute for restoring the db cluster data. %d is replaced with the full path to the db cluster datadir. Use %% to embed an actual % character. Must return a 0 exit code only on success. | yes      | string                  |         |
+| ArchiveRecoverySettings | archive recovery configuration                                                                                                                                                                                   | yes      | ArchiveRecoverySettings |         |
+
+#### ArchiveRecoverySettings
+
+| Name                    | Description                                                                                                                                                                | Required | Type                    | Default |
+|-------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------|-------------------------|---------|
+| RestoreCommand          | defines the command to execute for restoring the archives. See the related [postgresql doc](https://www.postgresql.org/docs/current/static/archive-recovery-settings.html) | yes      | string                  |         |
 
 #### Special Types
 duration types (as described in https://golang.org/pkg/time/#ParseDuration) are signed sequence of decimal numbers, each with optional fraction and a unit suffix, such as "300ms", "-1.5h" or "2h45m". Valid time units are "ns", "us" (or "µs"), "ms", "s", "m", "h".
