@@ -333,6 +333,29 @@ func fileExists(path string) (bool, error) {
 	return true, nil
 }
 
+func expand(s, dataDir string) string {
+	buf := make([]byte, 0, 2*len(s))
+	// %d %% are all ASCII, so bytes are fine for this operation.
+	i := 0
+	for j := 0; j < len(s); j++ {
+		if s[j] == '%' && j+1 < len(s) {
+			switch s[j+1] {
+			case 'd':
+				buf = append(buf, s[i:j]...)
+				buf = append(buf, []byte(dataDir)...)
+				j += 1
+				i = j + 1
+			case '%':
+				j += 1
+				buf = append(buf, s[i:j]...)
+				i = j + 1
+			default:
+			}
+		}
+	}
+	return string(buf) + s[i:]
+}
+
 func getConfigFilePGParameters(ctx context.Context, connParams ConnParams) (common.Parameters, error) {
 	var pgParameters = common.Parameters{}
 	db, err := sql.Open("postgres", connParams.ConnString())

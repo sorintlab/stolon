@@ -151,6 +151,30 @@ out:
 	return nil
 }
 
+func (p *Manager) Restore(command string) error {
+	var err error
+	var output []byte
+
+	command = expand(command, p.dataDir)
+
+	if err = os.MkdirAll(p.dataDir, 0700); err != nil {
+		err = fmt.Errorf("cannot create data dir: %v", err)
+		goto out
+	}
+	output, err = exec.Command("/bin/sh", "-c", command).CombinedOutput()
+	if err != nil {
+		err = fmt.Errorf("error: %v, output: %s", err, output)
+		goto out
+	}
+	// On every error remove the dataDir, so we don't end with an half initialized database
+out:
+	if err != nil {
+		os.RemoveAll(p.dataDir)
+		return err
+	}
+	return nil
+}
+
 func (p *Manager) Start() error {
 	log.Infof("starting database")
 	if err := p.WriteConf(); err != nil {
@@ -414,22 +438,17 @@ func (p *Manager) WriteConf() error {
 	return nil
 }
 
-func (p *Manager) WriteRecoveryConf(followedConnParams ConnParams, replSlotName string) error {
+func (p *Manager) WriteRecoveryConf(recoveryParameters common.Parameters) error {
 	f, err := ioutil.TempFile(p.dataDir, "recovery.conf")
 	if err != nil {
 		return err
 	}
 	defer f.Close()
 
-	f.WriteString("standby_mode = 'on'\n")
-	if replSlotName != "" {
-		f.WriteString(fmt.Sprintf("primary_slot_name = '%s'\n", replSlotName))
+	for n, v := range recoveryParameters {
+		f.WriteString(fmt.Sprintf("%s = '%s'\n", n, v))
 	}
-	f.WriteString("recovery_target_timeline = 'latest'\n")
 
-	if followedConnParams != nil {
-		f.WriteString(fmt.Sprintf("primary_conninfo = '%s'", followedConnParams.ConnString()))
-	}
 	if err = f.Sync(); err != nil {
 		return err
 	}

@@ -242,6 +242,26 @@ func (p *PostgresKeeper) createPGParameters(db *cluster.DB) common.Parameters {
 	return parameters
 }
 
+func (p *PostgresKeeper) createRecoveryParameters(standbySettings *cluster.StandbySettings, archiveRecoverySettings *cluster.ArchiveRecoverySettings) common.Parameters {
+	parameters := common.Parameters{}
+
+	if standbySettings != nil {
+		parameters["standby_mode"] = "on"
+		parameters["primary_slot_name"] = standbySettings.PrimarySlotName
+		if standbySettings.PrimaryConninfo != "" {
+			parameters["primary_conninfo"] = standbySettings.PrimaryConninfo
+		}
+
+		parameters["recovery_target_timeline"] = "latest"
+	}
+
+	if archiveRecoverySettings != nil {
+		parameters["restore_command"] = archiveRecoverySettings.RestoreCommand
+	}
+
+	return parameters
+}
+
 type PostgresKeeper struct {
 	cfg *config
 
@@ -575,6 +595,7 @@ func (p *PostgresKeeper) resync(db, followedDB *cluster.DB, tryPgrewind, started
 		}
 	}
 	replConnParams := p.getReplConnParams(db, followedDB)
+	standbySettings := &cluster.StandbySettings{PrimaryConninfo: replConnParams.ConnString(), PrimarySlotName: common.StolonName(db.UID)}
 
 	// TODO(sgotti) Actually we don't check if pg_rewind is installed or if
 	// postgresql version is > 9.5 since someone can also use an externally
@@ -588,7 +609,7 @@ func (p *PostgresKeeper) resync(db, followedDB *cluster.DB, tryPgrewind, started
 			// log pg_rewind error and fallback to pg_basebackup
 			log.Errorf("error syncing with pg_rewind: %v", err)
 		} else {
-			if err := pgm.WriteRecoveryConf(replConnParams, common.StolonName(db.UID)); err != nil {
+			if err := pgm.WriteRecoveryConf(p.createRecoveryParameters(standbySettings, nil)); err != nil {
 				return fmt.Errorf("err: %v", err)
 			}
 			return nil
@@ -605,7 +626,7 @@ func (p *PostgresKeeper) resync(db, followedDB *cluster.DB, tryPgrewind, started
 	}
 	log.Info("sync succeeded")
 
-	if err := pgm.WriteRecoveryConf(replConnParams, common.StolonName(db.UID)); err != nil {
+	if err := pgm.WriteRecoveryConf(p.createRecoveryParameters(standbySettings, nil)); err != nil {
 		return fmt.Errorf("err: %v", err)
 	}
 	return nil
@@ -778,6 +799,38 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				return
 			}
 			initialized = true
+		case cluster.DBInitModePITR:
+			log.Infof("restoring the database cluster")
+			p.localStateMutex.Lock()
+			dbls.UID = db.UID
+			// Set a no generation since we aren't already converged.
+			dbls.Generation = cluster.NoGeneration
+			dbls.Initializing = true
+			p.localStateMutex.Unlock()
+			if err = p.saveDBLocalState(); err != nil {
+				log.Errorf("error: %v", err)
+				return
+			}
+			if started {
+				if err = pgm.Stop(true); err != nil {
+					log.Errorf("failed to stop pg instance: %v", err)
+					return
+				}
+				started = false
+			}
+			if err = pgm.RemoveAll(); err != nil {
+				log.Errorf("failed to remove the postgres data dir: %v", err)
+				return
+			}
+			if err = pgm.Restore(db.Spec.PITRConfig.DataRestoreCommand); err != nil {
+				log.Errorf("failed to restore postgres database cluster: %v", err)
+				return
+			}
+			initialized = true
+			if err = pgm.WriteRecoveryConf(p.createRecoveryParameters(nil, db.Spec.PITRConfig.ArchiveRecoverySettings)); err != nil {
+				log.Errorf("err: %v", err)
+				return
+			}
 		case cluster.DBInitModeNone:
 			log.Info("updating our db UID with the cluster data provided db UID")
 			// If no init mode is required just replace our current
@@ -895,7 +948,8 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				// check if it's on the same branch or force a
 				// resync
 				replConnParams := p.getReplConnParams(db, followedDB)
-				if err = pgm.WriteRecoveryConf(replConnParams, common.StolonName(db.UID)); err != nil {
+				standbySettings := &cluster.StandbySettings{PrimaryConninfo: replConnParams.ConnString(), PrimarySlotName: common.StolonName(db.UID)}
+				if err = pgm.WriteRecoveryConf(p.createRecoveryParameters(standbySettings, nil)); err != nil {
 					log.Errorf("err: %v", err)
 					return
 				}
@@ -948,7 +1002,8 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 			log.Info("already standby")
 			if !started {
 				replConnParams := p.getReplConnParams(db, followedDB)
-				if err = pgm.WriteRecoveryConf(replConnParams, common.StolonName(db.UID)); err != nil {
+				standbySettings := &cluster.StandbySettings{PrimaryConninfo: replConnParams.ConnString(), PrimarySlotName: common.StolonName(db.UID)}
+				if err = pgm.WriteRecoveryConf(p.createRecoveryParameters(standbySettings, nil)); err != nil {
 					log.Errorf("err: %v", err)
 					return
 				}
@@ -1007,7 +1062,8 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 			if !curReplConnParams.Equals(newReplConnParams) {
 				log.Info("connection parameters changed. Reconfiguring...")
 				log.Infof("following %q with connection parameters %v", followedUID, newReplConnParams)
-				if err = pgm.WriteRecoveryConf(newReplConnParams, common.StolonName(db.UID)); err != nil {
+				standbySettings := &cluster.StandbySettings{PrimaryConninfo: newReplConnParams.ConnString(), PrimarySlotName: common.StolonName(db.UID)}
+				if err = pgm.WriteRecoveryConf(p.createRecoveryParameters(standbySettings, nil)); err != nil {
 					log.Errorf("err: %v", err)
 					return
 				}

@@ -619,6 +619,61 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 					newcd.Cluster.Status.Phase = cluster.ClusterPhaseNormal
 				}
 			}
+		case cluster.ClusterInitModePITR:
+			// Is there already a keeper choosed to be the new master?
+			if cd.Cluster.Status.Master == "" {
+				log.Info("trying to find initial master")
+				k, err := s.findInitialKeeper(cd)
+				if err != nil {
+					return nil, fmt.Errorf("cannot choose initial master: %v", err)
+				}
+				log.Infof("initializing cluster using keeper %q as master db owner", k.UID)
+				db := &cluster.DB{
+					UID:        s.UIDFn(),
+					Generation: cluster.InitialGeneration,
+					ChangeTime: time.Now(),
+					Spec: &cluster.DBSpec{
+						KeeperUID:     k.UID,
+						InitMode:      cluster.DBInitModePITR,
+						PITRConfig:    cd.Cluster.Spec.PITRConfig,
+						Role:          common.RoleMaster,
+						Followers:     []string{},
+						IncludeConfig: *cd.Cluster.Spec.MergePgParameters,
+					},
+				}
+				newcd.DBs[db.UID] = db
+				newcd.Cluster.Status.Master = db.UID
+				log.Debugf("newcd: %s", spew.Sdump(newcd))
+			} else {
+				db, ok := cd.DBs[cd.Cluster.Status.Master]
+				if !ok {
+					panic(fmt.Errorf("db %q object doesn't exists. This shouldn't happen", cd.Cluster.Status.Master))
+				}
+				// Check that the choosed db for being the master has correctly initialized
+				// TODO(sgotti) set a timeout (the max time for an initdb operation)
+				switch s.dbConvergenceState(cd, db, cd.Cluster.Spec.InitTimeout.Duration) {
+				case Converged:
+					log.Infof("db %q on keeper %q initialized", db.UID, db.Spec.KeeperUID)
+					// Set db initMode to none, not needed but just a security measure
+					db.Spec.InitMode = cluster.DBInitModeNone
+					// Don't include previous config anymore
+					db.Spec.IncludeConfig = false
+					// Replace reported pg parameters in cluster spec
+					if *cd.Cluster.Spec.MergePgParameters {
+						newcd.Cluster.Spec.PGParameters = db.Status.PGParameters
+					}
+					// Cluster initialized, switch to Normal state
+					newcd.Cluster.Status.Phase = cluster.ClusterPhaseNormal
+				case Converging:
+					log.Infof("waiting for db %q on keeper %q to converge", db.UID, db.Spec.KeeperUID)
+				case ConvergenceFailed:
+					log.Infof("db %q on keeper %q failed to initialize", db.UID, db.Spec.KeeperUID)
+					// Empty DBs
+					newcd.DBs = cluster.DBs{}
+					// Unset master so another keeper can be choosen
+					newcd.Cluster.Status.Master = ""
+				}
+			}
 		default:
 			return nil, fmt.Errorf("unknown init mode %q", cd.Cluster.Spec.InitMode)
 		}
