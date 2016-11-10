@@ -88,3 +88,42 @@ func TestValidReplSlotName(t *testing.T) {
 		}
 	}
 }
+
+func TestExpand(t *testing.T) {
+	tests := []struct {
+		in  string
+		out string
+	}{
+		{
+			in:  "",
+			out: "",
+		},
+		{
+			in:  "%a",
+			out: "%a",
+		},
+		{
+			in:  "%d",
+			out: "/datadir",
+		},
+		{
+			in:  "%%d",
+			out: "%d",
+		},
+		{
+			in:  "%%%d",
+			out: "%/datadir",
+		},
+		{
+			in:  "%%%danother/string/%%%%%%%f%dddddblabla",
+			out: "%/datadiranother/string/%%%%f/datadirddddblabla",
+		},
+	}
+
+	for i, tt := range tests {
+		out := expand(tt.in, "/datadir")
+		if out != tt.out {
+			t.Errorf("#%d: wrong expanded string: got: %s, want: %s", i, out, tt.out)
+		}
+	}
+}

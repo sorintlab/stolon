@@ -138,6 +138,10 @@ type TestKeeper struct {
 	port            string
 	pgListenAddress string
 	pgPort          string
+	pgSUUsername    string
+	pgSUPassword    string
+	pgReplUsername  string
+	pgReplPassword  string
 	db              *sql.DB
 }
 
@@ -214,6 +218,10 @@ func NewTestKeeperWithID(t *testing.T, dir, id, clusterName, pgSUUsername, pgSUP
 		port:            port,
 		pgListenAddress: pgListenAddress,
 		pgPort:          pgPort,
+		pgSUUsername:    pgSUUsername,
+		pgSUPassword:    pgSUPassword,
+		pgReplUsername:  pgReplUsername,
+		pgReplPassword:  pgReplPassword,
 		db:              db,
 	}
 	return tk, nil
