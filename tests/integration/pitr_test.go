@@ -84,6 +84,7 @@ func TestPITR(t *testing.T) {
 	if err := tk.Start(); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
+	defer tk.Stop()
 
 	ts, err := NewTestSentinel(t, dir, clusterName, tstore.storeBackend, storeEndpoints, fmt.Sprintf("--initial-cluster-spec=%s", initialClusterSpecFile))
 	if err != nil {

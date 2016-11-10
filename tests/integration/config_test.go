@@ -145,7 +145,7 @@ func TestServerParameters(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	if err := tk.cmd.ExpectTimeout("failed to start postgres:", 30*time.Second); err != nil {
+	if err := tk.cmd.ExpectTimeout("failed to start postgres", 30*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 

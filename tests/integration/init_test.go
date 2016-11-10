@@ -226,7 +226,7 @@ func TestInitUsers(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	defer tk.Stop()
-	if err := tk.cmd.Expect("keeper: provided superuser name and replication user name are the same but provided passwords are different"); err != nil {
+	if err := tk.cmd.Expect("provided superuser name and replication user name are the same but provided passwords are different"); err != nil {
 		t.Fatalf("expecting keeper reporting provided superuser name and replication user name are the same but provided passwords are different")
 	}
 
@@ -271,7 +271,7 @@ func TestInitUsers(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	defer tk2.Stop()
-	if err := tk2.cmd.ExpectTimeout("postgresql: replication role added to superuser", 60*time.Second); err != nil {
+	if err := tk2.cmd.ExpectTimeout("replication role added to superuser", 60*time.Second); err != nil {
 		t.Fatalf("expecting keeper reporting replication role added to superuser")
 	}
 
@@ -307,10 +307,10 @@ func TestInitUsers(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	defer tk3.Stop()
-	if err := tk3.cmd.ExpectTimeout("postgresql: superuser password set", 60*time.Second); err != nil {
+	if err := tk3.cmd.ExpectTimeout("superuser password set", 60*time.Second); err != nil {
 		t.Fatalf("expecting keeper reporting superuser password set")
 	}
-	if err := tk3.cmd.ExpectTimeout("postgresql: replication role user02 created", 60*time.Second); err != nil {
+	if err := tk3.cmd.ExpectTimeout("replication role created role=user02", 60*time.Second); err != nil {
 		t.Fatalf("expecting keeper reporting replication role user02 created")
 	}
 }

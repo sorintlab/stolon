@@ -24,7 +24,6 @@ import (
 	"github.com/sorintlab/stolon/common"
 	"github.com/sorintlab/stolon/pkg/cluster"
 
-	"github.com/coreos/pkg/capnslog"
 	"github.com/docker/libkv"
 	kvstore "github.com/docker/libkv/store"
 	"github.com/docker/libkv/store/consul"
@@ -35,8 +34,6 @@ func init() {
 	etcd.Register()
 	consul.Register()
 }
-
-var log = capnslog.NewPackageLogger("github.com/sorintlab/stolon/pkg", "store")
 
 // Backend represents a KV Store Backend
 type Backend string
