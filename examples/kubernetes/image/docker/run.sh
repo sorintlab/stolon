@@ -25,7 +25,7 @@ function launchsentinel() {
 }
 
 function launchproxy() {
-  export STPROXY_LISTEN_ADDRESS=$POD_IP
+  export STPROXY_LISTEN_ADDRESS=0.0.0.0
   stolon-proxy
 }
 
