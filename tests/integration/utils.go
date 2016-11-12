@@ -411,6 +411,25 @@ func (tk *TestKeeper) WaitRole(r common.Role, timeout time.Duration) error {
 	return fmt.Errorf("timeout")
 }
 
+func (tk *TestKeeper) GetPGParameters() (common.Parameters, error) {
+	var pgParameters = common.Parameters{}
+	rows, err := tk.Query("select name, setting, source from pg_settings")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name, setting, source string
+		if err = rows.Scan(&name, &setting, &source); err != nil {
+			return nil, err
+		}
+		if source == "configuration file" {
+			pgParameters[name] = setting
+		}
+	}
+	return pgParameters, nil
+}
+
 type CheckFunc func(time.Duration) error
 
 func waitChecks(timeout time.Duration, fns ...CheckFunc) error {
@@ -542,6 +561,21 @@ func (tp *TestProxy) WaitNotListening(timeout time.Duration) error {
 		time.Sleep(2 * time.Second)
 	}
 	return fmt.Errorf("timeout")
+}
+
+func StolonCtl(clusterName string, storeBackend store.Backend, storeEndpoints string, a ...string) error {
+	args := []string{}
+	args = append(args, fmt.Sprintf("--cluster-name=%s", clusterName))
+	args = append(args, fmt.Sprintf("--store-backend=%s", storeBackend))
+	args = append(args, fmt.Sprintf("--store-endpoints=%s", storeEndpoints))
+	args = append(args, a...)
+
+	bin := os.Getenv("STCTL_BIN")
+	if bin == "" {
+		return fmt.Errorf("missing STCTL_BIN env")
+	}
+	cmd := exec.Command(bin, args...)
+	return cmd.Run()
 }
 
 type TestStore struct {
@@ -744,7 +778,7 @@ func WaitClusterDataWithMaster(e *store.StoreManager, timeout time.Duration) (st
 		if err != nil || cd == nil {
 			goto end
 		}
-		if cd.Cluster.Status.Master != "" {
+		if cd.Cluster.Status.Phase == cluster.ClusterPhaseNormal && cd.Cluster.Status.Master != "" {
 			return cd.DBs[cd.Cluster.Status.Master].Spec.KeeperUID, nil
 		}
 	end:
@@ -760,7 +794,7 @@ func WaitClusterDataMaster(master string, e *store.StoreManager, timeout time.Du
 		if err != nil || cd == nil {
 			goto end
 		}
-		if cd.Cluster.Status.Master != "" {
+		if cd.Cluster.Status.Phase == cluster.ClusterPhaseNormal && cd.Cluster.Status.Master != "" {
 			if cd.DBs[cd.Cluster.Status.Master].Spec.KeeperUID == master {
 				return nil
 			}
@@ -771,28 +805,14 @@ func WaitClusterDataMaster(master string, e *store.StoreManager, timeout time.Du
 	return fmt.Errorf("timeout")
 }
 
-func WaitClusterInitialized(e *store.StoreManager, timeout time.Duration) error {
+func WaitClusterPhase(e *store.StoreManager, phase cluster.ClusterPhase, timeout time.Duration) error {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
 		cd, _, err := e.GetClusterData()
 		if err != nil || cd == nil {
 			goto end
 		}
-		return nil
-	end:
-		time.Sleep(2 * time.Second)
-	}
-	return fmt.Errorf("timeout")
-}
-
-func WaitClusterPhaseNormal(e *store.StoreManager, timeout time.Duration) error {
-	start := time.Now()
-	for time.Now().Add(-timeout).Before(start) {
-		cd, _, err := e.GetClusterData()
-		if err != nil || cd == nil {
-			goto end
-		}
-		if cd.Cluster.Status.Phase == cluster.ClusterPhaseNormal {
+		if cd.Cluster.Status.Phase == phase {
 			return nil
 		}
 	end:

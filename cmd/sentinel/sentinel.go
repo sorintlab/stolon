@@ -547,17 +547,19 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 				// TODO(sgotti) set a timeout (the max time for an initdb operation)
 				switch s.dbConvergenceState(cd, db, cd.Cluster.Spec.InitTimeout.Duration) {
 				case Converged:
-					log.Info("db initialized", zap.String("db", db.UID), zap.String("keeper", db.Spec.KeeperUID))
-					// Set db initMode to none, not needed but just a security measure
-					db.Spec.InitMode = cluster.DBInitModeNone
-					// Don't include previous config anymore
-					db.Spec.IncludeConfig = false
-					// Replace reported pg parameters in cluster spec
-					if *cd.Cluster.Spec.MergePgParameters {
-						newcd.Cluster.Spec.PGParameters = db.Status.PGParameters
+					if db.Status.Healthy {
+						log.Info("db initialized", zap.String("db", db.UID), zap.String("keeper", db.Spec.KeeperUID))
+						// Set db initMode to none, not needed but just a security measure
+						db.Spec.InitMode = cluster.DBInitModeNone
+						// Don't include previous config anymore
+						db.Spec.IncludeConfig = false
+						// Replace reported pg parameters in cluster spec
+						if *cd.Cluster.Spec.MergePgParameters {
+							newcd.Cluster.Spec.PGParameters = db.Status.PGParameters
+						}
+						// Cluster initialized, switch to Normal state
+						newcd.Cluster.Status.Phase = cluster.ClusterPhaseNormal
 					}
-					// Cluster initialized, switch to Normal state
-					newcd.Cluster.Status.Phase = cluster.ClusterPhaseNormal
 				case Converging:
 					log.Info("waiting for db", zap.String("db", db.UID), zap.String("keeper", db.Spec.KeeperUID))
 				case ConvergenceFailed:
@@ -586,7 +588,7 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 					ChangeTime: time.Now(),
 					Spec: &cluster.DBSpec{
 						KeeperUID:     k.UID,
-						InitMode:      cluster.DBInitModeNone,
+						InitMode:      cluster.DBInitModeExisting,
 						Role:          common.RoleMaster,
 						Followers:     []string{},
 						IncludeConfig: *cd.Cluster.Spec.MergePgParameters,
@@ -602,7 +604,7 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 				}
 				// Check that the choosed db for being the master has correctly initialized
 				// TODO(sgotti) set a timeout (the max time for a noop operation, just a start/restart)
-				if s.dbConvergenceState(cd, db, 0) == Converged {
+				if db.Status.Healthy && s.dbConvergenceState(cd, db, 0) == Converged {
 					log.Info("db initialized", zap.String("db", db.UID), zap.String("keeper", db.Spec.KeeperUID))
 					// Don't include previous config anymore
 					db.Spec.IncludeConfig = false
@@ -648,17 +650,19 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 				// TODO(sgotti) set a timeout (the max time for an initdb operation)
 				switch s.dbConvergenceState(cd, db, cd.Cluster.Spec.InitTimeout.Duration) {
 				case Converged:
-					log.Info("db initialized", zap.String("db", db.UID), zap.String("keeper", db.Spec.KeeperUID))
-					// Set db initMode to none, not needed but just a security measure
-					db.Spec.InitMode = cluster.DBInitModeNone
-					// Don't include previous config anymore
-					db.Spec.IncludeConfig = false
-					// Replace reported pg parameters in cluster spec
-					if *cd.Cluster.Spec.MergePgParameters {
-						newcd.Cluster.Spec.PGParameters = db.Status.PGParameters
+					if db.Status.Healthy {
+						log.Info("db initialized", zap.String("db", db.UID), zap.String("keeper", db.Spec.KeeperUID))
+						// Set db initMode to none, not needed but just a security measure
+						db.Spec.InitMode = cluster.DBInitModeNone
+						// Don't include previous config anymore
+						db.Spec.IncludeConfig = false
+						// Replace reported pg parameters in cluster spec
+						if *cd.Cluster.Spec.MergePgParameters {
+							newcd.Cluster.Spec.PGParameters = db.Status.PGParameters
+						}
+						// Cluster initialized, switch to Normal state
+						newcd.Cluster.Status.Phase = cluster.ClusterPhaseNormal
 					}
-					// Cluster initialized, switch to Normal state
-					newcd.Cluster.Status.Phase = cluster.ClusterPhaseNormal
 				case Converging:
 					log.Info("waiting for db to converge", zap.String("db", db.UID), zap.String("keeper", db.Spec.KeeperUID))
 				case ConvergenceFailed:

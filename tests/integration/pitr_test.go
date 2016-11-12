@@ -168,7 +168,7 @@ func TestPITR(t *testing.T) {
 	}
 	defer ts.Stop()
 
-	if err := WaitClusterPhaseNormal(e, 60*time.Second); err != nil {
+	if err := WaitClusterPhase(e, cluster.ClusterPhaseNormal, 60*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	_, err = WaitClusterDataWithMaster(e, 30*time.Second)

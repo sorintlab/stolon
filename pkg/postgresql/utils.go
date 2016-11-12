@@ -364,7 +364,40 @@ func getConfigFilePGParameters(ctx context.Context, connParams ConnParams) (comm
 	}
 	defer db.Close()
 
-	rows, err := query(ctx, db, "select name, setting, source from pg_settings")
+	// We prefer pg_file_settings since pg_settings returns archive_command = '(disabled)' when archive_mode is off so we'll lose its value
+	// Check if pg_file_settings exists (pg >= 9.5)
+	rows, err := query(ctx, db, "select 1 from information_schema.tables where table_schema = 'pg_catalog' and table_name = 'pg_file_settings'")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	c := 0
+	for rows.Next() {
+		c++
+	}
+	use_pg_file_settings := false
+	if c > 0 {
+		use_pg_file_settings = true
+	}
+
+	if use_pg_file_settings {
+		rows, err = query(ctx, db, "select name, setting from pg_file_settings")
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var name, setting string
+			if err = rows.Scan(&name, &setting); err != nil {
+				return nil, err
+			}
+			pgParameters[name] = setting
+		}
+		return pgParameters, nil
+	}
+
+	// Fallback to pg_settings
+	rows, err = query(ctx, db, "select name, setting, source from pg_settings")
 	if err != nil {
 		return nil, err
 	}
