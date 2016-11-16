@@ -133,9 +133,9 @@ func status(cmd *cobra.Command, args []string) {
 		stdout("No active proxies")
 	} else {
 		sort.Sort(proxiesInfo)
-		fmt.Fprintf(tabOut, "ID\tLISTENADDRESS\tCV VERSION\n")
+		fmt.Fprintf(tabOut, "ID\n")
 		for _, pi := range proxiesInfo {
-			fmt.Fprintf(tabOut, "%s\t%s:%s\t%d\n", pi.UID, pi.ListenAddress, pi.Port, pi.ProxyGeneration)
+			fmt.Fprintf(tabOut, "%s\n", pi.UID)
 			tabOut.Flush()
 		}
 	}

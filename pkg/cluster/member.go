@@ -108,8 +108,6 @@ func (p ProxiesInfo) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 
 type ProxyInfo struct {
 	UID             string
-	ListenAddress   string
-	Port            string
 	ProxyUID        string
 	ProxyGeneration int64
 }

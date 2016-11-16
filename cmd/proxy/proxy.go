@@ -143,8 +143,6 @@ func (c *ClusterChecker) sendPollonConfData(confData pollon.ConfData) {
 func (c *ClusterChecker) SetProxyInfo(e *store.StoreManager, uid string, generation int64, ttl time.Duration) error {
 	proxyInfo := &cluster.ProxyInfo{
 		UID:             c.id,
-		ListenAddress:   c.listenAddress,
-		Port:            c.port,
 		ProxyUID:        uid,
 		ProxyGeneration: generation,
 	}
