@@ -375,8 +375,7 @@ type DBSpec struct {
 }
 
 type DBStatus struct {
-	ErrorStartTime time.Time `json:"errorStartTime,omitempty"`
-	Healthy        bool      `json:"healthy,omitempty"`
+	Healthy bool `json:"healthy,omitempty"`
 
 	CurrentGeneration int64 `json:"currentGeneration,omitempty"`
 
@@ -485,24 +484,4 @@ func (cd *ClusterData) FindDB(keeper *Keeper) *DB {
 		}
 	}
 	return nil
-}
-
-func (k *Keeper) SetError() {
-	if k.Status.ErrorStartTime.IsZero() {
-		k.Status.ErrorStartTime = time.Now()
-	}
-}
-
-func (k *Keeper) CleanError() {
-	k.Status.ErrorStartTime = time.Time{}
-}
-
-func (d *DB) SetError() {
-	if d.Status.ErrorStartTime.IsZero() {
-		d.Status.ErrorStartTime = time.Now()
-	}
-}
-
-func (d *DB) CleanError() {
-	d.Status.ErrorStartTime = time.Time{}
 }

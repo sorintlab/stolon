@@ -409,6 +409,30 @@ func getKeepersPGState(ctx context.Context, ki cluster.KeepersInfo) map[string]*
 	return keepersPGState
 }
 
+func (s *Sentinel) SetKeeperError(id string) {
+	if _, ok := s.keeperErrorTimes[id]; !ok {
+		s.keeperErrorTimes[id] = time.Now()
+	}
+}
+
+func (s *Sentinel) CleanKeeperError(id string) {
+	if _, ok := s.keeperErrorTimes[id]; ok {
+		delete(s.keeperErrorTimes, id)
+	}
+}
+
+func (s *Sentinel) SetDBError(id string) {
+	if _, ok := s.dbErrorTimes[id]; !ok {
+		s.dbErrorTimes[id] = time.Now()
+	}
+}
+
+func (s *Sentinel) CleanDBError(id string) {
+	if _, ok := s.dbErrorTimes[id]; ok {
+		delete(s.dbErrorTimes, id)
+	}
+}
+
 func (s *Sentinel) updateKeepersStatus(cd *cluster.ClusterData, keepersInfo cluster.KeepersInfo) *cluster.ClusterData {
 	// Create a copy of cd
 	cd = cd.DeepCopy()
@@ -429,11 +453,11 @@ func (s *Sentinel) updateKeepersStatus(cd *cluster.ClusterData, keepersInfo clus
 	}
 
 	// Mark not found keepersInfo as in error
-	for keeperUID, k := range cd.Keepers {
+	for keeperUID, _ := range cd.Keepers {
 		if _, ok := keepersInfo[keeperUID]; !ok {
-			k.SetError()
+			s.SetKeeperError(keeperUID)
 		} else {
-			k.CleanError()
+			s.CleanKeeperError(keeperUID)
 		}
 	}
 
@@ -455,12 +479,12 @@ func (s *Sentinel) updateDBsStatus(cd *cluster.ClusterData, dbStates map[string]
 		dbs, ok := dbStates[db.Spec.KeeperUID]
 		if !ok {
 			log.Error("no db state available", zap.String("db", db.UID))
-			db.SetError()
+			s.SetDBError(db.UID)
 			continue
 		}
 		if dbs.UID != db.UID {
 			log.Warn("received db state for unexpected db uid", zap.String("receivedDB", dbs.UID), zap.String("db", db.UID))
-			db.SetError()
+			s.SetDBError(db.UID)
 			continue
 		}
 		log.Debug("received db state", zap.String("db", db.UID))
@@ -469,7 +493,7 @@ func (s *Sentinel) updateDBsStatus(cd *cluster.ClusterData, dbStates map[string]
 		db.Status.CurrentGeneration = dbs.Generation
 		db.Status.PGParameters = cluster.PGParameters(dbs.PGParameters)
 		if dbs.Healthy {
-			db.CleanError()
+			s.CleanDBError(db.UID)
 			db.Status.SystemID = dbs.SystemID
 			db.Status.TimelineID = dbs.TimelineID
 			db.Status.XLogPos = dbs.XLogPos
@@ -818,20 +842,22 @@ const (
 )
 
 func (s *Sentinel) isKeeperHealthy(cd *cluster.ClusterData, keeper *cluster.Keeper) bool {
-	if keeper.Status.ErrorStartTime.IsZero() {
+	t, ok := s.keeperErrorTimes[keeper.UID]
+	if !ok {
 		return true
 	}
-	if time.Now().After(keeper.Status.ErrorStartTime.Add(cd.Cluster.Spec.FailInterval.Duration)) {
+	if time.Now().After(t.Add(cd.Cluster.Spec.FailInterval.Duration)) {
 		return false
 	}
 	return true
 }
 
 func (s *Sentinel) isDBHealthy(cd *cluster.ClusterData, db *cluster.DB) bool {
-	if db.Status.ErrorStartTime.IsZero() {
+	t, ok := s.dbErrorTimes[db.UID]
+	if !ok {
 		return true
 	}
-	if time.Now().After(db.Status.ErrorStartTime.Add(cd.Cluster.Spec.FailInterval.Duration)) {
+	if time.Now().After(t.Add(cd.Cluster.Spec.FailInterval.Duration)) {
 		return false
 	}
 	return true
@@ -871,6 +897,9 @@ type Sentinel struct {
 	UIDFn func() string
 	// Make RandFn settable to ease testing with reproducible "random" numbers
 	RandFn func(int) int
+
+	keeperErrorTimes map[string]time.Time
+	dbErrorTimes     map[string]time.Time
 }
 
 func NewSentinel(id string, cfg *config, stop chan bool, end chan bool) (*Sentinel, error) {
@@ -913,6 +942,9 @@ func NewSentinel(id string, cfg *config, stop chan bool, end chan bool) (*Sentin
 		// use math.rand (no need for crypto.rand) without an
 		// initial seed.
 		RandFn: rand.Intn,
+
+		keeperErrorTimes: make(map[string]time.Time),
+		dbErrorTimes:     make(map[string]time.Time),
 
 		sleepInterval:  cluster.DefaultSleepInterval,
 		requestTimeout: cluster.DefaultRequestTimeout,
