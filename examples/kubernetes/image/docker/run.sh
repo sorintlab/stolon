@@ -15,7 +15,6 @@ function checkdata() {
 
 function launchkeeper() {
   checkdata
-  export STKEEPER_LISTEN_ADDRESS=$POD_IP
   export STKEEPER_PG_LISTEN_ADDRESS=$POD_IP
   su stolon -c "stolon-keeper --data-dir /stolon-data"
 }

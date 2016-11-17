@@ -18,7 +18,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -30,7 +29,6 @@ import (
 	"github.com/sorintlab/stolon/common"
 	"github.com/sorintlab/stolon/pkg/cluster"
 	"github.com/sorintlab/stolon/pkg/flagutil"
-	"github.com/sorintlab/stolon/pkg/kubernetes"
 	"github.com/sorintlab/stolon/pkg/postgresql"
 	pg "github.com/sorintlab/stolon/pkg/postgresql"
 	"github.com/sorintlab/stolon/pkg/store"
@@ -51,7 +49,8 @@ var cmdKeeper = &cobra.Command{
 }
 
 type KeeperLocalState struct {
-	UID string
+	UID        string
+	ClusterUID string
 }
 
 type DBLocalState struct {
@@ -71,8 +70,6 @@ type config struct {
 	storeEndpoints          string
 	dataDir                 string
 	clusterName             string
-	listenAddress           string
-	port                    string
 	debug                   bool
 	pgListenAddress         string
 	pgPort                  string
@@ -101,8 +98,6 @@ func init() {
 	cmdKeeper.PersistentFlags().StringVar(&cfg.storeEndpoints, "store-endpoints", "", "a comma-delimited list of store endpoints (defaults: 127.0.0.1:2379 for etcd, 127.0.0.1:8500 for consul)")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.dataDir, "data-dir", "", "data directory")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.clusterName, "cluster-name", "", "cluster name")
-	cmdKeeper.PersistentFlags().StringVar(&cfg.listenAddress, "listen-address", "localhost", "keeper listening address")
-	cmdKeeper.PersistentFlags().StringVar(&cfg.port, "port", "5431", "keeper listening port")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.pgListenAddress, "pg-listen-address", "localhost", "postgresql instance listening address")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.pgPort, "pg-port", "5432", "postgresql instance listening port")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.pgBinPath, "pg-bin-path", "", "absolute path to postgresql binaries. If empty they will be searched in the current PATH")
@@ -320,8 +315,6 @@ func NewPostgresKeeper(cfg *config, stop chan bool, end chan error) (*PostgresKe
 		storeBackend:   cfg.storeBackend,
 		storeEndpoints: cfg.storeEndpoints,
 
-		listenAddress:       cfg.listenAddress,
-		port:                cfg.port,
 		debug:               cfg.debug,
 		pgListenAddress:     cfg.pgListenAddress,
 		pgPort:              cfg.pgPort,
@@ -376,49 +369,29 @@ func (p *PostgresKeeper) usePgrewind(db *cluster.DB) bool {
 	return p.pgSUUsername != "" && p.pgSUPassword != "" && db.Spec.UsePgrewind
 }
 
-func (p *PostgresKeeper) publish() error {
-	discoveryInfo := &cluster.KeeperDiscoveryInfo{
-		ListenAddress: p.listenAddress,
-		Port:          p.port,
-	}
-	log.Debug(spew.Sprintf("discoveryInfo: %#v", discoveryInfo))
-
+func (p *PostgresKeeper) updateKeeperInfo() error {
 	p.localStateMutex.Lock()
 	keeperUID := p.keeperLocalState.UID
+	clusterUID := p.keeperLocalState.ClusterUID
 	p.localStateMutex.Unlock()
-	if err := p.e.SetKeeperDiscoveryInfo(keeperUID, discoveryInfo, p.sleepInterval*2); err != nil {
+
+	if clusterUID == "" {
+		return nil
+	}
+
+	keeperInfo := &cluster.KeeperInfo{
+		InfoUID:       common.UID(),
+		UID:           keeperUID,
+		ClusterUID:    clusterUID,
+		PostgresState: p.getLastPGState(),
+	}
+
+	// The time to live is just to automatically remove old entries, it's
+	// not used to determine if the keeper info has been updated.
+	if err := p.e.SetKeeperInfo(keeperUID, keeperInfo, p.sleepInterval); err != nil {
 		return err
 	}
 	return nil
-}
-
-func (p *PostgresKeeper) infoHandler(w http.ResponseWriter, req *http.Request) {
-	p.localStateMutex.Lock()
-	keeperUID := p.keeperLocalState.UID
-	p.localStateMutex.Unlock()
-
-	keeperInfo := cluster.KeeperInfo{
-		UID:           keeperUID,
-		ListenAddress: p.listenAddress,
-		Port:          p.port,
-	}
-
-	if err := json.NewEncoder(w).Encode(&keeperInfo); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-	}
-}
-
-func (p *PostgresKeeper) pgStateHandler(w http.ResponseWriter, req *http.Request) {
-	pgState := p.getLastPGState()
-
-	if pgState == nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	if err := json.NewEncoder(w).Encode(pgState); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-	}
 }
 
 func (p *PostgresKeeper) updatePGState(pctx context.Context) {
@@ -437,7 +410,6 @@ func (p *PostgresKeeper) GetPGState(pctx context.Context) (*cluster.PostgresStat
 	defer p.getPGStateMutex.Unlock()
 	// Just get one pgstate at a time to avoid exausting available connections
 	pgState := &cluster.PostgresState{}
-	pgState.Healthy = true
 
 	p.localStateMutex.Lock()
 	pgState.UID = p.dbLocalState.UID
@@ -454,7 +426,6 @@ func (p *PostgresKeeper) GetPGState(pctx context.Context) (*cluster.PostgresStat
 	if initialized {
 		pgParameters, err := p.pgm.GetConfigFilePGParameters()
 		if err != nil {
-			pgState.Healthy = false
 			log.Error("cannot get configured pg parameters", zap.Error(err))
 			return pgState, nil
 		}
@@ -470,7 +441,6 @@ func (p *PostgresKeeper) GetPGState(pctx context.Context) (*cluster.PostgresStat
 
 		sd, err := p.pgm.GetSystemData()
 		if err != nil {
-			pgState.Healthy = false
 			log.Error("error getting pg state", zap.Error(err))
 			return pgState, nil
 		}
@@ -483,7 +453,6 @@ func (p *PostgresKeeper) GetPGState(pctx context.Context) (*cluster.PostgresStat
 		if pgState.TimelineID > 1 {
 			tlsh, err := p.pgm.GetTimelinesHistory(pgState.TimelineID)
 			if err != nil {
-				pgState.Healthy = false
 				log.Error("error getting timeline history", zap.Error(err))
 				return pgState, nil
 			}
@@ -499,6 +468,7 @@ func (p *PostgresKeeper) GetPGState(pctx context.Context) (*cluster.PostgresStat
 			}
 			pgState.TimelinesHistory = ctlsh
 		}
+		pgState.Healthy = true
 	}
 
 	return pgState, nil
@@ -506,7 +476,7 @@ func (p *PostgresKeeper) GetPGState(pctx context.Context) (*cluster.PostgresStat
 
 func (p *PostgresKeeper) getLastPGState() *cluster.PostgresState {
 	p.pgStateMutex.Lock()
-	pgState := p.lastPGState.Copy()
+	pgState := p.lastPGState.DeepCopy()
 	p.pgStateMutex.Unlock()
 	log.Debug("pgstate dump", zap.String("pgState", spew.Sdump(pgState)))
 	return pgState
@@ -515,8 +485,7 @@ func (p *PostgresKeeper) getLastPGState() *cluster.PostgresState {
 func (p *PostgresKeeper) Start() {
 	endSMCh := make(chan struct{})
 	endPgStatecheckerCh := make(chan struct{})
-	endPublish := make(chan struct{})
-	endApiCh := make(chan error)
+	endUpdateKeeperInfo := make(chan struct{})
 
 	var err error
 	var cd *cluster.ClusterData
@@ -542,16 +511,10 @@ func (p *PostgresKeeper) Start() {
 
 	p.pgm.Stop(true)
 
-	http.HandleFunc("/info", p.infoHandler)
-	http.HandleFunc("/pgstate", p.pgStateHandler)
-	go func() {
-		endApiCh <- http.ListenAndServe(fmt.Sprintf("%s:%s", p.listenAddress, p.port), nil)
-	}()
-
 	ctx, cancel := context.WithCancel(context.Background())
 	smTimerCh := time.NewTimer(0).C
 	updatePGStateTimerCh := time.NewTimer(0).C
-	publishCh := time.NewTimer(0).C
+	updateKeeperInfoTimerCh := time.NewTimer(0).C
 	for true {
 		select {
 		case <-p.stop:
@@ -571,29 +534,26 @@ func (p *PostgresKeeper) Start() {
 			smTimerCh = time.NewTimer(p.sleepInterval).C
 
 		case <-updatePGStateTimerCh:
+			// updateKeeperInfo two times faster than the sleep interval
 			go func() {
 				p.updatePGState(ctx)
 				endPgStatecheckerCh <- struct{}{}
 			}()
 
 		case <-endPgStatecheckerCh:
-			updatePGStateTimerCh = time.NewTimer(p.sleepInterval).C
+			// updateKeeperInfo two times faster than the sleep interval
+			updatePGStateTimerCh = time.NewTimer(p.sleepInterval / 2).C
 
-		case <-publishCh:
+		case <-updateKeeperInfoTimerCh:
 			go func() {
-				p.publish()
-				endPublish <- struct{}{}
+				if err := p.updateKeeperInfo(); err != nil {
+					log.Error("failed to update keeper info", zap.Error(err))
+				}
+				endUpdateKeeperInfo <- struct{}{}
 			}()
 
-		case <-endPublish:
-			publishCh = time.NewTimer(p.sleepInterval).C
-
-		case err := <-endApiCh:
-			if err != nil {
-				log.Error("ListenAndServe: ", zap.Error(err))
-				os.Exit(1)
-			}
-			close(p.stop)
+		case <-endUpdateKeeperInfo:
+			updateKeeperInfoTimerCh = time.NewTimer(p.sleepInterval).C
 		}
 	}
 }
@@ -704,6 +664,14 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 	if cd.Cluster != nil {
 		p.sleepInterval = cd.Cluster.Spec.SleepInterval.Duration
 		p.requestTimeout = cd.Cluster.Spec.RequestTimeout.Duration
+
+		if p.keeperLocalState.ClusterUID != cd.Cluster.UID {
+			p.keeperLocalState.ClusterUID = cd.Cluster.UID
+			if err = p.saveKeeperLocalState(); err != nil {
+				log.Error("error", zap.Error(err))
+				return
+			}
+		}
 	}
 
 	k, ok := cd.Keepers[p.keeperLocalState.UID]
@@ -1430,16 +1398,13 @@ func keeper(cmd *cobra.Command, args []string) {
 		fmt.Printf("cannot take exclusive lock on data dir %q: %v\n", cfg.dataDir, err)
 		os.Exit(1)
 	}
+	log.Info("exclusive lock on data dir taken")
 
 	if cfg.id != "" {
 		if !pg.IsValidReplSlotName(cfg.id) {
 			fmt.Printf("keeper id %q not valid. It can contain only lower-case letters, numbers and the underscore character\n", cfg.id)
 			os.Exit(1)
 		}
-	}
-
-	if kubernetes.OnKubernetes() {
-		log.Info("running under kubernetes.")
 	}
 
 	stop := make(chan bool, 0)

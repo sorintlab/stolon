@@ -65,7 +65,8 @@ func TestPITR(t *testing.T) {
 
 	initialClusterSpec := &cluster.ClusterSpec{
 		InitMode:           cluster.ClusterInitModeNew,
-		FailInterval:       cluster.Duration{Duration: 10 * time.Second},
+		SleepInterval:      cluster.Duration{Duration: 2 * time.Second},
+		FailInterval:       cluster.Duration{Duration: 5 * time.Second},
 		ConvergenceTimeout: cluster.Duration{Duration: 30 * time.Second},
 		PGParameters: cluster.PGParameters{
 			"archive_mode":    "on",
@@ -145,7 +146,8 @@ func TestPITR(t *testing.T) {
 	// Now initialize a new cluster with the existing keeper
 	initialClusterSpec = &cluster.ClusterSpec{
 		InitMode:           cluster.ClusterInitModePITR,
-		FailInterval:       cluster.Duration{Duration: 10 * time.Second},
+		SleepInterval:      cluster.Duration{Duration: 2 * time.Second},
+		FailInterval:       cluster.Duration{Duration: 5 * time.Second},
 		ConvergenceTimeout: cluster.Duration{Duration: 30 * time.Second},
 		PITRConfig: &cluster.PITRConfig{
 			DataRestoreCommand: fmt.Sprintf("tar xvf %s/base.tar -C %%d", baseBackupDir),

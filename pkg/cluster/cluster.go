@@ -16,6 +16,7 @@ package cluster
 
 import (
 	"encoding/json"
+	"reflect"
 	"strings"
 	"time"
 
@@ -305,11 +306,7 @@ func NewCluster(uid string, cs *ClusterSpec) *Cluster {
 type KeeperSpec struct{}
 
 type KeeperStatus struct {
-	ErrorStartTime time.Time `json:"errorStartTime,omitempty"`
-	Healthy        bool      `json:"healthy,omitempty"`
-
-	ListenAddress string `json:"listenAddress,omitempty"`
-	Port          string `json:"port,omitempty"`
+	Healthy bool `json:"healthy,omitempty"`
 }
 
 type Keeper struct {
@@ -330,10 +327,7 @@ func NewKeeperFromKeeperInfo(ki *KeeperInfo) *Keeper {
 		ChangeTime: time.Time{},
 		Spec:       &KeeperSpec{},
 		Status: KeeperStatus{
-			ErrorStartTime: time.Time{},
-			Healthy:        true,
-			ListenAddress:  ki.ListenAddress,
-			Port:           ki.Port,
+			Healthy: true,
 		},
 	}
 }
@@ -473,6 +467,9 @@ func (c *ClusterData) DeepCopy() *ClusterData {
 	nc, err := copystructure.Copy(c)
 	if err != nil {
 		panic(err)
+	}
+	if !reflect.DeepEqual(c, nc) {
+		panic("not equal")
 	}
 	return nc.(*ClusterData)
 }

@@ -14,40 +14,61 @@
 
 package cluster
 
-import "github.com/sorintlab/stolon/common"
+import (
+	"reflect"
+
+	"github.com/sorintlab/stolon/common"
+
+	"github.com/mitchellh/copystructure"
+)
 
 type KeepersInfo map[string]*KeeperInfo
 
-type KeeperInfo struct {
-	UID           string
-	Generation    int64
-	ListenAddress string
-	Port          string
-}
-
-func (k *KeeperInfo) Copy() *KeeperInfo {
+func (k KeepersInfo) DeepCopy() KeepersInfo {
 	if k == nil {
 		return nil
 	}
-	nk := *k
-	return &nk
+	nk, err := copystructure.Copy(k)
+	if err != nil {
+		panic(err)
+	}
+	if !reflect.DeepEqual(k, nk) {
+		panic("not equal")
+	}
+	return nk.(KeepersInfo)
+}
+
+type KeeperInfo struct {
+	// An unique id for this info, used to know when this the keeper info
+	// has been updated
+	InfoUID string `json:"infoUID,omitempty"`
+
+	UID        string `json:"uid,omitempty"`
+	ClusterUID string `json:"clusterUID,omitempty"`
+
+	PostgresState *PostgresState `json:"postgresState,omitempty"`
+}
+
+func (k *KeeperInfo) DeepCopy() *KeeperInfo {
+	if k == nil {
+		return nil
+	}
+	nk, err := copystructure.Copy(k)
+	if err != nil {
+		panic(err)
+	}
+	if !reflect.DeepEqual(k, nk) {
+		panic("not equal")
+	}
+	return nk.(*KeeperInfo)
 }
 
 type PostgresTimelinesHistory []*PostgresTimelineHistory
 
-func (tlsh PostgresTimelinesHistory) Copy() PostgresTimelinesHistory {
-	if tlsh == nil {
-		return nil
-	}
-	ntlsh := make(PostgresTimelinesHistory, len(tlsh))
-	copy(ntlsh, tlsh)
-	return ntlsh
-}
-
 type PostgresTimelineHistory struct {
-	TimelineID  uint64
-	SwitchPoint uint64
-	Reason      string
+	TimelineID  uint64 `json:"timelineID,omitempty"`
+	SwitchPoint uint64 `json:"switchPoint,omitempty"`
+	Reason      string `json:"reason,omitempty"`
 }
 
 func (tlsh PostgresTimelinesHistory) GetTimelineHistory(id uint64) *PostgresTimelineHistory {
@@ -60,34 +81,32 @@ func (tlsh PostgresTimelinesHistory) GetTimelineHistory(id uint64) *PostgresTime
 }
 
 type PostgresState struct {
-	UID        string
-	Generation int64
+	UID        string `json:"uid,omitempty"`
+	Generation int64  `json:"generation,omitempty"`
 
 	ListenAddress string `json:"listenAddress,omitempty"`
 	Port          string `json:"port,omitempty"`
 
-	Healthy          bool
-	SystemID         string
-	TimelineID       uint64
-	XLogPos          uint64
-	TimelinesHistory PostgresTimelinesHistory
-	PGParameters     common.Parameters
+	Healthy          bool                     `json:"healthy,omitempty"`
+	SystemID         string                   `json:"systemID,omitempty"`
+	TimelineID       uint64                   `json:"timelineID,omitempty"`
+	XLogPos          uint64                   `json:"xLogPos,omitempty"`
+	TimelinesHistory PostgresTimelinesHistory `json:"timelinesHistory,omitempty"`
+	PGParameters     common.Parameters        `json:"pgParameters,omitempty"`
 }
 
-func (p *PostgresState) Copy() *PostgresState {
+func (p *PostgresState) DeepCopy() *PostgresState {
 	if p == nil {
 		return nil
 	}
-	np := *p
-	np.TimelinesHistory = p.TimelinesHistory.Copy()
-	return &np
-}
-
-type KeepersDiscoveryInfo []*KeeperDiscoveryInfo
-
-type KeeperDiscoveryInfo struct {
-	ListenAddress string
-	Port          string
+	np, err := copystructure.Copy(p)
+	if err != nil {
+		panic(err)
+	}
+	if !reflect.DeepEqual(p, np) {
+		panic("not equal")
+	}
+	return np.(*PostgresState)
 }
 
 type SentinelsInfo []*SentinelInfo
