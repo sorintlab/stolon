@@ -613,7 +613,7 @@ func TestUpdateCluster(t *testing.T) {
 						ChangeTime: time.Time{},
 						Spec: &cluster.DBSpec{
 							KeeperUID: "keeper01",
-							Role:      common.RoleUndefined,
+							Role:      common.RoleMaster,
 							Followers: []string{},
 						},
 						Status: cluster.DBStatus{
@@ -1026,7 +1026,7 @@ func TestUpdateCluster(t *testing.T) {
 						ChangeTime: time.Time{},
 						Spec: &cluster.DBSpec{
 							KeeperUID: "keeper01",
-							Role:      common.RoleUndefined,
+							Role:      common.RoleMaster,
 							Followers: []string{},
 						},
 						Status: cluster.DBStatus{

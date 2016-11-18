@@ -732,9 +732,8 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 
 		// New master elected
 		if curMasterDBUID != wantedMasterDBUID {
-			// Set the old master to an undefined role (the keeper will do nothing when role is RoleUndefined)
+			// maintain the current role, remove followers
 			oldMasterdb := newcd.DBs[curMasterDBUID]
-			oldMasterdb.Spec.Role = common.RoleUndefined
 			oldMasterdb.Spec.Followers = []string{}
 
 			newcd.Cluster.Status.Master = wantedMasterDBUID

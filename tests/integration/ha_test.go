@@ -372,9 +372,76 @@ func TestFailover(t *testing.T) {
 	t.Parallel()
 	testFailover(t, false)
 }
+
 func TestFailoverSyncRepl(t *testing.T) {
 	t.Parallel()
 	testFailover(t, true)
+}
+
+// Tests standby elected as new master but fails to become master. Then old
+// master comes back and is re-elected as master.
+func testFailoverFailed(t *testing.T, syncRepl bool) {
+	dir, err := ioutil.TempDir("", "stolon")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer os.RemoveAll(dir)
+
+	clusterName := uuid.NewV4().String()
+
+	tks, tss, tstore := setupServers(t, clusterName, dir, 2, 1, syncRepl, false)
+	defer shutdown(tks, tss, tstore)
+
+	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
+	storePath := filepath.Join(common.StoreBasePath, clusterName)
+
+	kvstore, err := store.NewStore(tstore.storeBackend, storeEndpoints)
+	if err != nil {
+		t.Fatalf("cannot create store: %v", err)
+	}
+	e := store.NewStoreManager(kvstore, storePath)
+
+	master, standbys, err := getRoles(t, tks)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	standby := standbys[0]
+
+	if err := populate(t, master); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := write(t, master, 1, 1); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// Stop the keeper process on master, should also stop the database
+	t.Logf("Stopping current master keeper: %s", master.id)
+	master.Stop()
+
+	// Wait for cluster data containing standy as master
+	if err := WaitClusterDataMaster(standby.id, e, 30*time.Second); err != nil {
+		t.Fatalf("expected master %q in cluster view", standby.id)
+	}
+
+	// Stopping standby before reading the new cluster data and promoting
+	t.Logf("Stopping current stanby keeper: %s", master.id)
+	standby.Stop()
+
+	t.Logf("Starting previous master keeper: %s", master.id)
+	master.Start()
+	// Wait for cluster data containing previous master as master
+	if err := WaitClusterDataMaster(master.id, e, 30*time.Second); err != nil {
+		t.Fatalf("expected master %q in cluster view", master.id)
+	}
+}
+
+func TestFailoverFailed(t *testing.T) {
+	t.Parallel()
+	testFailoverFailed(t, false)
+}
+func TestFailoverFailedSyncRepl(t *testing.T) {
+	t.Parallel()
+	testFailoverFailed(t, true)
 }
 
 func testOldMasterRestart(t *testing.T, syncRepl, usePgrewind bool) {
