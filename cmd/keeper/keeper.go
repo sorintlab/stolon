@@ -1097,6 +1097,9 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 					}
 				}
 
+				// TODO(sgotti) pg_rewind considers databases on the same timeline as in sync and doesn't check if they diverged at different position in previous timelines.
+				// So check that the db as been synced or resync again with pg_rewind disabled. Will need to report this upstream.
+
 				// Check timeline history
 				// We need to update our pgState to avoid dealing with
 				// an old pgState not reflecting the real state
@@ -1117,6 +1120,24 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 						return
 					}
 					started = true
+
+					// Check again if it was really synced
+					pgState, err = p.GetPGState(pctx)
+					if err != nil {
+						log.Error("cannot get current pgstate", zap.Error(err))
+						return
+					}
+					if p.isDifferentTimelineBranch(followedDB, pgState) {
+						if err = p.resync(db, followedDB, false, started); err != nil {
+							log.Error("failed to resync from followed instance", zap.Error(err))
+							return
+						}
+						if err = pgm.Start(); err != nil {
+							log.Error("err", zap.Error(err))
+							return
+						}
+						started = true
+					}
 				}
 			} else {
 				if err = p.resync(db, followedDB, false, started); err != nil {
@@ -1156,15 +1177,19 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				return
 			}
 			needsResync := false
+			tryPgrewind := false
 			// If the db has a different systemdID then a resync is needed
 			if systemID != followedDB.Status.SystemID {
 				needsResync = true
 				// Check timeline history
 			} else if p.isDifferentTimelineBranch(followedDB, pgState) {
 				needsResync = true
+				tryPgrewind = true
 			}
 			if needsResync {
-				if err = p.resync(db, followedDB, true, started); err != nil {
+				// TODO(sgotti) pg_rewind considers databases on the same timeline as in sync and doesn't check if they diverged at different position in previous timelines.
+				// So check that the db as been synced or resync again with pg_rewind disabled. Will need to report this upstream.
+				if err = p.resync(db, followedDB, tryPgrewind, started); err != nil {
 					log.Error("failed to full resync from followed instance", zap.Error(err))
 					return
 				}
@@ -1173,6 +1198,24 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 					return
 				}
 				started = true
+
+				// Check again if it was really synced
+				pgState, err = p.GetPGState(pctx)
+				if err != nil {
+					log.Error("cannot get current pgstate", zap.Error(err))
+					return
+				}
+				if p.isDifferentTimelineBranch(followedDB, pgState) {
+					if err = p.resync(db, followedDB, false, started); err != nil {
+						log.Error("failed to resync from followed instance", zap.Error(err))
+						return
+					}
+					if err = pgm.Start(); err != nil {
+						log.Error("err", zap.Error(err))
+						return
+					}
+					started = true
+				}
 			}
 
 			// TODO(sgotti) Check that the followed instance has all the needed WAL segments
@@ -1203,7 +1246,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				}
 			}
 		case common.RoleUndefined:
-			if err = p.resync(db, followedDB, true, started); err != nil {
+			if err = p.resync(db, followedDB, false, started); err != nil {
 				log.Error("failed to full resync from followed instance", zap.Error(err))
 				return
 			}

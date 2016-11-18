@@ -518,9 +518,11 @@ func (p *Manager) SyncFromFollowedPGRewind(followedConnParams ConnParams, passwo
 	cmd := exec.Command(name, "--debug", "-D", p.dataDir, "--source-server="+followedConnString)
 	cmd.Env = append(cmd.Env, fmt.Sprintf("PGPASSFILE=%s", pgpass.Name()))
 	log.Debug("execing cmd", zap.Object("cmd", cmd))
-	if out, err := cmd.CombinedOutput(); err != nil {
+	out, err := cmd.CombinedOutput()
+	if err != nil {
 		return fmt.Errorf("error: %v, output: %s", err, string(out))
 	}
+	log.Debug("cmd out", zap.String("out", string(out)))
 	return nil
 }
 
