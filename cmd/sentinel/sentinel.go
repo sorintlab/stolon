@@ -36,6 +36,7 @@ import (
 	"github.com/sorintlab/stolon/pkg/flagutil"
 	"github.com/sorintlab/stolon/pkg/kubernetes"
 	"github.com/sorintlab/stolon/pkg/store"
+	"github.com/sorintlab/stolon/pkg/timer"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/docker/leadership"
@@ -410,26 +411,26 @@ func getKeepersPGState(ctx context.Context, ki cluster.KeepersInfo) map[string]*
 }
 
 func (s *Sentinel) SetKeeperError(id string) {
-	if _, ok := s.keeperErrorTimes[id]; !ok {
-		s.keeperErrorTimes[id] = time.Now()
+	if _, ok := s.keeperErrorTimers[id]; !ok {
+		s.keeperErrorTimers[id] = timer.Now()
 	}
 }
 
 func (s *Sentinel) CleanKeeperError(id string) {
-	if _, ok := s.keeperErrorTimes[id]; ok {
-		delete(s.keeperErrorTimes, id)
+	if _, ok := s.keeperErrorTimers[id]; ok {
+		delete(s.keeperErrorTimers, id)
 	}
 }
 
 func (s *Sentinel) SetDBError(id string) {
-	if _, ok := s.dbErrorTimes[id]; !ok {
-		s.dbErrorTimes[id] = time.Now()
+	if _, ok := s.dbErrorTimers[id]; !ok {
+		s.dbErrorTimers[id] = timer.Now()
 	}
 }
 
 func (s *Sentinel) CleanDBError(id string) {
-	if _, ok := s.dbErrorTimes[id]; ok {
-		delete(s.dbErrorTimes, id)
+	if _, ok := s.dbErrorTimers[id]; ok {
+		delete(s.dbErrorTimers, id)
 	}
 }
 
@@ -842,22 +843,22 @@ const (
 )
 
 func (s *Sentinel) isKeeperHealthy(cd *cluster.ClusterData, keeper *cluster.Keeper) bool {
-	t, ok := s.keeperErrorTimes[keeper.UID]
+	t, ok := s.keeperErrorTimers[keeper.UID]
 	if !ok {
 		return true
 	}
-	if time.Now().After(t.Add(cd.Cluster.Spec.FailInterval.Duration)) {
+	if timer.Since(t) > cd.Cluster.Spec.FailInterval.Duration {
 		return false
 	}
 	return true
 }
 
 func (s *Sentinel) isDBHealthy(cd *cluster.ClusterData, db *cluster.DB) bool {
-	t, ok := s.dbErrorTimes[db.UID]
+	t, ok := s.dbErrorTimers[db.UID]
 	if !ok {
 		return true
 	}
-	if time.Now().After(t.Add(cd.Cluster.Spec.FailInterval.Duration)) {
+	if timer.Since(t) > cd.Cluster.Spec.FailInterval.Duration {
 		return false
 	}
 	return true
@@ -898,8 +899,8 @@ type Sentinel struct {
 	// Make RandFn settable to ease testing with reproducible "random" numbers
 	RandFn func(int) int
 
-	keeperErrorTimes map[string]time.Time
-	dbErrorTimes     map[string]time.Time
+	keeperErrorTimers map[string]int64
+	dbErrorTimers     map[string]int64
 }
 
 func NewSentinel(id string, cfg *config, stop chan bool, end chan bool) (*Sentinel, error) {
@@ -943,8 +944,8 @@ func NewSentinel(id string, cfg *config, stop chan bool, end chan bool) (*Sentin
 		// initial seed.
 		RandFn: rand.Intn,
 
-		keeperErrorTimes: make(map[string]time.Time),
-		dbErrorTimes:     make(map[string]time.Time),
+		keeperErrorTimers: make(map[string]int64),
+		dbErrorTimers:     make(map[string]int64),
 
 		sleepInterval:  cluster.DefaultSleepInterval,
 		requestTimeout: cluster.DefaultRequestTimeout,
