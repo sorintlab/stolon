@@ -161,6 +161,7 @@ func NewTestKeeperWithID(t *testing.T, dir, id, clusterName, pgSUUsername, pgSUP
 
 	args = append(args, fmt.Sprintf("--id=%s", id))
 	args = append(args, fmt.Sprintf("--cluster-name=%s", clusterName))
+	args = append(args, fmt.Sprintf("--pg-listen-address=%s", pgListenAddress))
 	args = append(args, fmt.Sprintf("--pg-port=%s", pgPort))
 	args = append(args, fmt.Sprintf("--data-dir=%s", dataDir))
 	args = append(args, fmt.Sprintf("--store-backend=%s", storeBackend))

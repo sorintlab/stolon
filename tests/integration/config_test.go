@@ -61,70 +61,39 @@ func TestServerParameters(t *testing.T) {
 	}
 	e := store.NewStoreManager(kvstore, storePath)
 
+	initialClusterSpec := &cluster.ClusterSpec{
+		InitMode:           cluster.ClusterInitModeNew,
+		SleepInterval:      cluster.Duration{Duration: 2 * time.Second},
+		FailInterval:       cluster.Duration{Duration: 5 * time.Second},
+		ConvergenceTimeout: cluster.Duration{Duration: 30 * time.Second},
+	}
+	initialClusterSpecFile, err := writeClusterSpec(dir, initialClusterSpec)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	ts, err := NewTestSentinel(t, dir, clusterName, tstore.storeBackend, storeEndpoints, fmt.Sprintf("--initial-cluster-spec=%s", initialClusterSpecFile))
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := ts.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
 	tk, err := NewTestKeeper(t, dir, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, tstore.storeBackend, storeEndpoints)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-
-	cd := &cluster.ClusterData{
-		FormatVersion: cluster.CurrentCDFormatVersion,
-		Cluster: &cluster.Cluster{
-			UID:        "01",
-			Generation: 1,
-			Spec: &cluster.ClusterSpec{
-				FailInterval: cluster.Duration{Duration: 10 * time.Second},
-			},
-			Status: cluster.ClusterStatus{
-				CurrentGeneration: 1,
-				Phase:             cluster.ClusterPhaseNormal,
-				Master:            tk.id,
-			},
-		},
-		Keepers: cluster.Keepers{
-			tk.id: &cluster.Keeper{
-				UID:  tk.id,
-				Spec: &cluster.KeeperSpec{},
-				Status: cluster.KeeperStatus{
-					Healthy: true,
-				},
-			},
-		},
-		DBs: cluster.DBs{
-			"01": &cluster.DB{
-				UID:        "01",
-				Generation: 1,
-				ChangeTime: time.Time{},
-				Spec: &cluster.DBSpec{
-					KeeperUID: tk.id,
-					InitMode:  cluster.DBInitModeNew,
-					Role:      common.RoleMaster,
-				},
-				Status: cluster.DBStatus{
-					Healthy:           false,
-					CurrentGeneration: 1,
-				},
-			},
-		},
-	}
-	cd.Cluster.Spec.SetDefaults()
-	pair, err := e.AtomicPutClusterData(cd, nil)
-	if err != nil {
+	if err := tk.Start(); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	if err := tk.StartExpect(); err != nil {
+	if err := WaitClusterPhase(e, cluster.ClusterPhaseNormal, 60*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	defer tk.Stop()
-
 	if err := tk.WaitDBUp(60 * time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	cd.DBs["01"].Spec.PGParameters = map[string]string{
-		"unexistent_parameter": "value",
-	}
-	pair, err = e.AtomicPutClusterData(cd, pair)
+	err = StolonCtl(clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "pgParameters" : { "unexistent_parameter": "value" } }`)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -141,17 +110,17 @@ func TestServerParameters(t *testing.T) {
 	tk.Stop()
 
 	// Start tk again, postgres should fail to start due to bad parameter
-	if err := tk.StartExpect(); err != nil {
+	if err := tk.Start(); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
+	defer tk.Stop()
 
 	if err := tk.cmd.ExpectTimeout("failed to start postgres", 30*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
 	// Fix wrong parameters
-	cd.DBs["01"].Spec.PGParameters = map[string]string{}
-	pair, err = e.AtomicPutClusterData(cd, pair)
+	err = StolonCtl(clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "pgParameters" : null }`)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}

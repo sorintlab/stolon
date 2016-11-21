@@ -41,6 +41,10 @@ func UID() string {
 	return fmt.Sprintf("%x", u[:4])
 }
 
+func UUID() string {
+	return uuid.NewV4().String()
+}
+
 const (
 	stolonPrefix = "stolon_"
 )

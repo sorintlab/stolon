@@ -307,6 +307,8 @@ type KeeperSpec struct{}
 
 type KeeperStatus struct {
 	Healthy bool `json:"healthy,omitempty"`
+
+	BootUUID string `json:"bootUUID,omitempty"`
 }
 
 type Keeper struct {
@@ -327,7 +329,8 @@ func NewKeeperFromKeeperInfo(ki *KeeperInfo) *Keeper {
 		ChangeTime: time.Time{},
 		Spec:       &KeeperSpec{},
 		Status: KeeperStatus{
-			Healthy: true,
+			Healthy:  true,
+			BootUUID: ki.BootUUID,
 		},
 	}
 }
