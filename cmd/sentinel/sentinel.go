@@ -569,7 +569,6 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 					panic(fmt.Errorf("db %q object doesn't exists. This shouldn't happen", cd.Cluster.Status.Master))
 				}
 				// Check that the choosed db for being the master has correctly initialized
-				// TODO(sgotti) set a timeout (the max time for an initdb operation)
 				switch s.dbConvergenceState(cd, db, cd.Cluster.Spec.InitTimeout.Duration) {
 				case Converged:
 					if db.Status.Healthy {
@@ -672,8 +671,8 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 					panic(fmt.Errorf("db %q object doesn't exists. This shouldn't happen", cd.Cluster.Status.Master))
 				}
 				// Check that the choosed db for being the master has correctly initialized
-				// TODO(sgotti) set a timeout (the max time for an initdb operation)
-				switch s.dbConvergenceState(cd, db, cd.Cluster.Spec.InitTimeout.Duration) {
+				// TODO(sgotti) set a timeout (the max time for a restore operation)
+				switch s.dbConvergenceState(cd, db, 0) {
 				case Converged:
 					if db.Status.Healthy {
 						log.Info("db initialized", zap.String("db", db.UID), zap.String("keeper", db.Spec.KeeperUID))
