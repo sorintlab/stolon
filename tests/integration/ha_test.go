@@ -142,7 +142,8 @@ func setupServers(t *testing.T, clusterName, dir string, numKeepers, numSentinel
 
 	initialClusterSpec := &cluster.ClusterSpec{
 		InitMode:               cluster.ClusterInitModeNew,
-		FailInterval:           cluster.Duration{Duration: 10 * time.Second},
+		SleepInterval:          cluster.Duration{Duration: 2 * time.Second},
+		FailInterval:           cluster.Duration{Duration: 5 * time.Second},
 		ConvergenceTimeout:     cluster.Duration{Duration: 30 * time.Second},
 		SynchronousReplication: syncRepl,
 		UsePgrewind:            usePgrewind,

@@ -25,7 +25,7 @@ fi
 
 source ./build
 
-TESTABLE="cmd/keeper cmd/sentinel cmd/proxy pkg/cluster pkg/store pkg/flagutil pkg/kubernetes pkg/postgresql pkg/util"
+TESTABLE="cmd/keeper cmd/sentinel cmd/proxy pkg/cluster pkg/store pkg/flagutil pkg/postgresql pkg/util"
 
 # user has not provided PKG override
 if [ -z "$PKG" ]; then

@@ -15,14 +15,10 @@
 package main
 
 import (
-	"crypto/tls"
-	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"math/rand"
-	"net/http"
-	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -34,13 +30,12 @@ import (
 	"github.com/sorintlab/stolon/common"
 	"github.com/sorintlab/stolon/pkg/cluster"
 	"github.com/sorintlab/stolon/pkg/flagutil"
-	"github.com/sorintlab/stolon/pkg/kubernetes"
 	"github.com/sorintlab/stolon/pkg/store"
 	"github.com/sorintlab/stolon/pkg/timer"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/docker/leadership"
-	"github.com/jmoiron/jsonq"
+	"github.com/mitchellh/copystructure"
 	"github.com/spf13/cobra"
 	"github.com/uber-go/zap"
 	"golang.org/x/net/context"
@@ -51,21 +46,12 @@ var cmdSentinel = &cobra.Command{
 	Run: sentinel,
 }
 
-const (
-	storeDiscovery      = "store"
-	kubernetesDiscovery = "kubernetes"
-)
-
 type config struct {
-	storeBackend            string
-	storeEndpoints          string
-	clusterName             string
-	keeperPort              string
-	keeperKubeLabelSelector string
-	initialClusterSpecFile  string
-	kubernetesNamespace     string
-	discoveryType           string
-	debug                   bool
+	storeBackend           string
+	storeEndpoints         string
+	clusterName            string
+	initialClusterSpecFile string
+	debug                  bool
 }
 
 var cfg config
@@ -74,11 +60,7 @@ func init() {
 	cmdSentinel.PersistentFlags().StringVar(&cfg.storeBackend, "store-backend", "", "store backend type (etcd or consul)")
 	cmdSentinel.PersistentFlags().StringVar(&cfg.storeEndpoints, "store-endpoints", "", "a comma-delimited list of store endpoints (defaults: 127.0.0.1:2379 for etcd, 127.0.0.1:8500 for consul)")
 	cmdSentinel.PersistentFlags().StringVar(&cfg.clusterName, "cluster-name", "", "cluster name")
-	cmdSentinel.PersistentFlags().StringVar(&cfg.keeperKubeLabelSelector, "keeper-kube-label-selector", "", "label selector for discoverying stolon-keeper(s) under kubernetes")
-	cmdSentinel.PersistentFlags().StringVar(&cfg.keeperPort, "keeper-port", "5431", "stolon-keeper(s) listening port (used by kubernetes discovery)")
 	cmdSentinel.PersistentFlags().StringVar(&cfg.initialClusterSpecFile, "initial-cluster-spec", "", "a file providing the initial cluster specification, used only at cluster initialization, ignored if cluster is already initialized")
-	cmdSentinel.PersistentFlags().StringVar(&cfg.kubernetesNamespace, "kubernetes-namespace", "default", "the kubernetes namespace stolon is deployed under")
-	cmdSentinel.PersistentFlags().StringVar(&cfg.discoveryType, "discovery-type", "", "discovery type (store or kubernetes). Default: detected")
 	cmdSentinel.PersistentFlags().BoolVar(&cfg.debug, "debug", false, "enable debug logging")
 }
 
@@ -95,6 +77,7 @@ func (s *Sentinel) electionLoop() {
 				if elected {
 					log.Info("sentinel leadership acquired")
 					s.leader = true
+					s.leadershipCount++
 				} else {
 					if s.leader {
 						log.Info("sentinel leadership lost")
@@ -115,74 +98,6 @@ func (s *Sentinel) electionLoop() {
 		}
 	end:
 		time.Sleep(10 * time.Second)
-	}
-}
-
-func getKeeperInfo(ctx context.Context, kdi *cluster.KeeperDiscoveryInfo) (*cluster.KeeperInfo, error) {
-	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s:%s/info", kdi.ListenAddress, kdi.Port), nil)
-	if err != nil {
-		return nil, err
-	}
-	var data cluster.KeeperInfo
-	err = httpDo(ctx, req, nil, func(resp *http.Response, err error) error {
-		if err != nil {
-			return err
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("http error code: %d, error: %s", resp.StatusCode, resp.Status)
-		}
-		if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-			return err
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return &data, nil
-}
-
-func GetPGState(ctx context.Context, keeperInfo *cluster.KeeperInfo) (*cluster.PostgresState, error) {
-	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s:%s/pgstate", keeperInfo.ListenAddress, keeperInfo.Port), nil)
-	if err != nil {
-		return nil, err
-	}
-	var pgState cluster.PostgresState
-	err = httpDo(ctx, req, nil, func(resp *http.Response, err error) error {
-		if err != nil {
-			return err
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("http error code: %d, error: %s", resp.StatusCode, resp.Status)
-		}
-		if err := json.NewDecoder(resp.Body).Decode(&pgState); err != nil {
-			return err
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return &pgState, nil
-}
-
-func httpDo(ctx context.Context, req *http.Request, tlsConfig *tls.Config, f func(*http.Response, error) error) error {
-	// Run the HTTP request in a goroutine and pass the response to f.
-	tr := &http.Transport{DisableKeepAlives: true, TLSClientConfig: tlsConfig}
-	client := &http.Client{Transport: tr}
-	c := make(chan error, 1)
-	go func() { c <- f(client.Do(req)) }()
-	select {
-	case <-ctx.Done():
-		tr.CancelRequest(req)
-		<-c // Wait for f to return.
-		return ctx.Err()
-	case err := <-c:
-		return err
 	}
 }
 
@@ -236,178 +151,8 @@ func (s *Sentinel) findBestStandby(cd *cluster.ClusterData, masterDB *cluster.DB
 	return bestDB, nil
 }
 
-func (s *Sentinel) discover(ctx context.Context) (cluster.KeepersDiscoveryInfo, error) {
-	switch s.cfg.discoveryType {
-	case storeDiscovery:
-		log.Debug("using store discovery")
-		return s.discoverStore(ctx)
-	case kubernetesDiscovery:
-		log.Debug("using kubernetes discovery")
-		ksdi := cluster.KeepersDiscoveryInfo{}
-		podsIPs, err := s.getKubernetesPodsIPs(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get running pods ips: %v", err)
-		}
-		for _, podIP := range podsIPs {
-			ksdi = append(ksdi, &cluster.KeeperDiscoveryInfo{ListenAddress: podIP, Port: s.cfg.keeperPort})
-		}
-		return ksdi, nil
-	default:
-		return nil, fmt.Errorf("unknown discovery type")
-	}
-}
-
-func (s *Sentinel) discoverStore(ctx context.Context) (cluster.KeepersDiscoveryInfo, error) {
-	return s.e.GetKeepersDiscoveryInfo()
-}
-
-func (s *Sentinel) getKubernetesPodsIPs(ctx context.Context) ([]string, error) {
-	podsIPs := []string{}
-
-	token, err := ioutil.ReadFile("/run/secrets/kubernetes.io/serviceaccount/token")
-	if err != nil {
-		return nil, fmt.Errorf("cannot retrieve kube api token: %v", err)
-	}
-	ca, err := ioutil.ReadFile("/run/secrets/kubernetes.io/serviceaccount/ca.crt")
-	if err != nil {
-		return nil, fmt.Errorf("cannot retrieve kube ca certificate: %v", err)
-	}
-	host := os.Getenv("KUBERNETES_SERVICE_HOST")
-	port := os.Getenv("KUBERNETES_SERVICE_PORT")
-	u, err := url.Parse(fmt.Sprintf("https://%s:%s/api/v1/namespaces/%s/pods", host, port, cfg.kubernetesNamespace))
-	if err != nil {
-		return nil, err
-	}
-	q := u.Query()
-	q.Set("labelSelector", s.cfg.keeperKubeLabelSelector)
-	u.RawQuery = q.Encode()
-
-	req, err := http.NewRequest("GET", u.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", token))
-
-	roots := x509.NewCertPool()
-	if ok := roots.AppendCertsFromPEM([]byte(ca)); !ok {
-		return nil, fmt.Errorf("failed to parse kube ca certificate")
-	}
-	tlsConfig := &tls.Config{RootCAs: roots}
-	err = httpDo(ctx, req, tlsConfig, func(resp *http.Response, err error) error {
-		if err != nil {
-			return err
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode == http.StatusNotFound {
-			return nil
-		}
-		if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("http error code: %d, error: %s", resp.StatusCode, resp.Status)
-		}
-		// Not using kubernetes apis packages since they import tons of other packages
-		var data map[string]interface{}
-		if err = json.NewDecoder(resp.Body).Decode(&data); err != nil {
-			return err
-		}
-
-		jq := jsonq.NewQuery(data)
-
-		items, err := jq.ArrayOfObjects("items")
-		if err != nil {
-			return nil
-		}
-		for _, item := range items {
-			jq := jsonq.NewQuery(item)
-			phase, err := jq.String("status", "phase")
-			if err != nil {
-				log.Error("cannot get pod phase", zap.Error(err))
-				return nil
-			}
-			log.Debug("pod phase", zap.String("phase", phase))
-			if phase != "Running" {
-				continue
-			}
-			podIP, err := jq.String("status", "podIP")
-			if err != nil {
-				log.Error("cannot get pod ip", zap.Error(err))
-				return nil
-			}
-			log.Debug("pod ip", zap.String("ip", podIP))
-			podsIPs = append(podsIPs, podIP)
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return podsIPs, nil
-}
-
-func getKeepersInfo(ctx context.Context, ksdi cluster.KeepersDiscoveryInfo) (cluster.KeepersInfo, error) {
-	keepersInfo := make(cluster.KeepersInfo)
-	type Response struct {
-		idx int
-		ki  *cluster.KeeperInfo
-		err error
-	}
-	ch := make(chan Response)
-	for idx, kdi := range ksdi {
-		go func(idx int, kdi *cluster.KeeperDiscoveryInfo) {
-			ki, err := getKeeperInfo(ctx, kdi)
-			ch <- Response{idx, ki, err}
-		}(idx, kdi)
-	}
-	count := 0
-	for {
-		if count == len(ksdi) {
-			break
-		}
-		select {
-		case res := <-ch:
-			count++
-			if res.err != nil {
-				log.Error("error getting keeper info", zap.String("address", ksdi[res.idx].ListenAddress), zap.String("port", ksdi[res.idx].Port), zap.Error(res.err))
-				break
-			}
-			keepersInfo[res.ki.UID] = res.ki
-		}
-	}
-	return keepersInfo, nil
-
-}
-
-func getKeepersPGState(ctx context.Context, ki cluster.KeepersInfo) map[string]*cluster.PostgresState {
-	keepersPGState := map[string]*cluster.PostgresState{}
-	type Response struct {
-		id      string
-		pgState *cluster.PostgresState
-		err     error
-	}
-	ch := make(chan Response)
-	for id, k := range ki {
-		go func(id string, k *cluster.KeeperInfo) {
-			pgState, err := GetPGState(ctx, k)
-			ch <- Response{id, pgState, err}
-		}(id, k)
-	}
-	count := 0
-	for {
-		if count == len(ki) {
-			break
-		}
-		select {
-		case res := <-ch:
-			count++
-			if res.err != nil {
-				log.Error("error getting keeper pg state for keeper", zap.String("keeper", res.id), zap.Error(res.err))
-				break
-			}
-			keepersPGState[res.id] = res.pgState
-		}
-	}
-	return keepersPGState
+func (s *Sentinel) getKeepersInfo(ctx context.Context) (cluster.KeepersInfo, error) {
+	return s.e.GetKeepersInfo()
 }
 
 func (s *Sentinel) SetKeeperError(id string) {
@@ -434,11 +179,54 @@ func (s *Sentinel) CleanDBError(id string) {
 	}
 }
 
-func (s *Sentinel) updateKeepersStatus(cd *cluster.ClusterData, keepersInfo cluster.KeepersInfo) *cluster.ClusterData {
+func (s *Sentinel) updateKeepersStatus(cd *cluster.ClusterData, keepersInfo cluster.KeepersInfo, firstRun bool) (*cluster.ClusterData, KeeperInfoHistories) {
 	// Create a copy of cd
 	cd = cd.DeepCopy()
 
-	// Create a new keeper from keepersInfo
+	kihs := s.keeperInfoHistories.DeepCopy()
+
+	// Remove keepers with wrong cluster UID
+	tmpKeepersInfo := keepersInfo.DeepCopy()
+	for _, ki := range keepersInfo {
+		if ki.ClusterUID != cd.Cluster.UID {
+			delete(tmpKeepersInfo, ki.UID)
+		}
+	}
+	keepersInfo = tmpKeepersInfo
+
+	// On first run just insert keepers info in the history with Seen set
+	// to false and don't do any change to the keepers' state
+	if firstRun {
+		for keeperUID, ki := range keepersInfo {
+			kihs[keeperUID] = &KeeperInfoHistory{KeeperInfo: ki, Seen: false}
+		}
+		return cd, kihs
+	}
+
+	tmpKeepersInfo = keepersInfo.DeepCopy()
+	// keep only updated keepers info
+	for keeperUID, ki := range keepersInfo {
+		if kih, ok := kihs[keeperUID]; ok {
+			log.Debug("kih", zap.Object("kih", kih))
+			if kih.KeeperInfo.InfoUID == ki.InfoUID {
+				if !kih.Seen {
+					//Remove since it was already there and wasn't updated
+					delete(tmpKeepersInfo, ki.UID)
+				} else if kih.Seen && timer.Since(kih.Timer) > s.sleepInterval {
+					//Remove since it wasn't updated
+					delete(tmpKeepersInfo, ki.UID)
+				}
+			}
+			if kih.KeeperInfo.InfoUID != ki.InfoUID {
+				kihs[keeperUID] = &KeeperInfoHistory{KeeperInfo: ki, Seen: true, Timer: timer.Now()}
+			}
+		} else {
+			kihs[keeperUID] = &KeeperInfoHistory{KeeperInfo: ki, Seen: true, Timer: timer.Now()}
+		}
+	}
+	keepersInfo = tmpKeepersInfo
+
+	// Create new keepers from keepersInfo
 	for keeperUID, ki := range keepersInfo {
 		if _, ok := cd.Keepers[keeperUID]; !ok {
 			k := cluster.NewKeeperFromKeeperInfo(ki)
@@ -446,14 +234,8 @@ func (s *Sentinel) updateKeepersStatus(cd *cluster.ClusterData, keepersInfo clus
 		}
 	}
 
-	// Update keeper status with keepersInfo
-	for keeperUID, ki := range keepersInfo {
-		k := cd.Keepers[keeperUID]
-		k.Status.ListenAddress = ki.ListenAddress
-		k.Status.Port = ki.Port
-	}
-
-	// Mark not found keepersInfo as in error
+	// Mark keepers without a keeperInfo (cleaned up above from not updated
+	// ones) as in error
 	for keeperUID, _ := range cd.Keepers {
 		if _, ok := keepersInfo[keeperUID]; !ok {
 			s.SetKeeperError(keeperUID)
@@ -462,23 +244,22 @@ func (s *Sentinel) updateKeepersStatus(cd *cluster.ClusterData, keepersInfo clus
 		}
 	}
 
-	// Update Healthy state
+	// Update keepers' healthy states
 	for _, k := range cd.Keepers {
 		k.Status.Healthy = s.isKeeperHealthy(cd, k)
 	}
 
-	return cd
-}
-
-func (s *Sentinel) updateDBsStatus(cd *cluster.ClusterData, dbStates map[string]*cluster.PostgresState) *cluster.ClusterData {
-	// Create newKeepersState as a copy of the current keepersState
-	cd = cd.DeepCopy()
-
-	// Update PGstate
+	// Update dbs' states
 	for _, db := range cd.DBs {
 		// Mark not found DBs in DBstates in error
-		dbs, ok := dbStates[db.Spec.KeeperUID]
+		k, ok := keepersInfo[db.Spec.KeeperUID]
 		if !ok {
+			log.Error("no keeper info available", zap.String("db", db.UID), zap.String("keeper", db.Spec.KeeperUID))
+			s.SetDBError(db.UID)
+			continue
+		}
+		dbs := k.PostgresState
+		if dbs == nil {
 			log.Error("no db state available", zap.String("db", db.UID))
 			s.SetDBError(db.UID)
 			continue
@@ -492,22 +273,24 @@ func (s *Sentinel) updateDBsStatus(cd *cluster.ClusterData, dbStates map[string]
 		db.Status.ListenAddress = dbs.ListenAddress
 		db.Status.Port = dbs.Port
 		db.Status.CurrentGeneration = dbs.Generation
-		db.Status.PGParameters = cluster.PGParameters(dbs.PGParameters)
 		if dbs.Healthy {
 			s.CleanDBError(db.UID)
 			db.Status.SystemID = dbs.SystemID
 			db.Status.TimelineID = dbs.TimelineID
 			db.Status.XLogPos = dbs.XLogPos
 			db.Status.TimelinesHistory = dbs.TimelinesHistory
+			db.Status.PGParameters = cluster.PGParameters(dbs.PGParameters)
+		} else {
+			s.SetDBError(db.UID)
 		}
 	}
 
-	// Update Healthy state
+	// Update dbs' healthy state
 	for _, db := range cd.DBs {
 		db.Status.Healthy = s.isDBHealthy(cd, db)
 	}
 
-	return cd
+	return cd, kihs
 }
 
 func (s *Sentinel) findInitialKeeper(cd *cluster.ClusterData) (*cluster.Keeper, error) {
@@ -875,6 +658,29 @@ func (s *Sentinel) dbConvergenceState(cd *cluster.ClusterData, db *cluster.DB, t
 	return Converging
 }
 
+type KeeperInfoHistory struct {
+	KeeperInfo *cluster.KeeperInfo
+	Seen       bool
+	Timer      int64
+}
+
+type KeeperInfoHistories map[string]*KeeperInfoHistory
+
+func (k KeeperInfoHistories) DeepCopy() KeeperInfoHistories {
+	if k == nil {
+		return nil
+	}
+	nk, err := copystructure.Copy(k)
+	if err != nil {
+		panic(err)
+	}
+	log.Debug("", zap.String("k", spew.Sdump(k)), zap.String("nk", spew.Sdump(nk)))
+	if !reflect.DeepEqual(k, nk) {
+		panic("not equal")
+	}
+	return nk.(KeeperInfoHistories)
+}
+
 type Sentinel struct {
 	id  string
 	cfg *config
@@ -884,9 +690,13 @@ type Sentinel struct {
 	stop      chan bool
 	end       chan bool
 
+	lastLeadershipCount uint
+
 	updateMutex sync.Mutex
 	leader      bool
-	leaderMutex sync.Mutex
+	// Used to determine if we lost and regained the leadership
+	leadershipCount uint
+	leaderMutex     sync.Mutex
 
 	initialClusterSpec *cluster.ClusterSpec
 
@@ -900,6 +710,8 @@ type Sentinel struct {
 
 	keeperErrorTimers map[string]int64
 	dbErrorTimers     map[string]int64
+
+	keeperInfoHistories KeeperInfoHistories
 }
 
 func NewSentinel(id string, cfg *config, stop chan bool, end chan bool) (*Sentinel, error) {
@@ -943,9 +755,6 @@ func NewSentinel(id string, cfg *config, stop chan bool, end chan bool) (*Sentin
 		// initial seed.
 		RandFn: rand.Intn,
 
-		keeperErrorTimers: make(map[string]int64),
-		dbErrorTimers:     make(map[string]int64),
-
 		sleepInterval:  cluster.DefaultSleepInterval,
 		requestTimeout: cluster.DefaultRequestTimeout,
 	}, nil
@@ -978,10 +787,10 @@ func (s *Sentinel) Start() {
 	}
 }
 
-func (s *Sentinel) isLeader() bool {
+func (s *Sentinel) leaderInfo() (bool, uint) {
 	s.leaderMutex.Lock()
 	defer s.leaderMutex.Unlock()
-	return s.leader
+	return s.leader, s.leadershipCount
 }
 
 func (s *Sentinel) clusterSentinelCheck(pctx context.Context) {
@@ -1029,16 +838,7 @@ func (s *Sentinel) clusterSentinelCheck(pctx context.Context) {
 	}
 
 	ctx, cancel := context.WithTimeout(pctx, s.requestTimeout)
-	keepersDiscoveryInfo, err := s.discover(ctx)
-	cancel()
-	if err != nil {
-		log.Error("err", zap.Error(err))
-		return
-	}
-	log.Debug("keepersDiscoveryInfo dump", zap.String("keepersDiscoveryInfo", spew.Sdump(keepersDiscoveryInfo)))
-
-	ctx, cancel = context.WithTimeout(pctx, s.requestTimeout)
-	keepersInfo, err := getKeepersInfo(ctx, keepersDiscoveryInfo)
+	keepersInfo, err := s.getKeepersInfo(ctx)
 	cancel()
 	if err != nil {
 		log.Error("err", zap.Error(err))
@@ -1046,18 +846,27 @@ func (s *Sentinel) clusterSentinelCheck(pctx context.Context) {
 	}
 	log.Debug("keepersInfo dump", zap.String("keepersInfo", spew.Sdump(keepersInfo)))
 
-	ctx, cancel = context.WithTimeout(pctx, s.requestTimeout)
-	keepersPGState := getKeepersPGState(ctx, keepersInfo)
-	cancel()
-	log.Debug("keepersPGState dump", zap.String("keepersPGState", spew.Sdump(keepersPGState)))
-
-	if !s.isLeader() {
+	isLeader, leadershipCount := s.leaderInfo()
+	if !isLeader {
 		return
 	}
 
-	newcd := s.updateKeepersStatus(cd, keepersInfo)
+	// detect if this is the first check after (re)gaining leadership
+	firstRun := false
+	if s.lastLeadershipCount != leadershipCount {
+		firstRun = true
+		s.lastLeadershipCount = leadershipCount
+	}
 
-	newcd = s.updateDBsStatus(newcd, keepersPGState)
+	// if this is the first check after (re)gaining leadership reset all
+	// the internal timers
+	if firstRun {
+		s.keeperErrorTimers = make(map[string]int64)
+		s.dbErrorTimers = make(map[string]int64)
+		s.keeperInfoHistories = make(KeeperInfoHistories)
+	}
+
+	newcd, newKeeperInfoHistories := s.updateKeepersStatus(cd, keepersInfo, firstRun)
 
 	newcd, err = s.updateCluster(newcd)
 	if err != nil {
@@ -1071,6 +880,11 @@ func (s *Sentinel) clusterSentinelCheck(pctx context.Context) {
 			log.Error("error saving clusterdata", zap.Error(err))
 		}
 	}
+
+	// Save the new keeperInfoHistories only on successfull cluster data
+	// update or in the next run we'll think that the saved keeperInfo was
+	// already applied.
+	s.keeperInfoHistories = newKeeperInfoHistories
 }
 
 func sigHandler(sigs chan os.Signal, stop chan bool) {
@@ -1097,23 +911,6 @@ func sentinel(cmd *cobra.Command, args []string) {
 		fmt.Println("store backend type required")
 		os.Exit(1)
 
-	}
-	if cfg.discoveryType == "" {
-		if kubernetes.OnKubernetes() {
-			cfg.discoveryType = kubernetesDiscovery
-		} else {
-			cfg.discoveryType = storeDiscovery
-		}
-	}
-	if cfg.discoveryType != storeDiscovery && cfg.discoveryType != kubernetesDiscovery {
-		fmt.Printf("unknown discovery type: %s\n", cfg.discoveryType)
-		os.Exit(1)
-	}
-	if cfg.discoveryType == kubernetesDiscovery {
-		if cfg.keeperKubeLabelSelector == "" {
-			fmt.Println("keeper-kube-label-selector must be define under kubernetes")
-			os.Exit(1)
-		}
 	}
 
 	id := common.UID()

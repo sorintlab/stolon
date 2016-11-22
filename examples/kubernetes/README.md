@@ -15,10 +15,6 @@ In the [image](examples/kubernetes/image/docker) directory you'll find the Docke
 `sorintlab/stolon:master` is the one used by the kubernetes definitions in this example.
 For a more stable testing you can use `sorintlab/stolon:latest`
 
-### Keepers discovery
-
-When running inside a kubernetes cluster then sentinels will use the kubernetes APIs to discover keepers members. If, on your setup, this doesn't work (for example no api service certificates configured or https api serving disabled) you can disable it using the stolon-sentinel `--discovery-type=store` or exporting the `STSENTINEL_DISCOVERY_TYPE=store` environment variable (see the commented variable in the [stolon-sentinel](stolon-sentinel.yaml) replication controller definition.
-
 ## Cluster setup and tests
 
 This example has some predefined values that you'd like to change:

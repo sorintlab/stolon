@@ -16,13 +16,11 @@ package integration
 
 import (
 	"bufio"
-	"crypto/tls"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -39,7 +37,6 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/satori/go.uuid"
 	"github.com/sgotti/gexpect"
-	"golang.org/x/net/context"
 )
 
 type Process struct {
@@ -134,8 +131,6 @@ type TestKeeper struct {
 	t *testing.T
 	Process
 	dataDir         string
-	listenAddress   string
-	port            string
 	pgListenAddress string
 	pgPort          string
 	pgSUUsername    string
@@ -156,20 +151,12 @@ func NewTestKeeperWithID(t *testing.T, dir, id, clusterName, pgSUUsername, pgSUP
 		return nil, err
 	}
 	defer ln.Close()
-	ln2, err := net.Listen("tcp", "localhost:0")
-	if err != nil {
-		return nil, err
-	}
-	defer ln2.Close()
 
-	listenAddress := ln.Addr().(*net.TCPAddr).IP.String()
-	port := strconv.Itoa(ln.Addr().(*net.TCPAddr).Port)
-	pgListenAddress := ln2.Addr().(*net.TCPAddr).IP.String()
-	pgPort := strconv.Itoa(ln2.Addr().(*net.TCPAddr).Port)
+	pgListenAddress := ln.Addr().(*net.TCPAddr).IP.String()
+	pgPort := strconv.Itoa(ln.Addr().(*net.TCPAddr).Port)
 
 	args = append(args, fmt.Sprintf("--id=%s", id))
 	args = append(args, fmt.Sprintf("--cluster-name=%s", clusterName))
-	args = append(args, fmt.Sprintf("--port=%s", port))
 	args = append(args, fmt.Sprintf("--pg-port=%s", pgPort))
 	args = append(args, fmt.Sprintf("--data-dir=%s", dataDir))
 	args = append(args, fmt.Sprintf("--store-backend=%s", storeBackend))
@@ -214,8 +201,6 @@ func NewTestKeeperWithID(t *testing.T, dir, id, clusterName, pgSUUsername, pgSUP
 			args: args,
 		},
 		dataDir:         dataDir,
-		listenAddress:   listenAddress,
-		port:            port,
 		pgListenAddress: pgListenAddress,
 		pgPort:          pgPort,
 		pgSUUsername:    pgSUUsername,
@@ -275,74 +260,6 @@ func (tk *TestKeeper) WaitDBDown(timeout time.Duration) error {
 		time.Sleep(2 * time.Second)
 	}
 	return fmt.Errorf("timeout")
-}
-
-func (tk *TestKeeper) WaitUp(timeout time.Duration) error {
-	start := time.Now()
-	for time.Now().Add(-timeout).Before(start) {
-		_, err := tk.GetKeeperInfo(timeout - time.Now().Sub(start))
-		if err == nil {
-			return nil
-		}
-		tk.t.Logf("tk: %v, error: %v", tk.id, err)
-		time.Sleep(1 * time.Second)
-	}
-	return fmt.Errorf("timeout")
-}
-
-func (tk *TestKeeper) WaitDown(timeout time.Duration) error {
-	start := time.Now()
-	for time.Now().Add(-timeout).Before(start) {
-		_, err := tk.GetKeeperInfo(timeout - time.Now().Sub(start))
-		if err != nil {
-			return nil
-		}
-		time.Sleep(2 * time.Second)
-	}
-	return fmt.Errorf("timeout")
-}
-
-func (tk *TestKeeper) GetKeeperInfo(timeout time.Duration) (*cluster.KeeperInfo, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/info", net.JoinHostPort(tk.listenAddress, tk.port)), nil)
-	if err != nil {
-		return nil, err
-	}
-	var data cluster.KeeperInfo
-	err = httpDo(ctx, req, nil, func(resp *http.Response, err error) error {
-		if err != nil {
-			return err
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("http error code: %d, error: %s", resp.StatusCode, resp.Status)
-		}
-		if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-			return err
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return &data, nil
-}
-
-func httpDo(ctx context.Context, req *http.Request, tlsConfig *tls.Config, f func(*http.Response, error) error) error {
-	tr := &http.Transport{DisableKeepAlives: true, TLSClientConfig: tlsConfig}
-	client := &http.Client{Transport: tr}
-	c := make(chan error, 1)
-	go func() { c <- f(client.Do(req)) }()
-	select {
-	case <-ctx.Done():
-		tr.CancelRequest(req)
-		<-c
-		return ctx.Err()
-	case err := <-c:
-		return err
-	}
 }
 
 func (tk *TestKeeper) GetPGProcess() (*os.Process, error) {

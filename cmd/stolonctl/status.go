@@ -159,11 +159,11 @@ func status(cmd *cobra.Command, args []string) {
 		stdout("")
 	} else {
 		kssKeys := cd.Keepers.SortedKeys()
-		fmt.Fprintf(tabOut, "UID\tLISTENADDRESS\tPG LISTENADDRESS\tHEALTHY\tPGWANTEDGENERATION\tPGCURRENTGENERATION\n")
+		fmt.Fprintf(tabOut, "UID\t\tPG LISTENADDRESS\tHEALTHY\tPGWANTEDGENERATION\tPGCURRENTGENERATION\n")
 		for _, kuid := range kssKeys {
 			k := cd.Keepers[kuid]
 			db := cd.FindDB(k)
-			fmt.Fprintf(tabOut, "%s\t%s:%s\t%s:%s\t%t\t%d\t%d\n", k.UID, k.Status.ListenAddress, k.Status.Port, db.Status.ListenAddress, db.Status.Port, k.Status.Healthy, db.Generation, db.Status.CurrentGeneration)
+			fmt.Fprintf(tabOut, "%s\t%s:%s\t%t\t%d\t%d\n", k.UID, db.Status.ListenAddress, db.Status.Port, k.Status.Healthy, db.Generation, db.Status.CurrentGeneration)
 		}
 	}
 	tabOut.Flush()

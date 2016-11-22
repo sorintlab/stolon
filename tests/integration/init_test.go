@@ -47,7 +47,8 @@ func TestInit(t *testing.T) {
 
 	initialClusterSpec := &cluster.ClusterSpec{
 		InitMode:           cluster.ClusterInitModeNew,
-		FailInterval:       cluster.Duration{Duration: 10 * time.Second},
+		SleepInterval:      cluster.Duration{Duration: 2 * time.Second},
+		FailInterval:       cluster.Duration{Duration: 5 * time.Second},
 		ConvergenceTimeout: cluster.Duration{Duration: 30 * time.Second},
 	}
 	initialClusterSpecFile, err := writeClusterSpec(dir, initialClusterSpec)
@@ -112,7 +113,8 @@ func testInitExisting(t *testing.T, merge bool) {
 
 	initialClusterSpec := &cluster.ClusterSpec{
 		InitMode:           cluster.ClusterInitModeNew,
-		FailInterval:       cluster.Duration{Duration: 10 * time.Second},
+		SleepInterval:      cluster.Duration{Duration: 2 * time.Second},
+		FailInterval:       cluster.Duration{Duration: 5 * time.Second},
 		ConvergenceTimeout: cluster.Duration{Duration: 30 * time.Second},
 		PGParameters: cluster.PGParameters{
 			"archive_mode": "on",
@@ -157,7 +159,8 @@ func testInitExisting(t *testing.T, merge bool) {
 	// Now initialize a new cluster with the existing keeper
 	initialClusterSpec = &cluster.ClusterSpec{
 		InitMode:           cluster.ClusterInitModeExisting,
-		FailInterval:       cluster.Duration{Duration: 10 * time.Second},
+		SleepInterval:      cluster.Duration{Duration: 2 * time.Second},
+		FailInterval:       cluster.Duration{Duration: 5 * time.Second},
 		ConvergenceTimeout: cluster.Duration{Duration: 30 * time.Second},
 		MergePgParameters:  &merge,
 		ExistingConfig: &cluster.ExistingConfig{
@@ -250,7 +253,8 @@ func TestInitUsers(t *testing.T) {
 
 	initialClusterSpec := &cluster.ClusterSpec{
 		InitMode:           cluster.ClusterInitModeNew,
-		FailInterval:       cluster.Duration{Duration: 10 * time.Second},
+		SleepInterval:      cluster.Duration{Duration: 2 * time.Second},
+		FailInterval:       cluster.Duration{Duration: 5 * time.Second},
 		ConvergenceTimeout: cluster.Duration{Duration: 30 * time.Second},
 	}
 	initialClusterSpecFile, err := writeClusterSpec(dir, initialClusterSpec)
@@ -349,7 +353,8 @@ func TestInitialClusterSpec(t *testing.T) {
 
 	initialClusterSpec := &cluster.ClusterSpec{
 		InitMode:               cluster.ClusterInitModeNew,
-		FailInterval:           cluster.Duration{Duration: 10 * time.Second},
+		SleepInterval:          cluster.Duration{Duration: 2 * time.Second},
+		FailInterval:           cluster.Duration{Duration: 5 * time.Second},
 		ConvergenceTimeout:     cluster.Duration{Duration: 30 * time.Second},
 		SynchronousReplication: true,
 	}
@@ -411,28 +416,27 @@ func TestExclusiveLock(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	if err := tk1.Start(); err != nil {
+	if err := tk1.StartExpect(); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	defer tk1.Stop()
 
-	// Wait for tk1 up before starting tk2
-	if err := tk1.WaitUp(10 * time.Second); err != nil {
-		t.Fatalf("expecting tk1 up but it's down")
+	// Wait for tk1 to take exclusive lock
+	if err := tk1.cmd.ExpectTimeout("exclusive lock on data dir taken", 60*time.Second); err != nil {
+		t.Fatalf("expecting keeper reporting that exclusive lock on data dir has been taken")
 	}
 
 	tk2, err := NewTestKeeperWithID(t, dir, id, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, tstore.storeBackend, storeEndpoints)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	if err := tk2.Start(); err != nil {
+	if err := tk2.StartExpect(); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	defer tk2.Stop()
 
-	// tk2 should exit because it cannot take an exclusive lock on dataDir
-	if err := tk2.Wait(10 * time.Second); err != nil {
-		t.Fatalf("expecting tk2 exiting due to failed exclusive lock, but it's active.")
+	// Wait for tk1 to take exclusive lock
+	if err := tk2.cmd.ExpectTimeout("cannot take exclusive lock on data dir", 60*time.Second); err != nil {
+		t.Fatalf("expecting keeper reporting that failed to take an exclusive lock on data dir")
 	}
-
 }

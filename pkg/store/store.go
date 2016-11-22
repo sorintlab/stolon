@@ -44,11 +44,11 @@ const (
 )
 
 const (
-	keepersDiscoveryInfoDir = "/keepers/discovery/"
-	clusterDataFile         = "clusterdata"
-	leaderSentinelInfoFile  = "/sentinels/leaderinfo"
-	sentinelsInfoDir        = "/sentinels/info/"
-	proxiesInfoDir          = "/proxies/info/"
+	keepersInfoDir         = "/keepers/info/"
+	clusterDataFile        = "clusterdata"
+	leaderSentinelInfoFile = "/sentinels/leaderinfo"
+	sentinelsInfoDir       = "/sentinels/info/"
+	proxiesInfoDir         = "/proxies/info/"
 )
 
 const (
@@ -138,7 +138,7 @@ func (e *StoreManager) GetClusterData() (*cluster.ClusterData, *kvstore.KVPair, 
 	return cd, pair, nil
 }
 
-func (e *StoreManager) SetKeeperDiscoveryInfo(id string, ms *cluster.KeeperDiscoveryInfo, ttl time.Duration) error {
+func (e *StoreManager) SetKeeperInfo(id string, ms *cluster.KeeperInfo, ttl time.Duration) error {
 	msj, err := json.Marshal(ms)
 	if err != nil {
 		return err
@@ -146,15 +146,15 @@ func (e *StoreManager) SetKeeperDiscoveryInfo(id string, ms *cluster.KeeperDisco
 	if ttl < MinTTL {
 		ttl = MinTTL
 	}
-	return e.store.Put(filepath.Join(e.clusterPath, keepersDiscoveryInfoDir, id), msj, &kvstore.WriteOptions{TTL: ttl})
+	return e.store.Put(filepath.Join(e.clusterPath, keepersInfoDir, id), msj, &kvstore.WriteOptions{TTL: ttl})
 }
 
-func (e *StoreManager) GetKeeperDiscoveryInfo(id string) (*cluster.KeeperDiscoveryInfo, bool, error) {
+func (e *StoreManager) GetKeeperInfo(id string) (*cluster.KeeperInfo, bool, error) {
 	if id == "" {
 		return nil, false, fmt.Errorf("empty keeper id")
 	}
-	var keeper cluster.KeeperDiscoveryInfo
-	pair, err := e.store.Get(filepath.Join(e.clusterPath, keepersDiscoveryInfoDir, id))
+	var keeper cluster.KeeperInfo
+	pair, err := e.store.Get(filepath.Join(e.clusterPath, keepersInfoDir, id))
 	if err != nil {
 		if err != kvstore.ErrKeyNotFound {
 			return nil, false, err
@@ -167,9 +167,9 @@ func (e *StoreManager) GetKeeperDiscoveryInfo(id string) (*cluster.KeeperDiscove
 	return &keeper, true, nil
 }
 
-func (e *StoreManager) GetKeepersDiscoveryInfo() (cluster.KeepersDiscoveryInfo, error) {
-	keepers := cluster.KeepersDiscoveryInfo{}
-	pairs, err := e.store.List(filepath.Join(e.clusterPath, keepersDiscoveryInfoDir))
+func (e *StoreManager) GetKeepersInfo() (cluster.KeepersInfo, error) {
+	keepers := cluster.KeepersInfo{}
+	pairs, err := e.store.List(filepath.Join(e.clusterPath, keepersInfoDir))
 	if err != nil {
 		if err != kvstore.ErrKeyNotFound {
 			return nil, err
@@ -177,12 +177,12 @@ func (e *StoreManager) GetKeepersDiscoveryInfo() (cluster.KeepersDiscoveryInfo, 
 		return keepers, nil
 	}
 	for _, pair := range pairs {
-		var keeper cluster.KeeperDiscoveryInfo
-		err = json.Unmarshal(pair.Value, &keeper)
+		var ki cluster.KeeperInfo
+		err = json.Unmarshal(pair.Value, &ki)
 		if err != nil {
 			return nil, err
 		}
-		keepers = append(keepers, &keeper)
+		keepers[ki.UID] = &ki
 	}
 	return keepers, nil
 }
