@@ -171,9 +171,6 @@ func (p *Manager) StartTmpMerged(args ...string) error {
 		return err
 	}
 
-	if err := p.WriteConf(); err != nil {
-		return fmt.Errorf("error writing conf file: %v", err)
-	}
 	if err := p.writePgHba(); err != nil {
 		return fmt.Errorf("error writing conf file: %v", err)
 	}

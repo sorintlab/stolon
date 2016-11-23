@@ -691,10 +691,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 	followersUIDs := db.Spec.Followers
 
 	prevPGParameters := pgm.GetParameters()
-	// create postgres parameteres
-	pgParameters := p.createPGParameters(db)
-	// update pgm postgres parameters
-	pgm.SetParameters(pgParameters)
+	var pgParameters common.Parameters
 
 	dbls := p.dbLocalState
 	if dbls.Initializing {
@@ -765,6 +762,12 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				log.Error("error", zap.Error(err))
 				return
 			}
+
+			// create postgres parameteres with empty InitPGParameters
+			pgParameters = p.createPGParameters(db)
+			// update pgm postgres parameters
+			pgm.SetParameters(pgParameters)
+
 			if started {
 				if err = pgm.Stop(true); err != nil {
 					log.Error("failed to stop pg instance", zap.Error(err))
@@ -789,7 +792,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				}
 				pgParameters, err = pgm.GetConfigFilePGParameters()
 				if err != nil {
-					log.Error("failed to rename previous postgresql.conf", zap.Error(err))
+					log.Error("failed to retrieve postgres parameters", zap.Error(err))
 					return
 				}
 				p.localStateMutex.Lock()
@@ -829,6 +832,12 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				log.Error("error", zap.Error(err))
 				return
 			}
+
+			// create postgres parameteres with empty InitPGParameters
+			pgParameters = p.createPGParameters(db)
+			// update pgm postgres parameters
+			pgm.SetParameters(pgParameters)
+
 			if started {
 				if err = pgm.Stop(true); err != nil {
 					log.Error("failed to stop pg instance", zap.Error(err))
@@ -855,7 +864,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				}
 				pgParameters, err = pgm.GetConfigFilePGParameters()
 				if err != nil {
-					log.Error("failed to rename previous postgresql.conf", zap.Error(err))
+					log.Error("failed to retrieve postgres parameters", zap.Error(err))
 					return
 				}
 				p.localStateMutex.Lock()
@@ -889,6 +898,12 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				log.Error("error", zap.Error(err))
 				return
 			}
+
+			// create postgres parameteres with empty InitPGParameters
+			pgParameters = p.createPGParameters(db)
+			// update pgm postgres parameters
+			pgm.SetParameters(pgParameters)
+
 			if started {
 				if err = pgm.Stop(true); err != nil {
 					log.Error("failed to stop pg instance", zap.Error(err))
@@ -903,7 +918,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				}
 				pgParameters, err = pgm.GetConfigFilePGParameters()
 				if err != nil {
-					log.Error("failed to rename previous postgresql.conf", zap.Error(err))
+					log.Error("failed to retrieve postgres parameters", zap.Error(err))
 					return
 				}
 				p.localStateMutex.Lock()
@@ -947,6 +962,9 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 		}
 	}
 
+	// create postgres parameteres
+	pgParameters = p.createPGParameters(db)
+	// update pgm postgres parameters
 	pgm.SetParameters(pgParameters)
 
 	var localRole common.Role

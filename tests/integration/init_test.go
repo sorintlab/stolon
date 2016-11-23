@@ -80,6 +80,85 @@ func TestInit(t *testing.T) {
 	t.Logf("database is up")
 }
 
+func TestInitNewMerge(t *testing.T) {
+	t.Parallel()
+	testInitNew(t, true)
+}
+
+func TestInitNewNoMerge(t *testing.T) {
+	t.Parallel()
+	testInitNew(t, false)
+}
+
+func testInitNew(t *testing.T, merge bool) {
+	clusterName := uuid.NewV4().String()
+
+	dir, err := ioutil.TempDir("", "")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer os.RemoveAll(dir)
+
+	tstore := setupStore(t, dir)
+	defer tstore.Stop()
+
+	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
+	storePath := filepath.Join(common.StoreBasePath, clusterName)
+
+	kvstore, err := store.NewStore(tstore.storeBackend, storeEndpoints)
+	if err != nil {
+		t.Fatalf("cannot create store: %v", err)
+	}
+	e := store.NewStoreManager(kvstore, storePath)
+
+	initialClusterSpec := &cluster.ClusterSpec{
+		InitMode:           cluster.ClusterInitModeNew,
+		FailInterval:       cluster.Duration{Duration: 10 * time.Second},
+		ConvergenceTimeout: cluster.Duration{Duration: 30 * time.Second},
+		MergePgParameters:  &merge,
+	}
+	initialClusterSpecFile, err := writeClusterSpec(dir, initialClusterSpec)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	ts, err := NewTestSentinel(t, dir, clusterName, tstore.storeBackend, storeEndpoints, fmt.Sprintf("--initial-cluster-spec=%s", initialClusterSpecFile))
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := ts.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	tk, err := NewTestKeeper(t, dir, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, tstore.storeBackend, storeEndpoints)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	if err := tk.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	if err := WaitClusterPhase(e, cluster.ClusterPhaseNormal, 60*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	if err := tk.WaitDBUp(60 * time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	cd, _, err := e.GetClusterData()
+	// max_connection should be set by initdb
+	_, ok := cd.Cluster.Spec.PGParameters["max_connections"]
+	if merge && !ok {
+		t.Fatalf("expected max_connection set in cluster data pgParameters")
+	}
+	if !merge && ok {
+		t.Fatalf("expected no max_connection set in cluster data pgParameters")
+	}
+
+	tk.Stop()
+}
+
 func TestInitExistingMerge(t *testing.T) {
 	t.Parallel()
 	testInitExisting(t, true)
@@ -172,7 +251,6 @@ func testInitExisting(t *testing.T, merge bool) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	//	time.Sleep(1 * time.Hour)
 	t.Logf("reinitializing cluster")
 	// Initialize cluster with new spec
 	err = StolonCtl(clusterName, tstore.storeBackend, storeEndpoints, "init", "-y", "-f", initialClusterSpecFile)
@@ -203,6 +281,16 @@ func testInitExisting(t *testing.T, merge bool) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	v, ok := pgParameters["archive_mode"]
+	if merge && v != "on" {
+		t.Fatalf("expected archive_mode == on got %q", v)
+	}
+	if !merge && ok {
+		t.Fatalf("expected archive_mode empty")
+	}
+
+	cd, _, err := e.GetClusterData()
+	// max_connection should be set by initdb
+	v, ok = cd.Cluster.Spec.PGParameters["archive_mode"]
 	if merge && v != "on" {
 		t.Fatalf("expected archive_mode == on got %q", v)
 	}
