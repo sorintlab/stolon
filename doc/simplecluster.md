@@ -24,9 +24,9 @@ The sentinel will become the sentinels leader for the cluster named `stolon-clus
 ```
 
 ```
-sentinel: id: 336d6e14
-sentinel: trying to acquire sentinels leadership
-sentinel: sentinel leadership acquired
+sentinel id id=66613766
+Trying to acquire sentinels leadership
+sentinel leadership acquired
 ```
 
 ### Launch first keeper
@@ -38,25 +38,39 @@ sentinel: sentinel leadership acquired
 This will start a stolon keeper with id `postgres0` listening by default on localhost:5431, it will setup and initialize a postgres instance inside `data/postgres0/postgres/`
 
 ```
-keeper: id: postgres0
-postgresql: Stopping database
-keeper: our keeper data is not available, waiting for it to appear
-keeper: current db UID "" different than cluster data db UID "30376139", initializing the database cluster
-postgresql: Setting required accesses to pg_hba.conf
-postgresql: Starting database
-postgresql: Setting roles
-postgresql: Defining superuser password
-postgresql: Creating replication role
-postgresql: Stopping database
-keeper: our db requested role is master
-postgresql: Starting database
+exclusive lock on data dir taken
+keeper uid uid=postgres0
+stopping database
+our keeper data is not available, waiting for it to appear
+our keeper data is not available, waiting for it to appear
+current db UID different than cluster data db UID db= cdDB=2a87ea79
+initializing the database cluster
+cannot get configured pg parameters error=dial tcp 127.0.0.1:5432: getsockopt: connection refused
+starting database
+error getting pg state error=pq: password authentication failed for user "repluser"
+setting roles
+setting superuser password
+superuser password set
+creating replication role
+replication role created role=repluser
+stopping database
+our db requested role is master
+starting database
+already master
+postgres parameters changed, reloading postgres instance
+reloading database configuration
 ```
 
 The sentinel will elect it as the master instance:
 
 ```
-sentinel: trying to find initial master
-sentinel: initializing cluster using keeper "postgres0" as master db owner
+trying to find initial master
+initializing cluster keeper=postgres0
+received db state for unexpected db uid receivedDB= db=2a87ea79
+waiting for db db=2a87ea79 keeper=postgres0
+waiting for db db=2a87ea79 keeper=postgres0
+waiting for db db=2a87ea79 keeper=postgres0
+db initialized db=2a87ea79 keeper=postgres0
 ```
 
 ### Start a proxy
@@ -68,9 +82,9 @@ Now we can start the proxy
 ```
 
 ```
-proxy: id: a8f586a9
-proxy: Starting proxying
-proxy: master address: 127.0.0.1:5432
+proxy id id=63323266
+Starting proxying
+master address address=127.0.0.1:5432
 ```
 
 
@@ -105,10 +119,28 @@ postgres=# select * from test;
 ### Start another keeper:
 
 ```
-./bin/stolon-keeper --cluster-name stolon-cluster --store-backend=etcd --id postgres1 --data-dir data/postgres1 --pg-su-password=supassword --pg-repl-username=repluser --pg-repl-password=replpassword --port 5433 --pg-port 5435
+./bin/stolon-keeper --cluster-name stolon-cluster --store-backend=etcd --id postgres1 --data-dir data/postgres1 --pg-su-password=supassword --pg-repl-username=repluser --pg-repl-password=replpassword --pg-port 5435
 ```
 
 This instance will start replicating from the master (postgres0)
+
+```
+exclusive lock on data dir taken
+keeper uid uid=postgres1
+stopping database
+our keeper data is not available, waiting for it to appear
+our keeper data is not available, waiting for it to appear
+current db UID different than cluster data db UID db= cdDB=63343433
+database cluster not initialized
+our db requested role is standby followedDB=2a87ea79
+running pg_basebackup
+sync succeeded
+starting database
+postgres parameters changed, reloading postgres instance
+reloading database configuration
+our db requested role is standby followedDB=2a87ea79
+already standby
+```
 
 ### Simulate master death
 
@@ -122,9 +154,11 @@ You can now try killing the actual keeper managing the master postgres instance 
 
 
 ```
-sentinel: master db "30376139" on keeper "postgres0" is failed
-sentinel: trying to find a standby to replace failed master
-sentinel: electing db "64646634" on keeper "postgres1" as the new master
+no keeper info available db=2a87ea79 keeper=postgres0
+no keeper info available db=2a87ea79 keeper=postgres0
+master db is failed db=2a87ea79 keeper=postgres0
+trying to find a standby to replace failed master
+electing db as the new master db=63343433 keeper=postgres1
 ```
 
 Now, inside the previous `psql` session you can redo the last select. The first time `psql` will report that the connection was closed and then it successfully reconnected:
