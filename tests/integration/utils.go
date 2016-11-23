@@ -25,6 +25,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -38,6 +39,14 @@ import (
 	"github.com/satori/go.uuid"
 	"github.com/sgotti/gexpect"
 )
+
+const (
+	MinPort = 2048
+	MaxPort = 16384
+)
+
+var curPort = MinPort
+var portMutex = sync.Mutex{}
 
 type Process struct {
 	t    *testing.T
@@ -145,15 +154,10 @@ func NewTestKeeperWithID(t *testing.T, dir, id, clusterName, pgSUUsername, pgSUP
 
 	dataDir := filepath.Join(dir, fmt.Sprintf("st%s", id))
 
-	// Hack to find a free tcp port
-	ln, err := net.Listen("tcp", "localhost:0")
+	pgListenAddress, pgPort, err := getFreePort(true, false)
 	if err != nil {
 		return nil, err
 	}
-	defer ln.Close()
-
-	pgListenAddress := ln.Addr().(*net.TCPAddr).IP.String()
-	pgPort := strconv.Itoa(ln.Addr().(*net.TCPAddr).Port)
 
 	args = append(args, fmt.Sprintf("--id=%s", id))
 	args = append(args, fmt.Sprintf("--cluster-name=%s", clusterName))
@@ -415,18 +419,14 @@ func NewTestProxy(t *testing.T, dir string, clusterName string, storeBackend sto
 	u := uuid.NewV4()
 	id := fmt.Sprintf("%x", u[:4])
 
-	// Hack to find a free tcp port
-	ln, err := net.Listen("tcp", "localhost:0")
+	listenAddress, port, err := getFreePort(true, false)
 	if err != nil {
 		return nil, err
 	}
-	defer ln.Close()
-
-	listenAddress := ln.Addr().(*net.TCPAddr).IP.String()
-	port := strconv.Itoa(ln.Addr().(*net.TCPAddr).Port)
 
 	args := []string{}
 	args = append(args, fmt.Sprintf("--cluster-name=%s", clusterName))
+	args = append(args, fmt.Sprintf("--listen-address=%s", listenAddress))
 	args = append(args, fmt.Sprintf("--port=%s", port))
 	args = append(args, fmt.Sprintf("--store-backend=%s", storeBackend))
 	args = append(args, fmt.Sprintf("--store-endpoints=%s", storeEndpoints))
@@ -521,22 +521,14 @@ func NewTestEtcd(t *testing.T, dir string, a ...string) (*TestStore, error) {
 
 	dataDir := filepath.Join(dir, "etcd")
 
-	// Hack to find a free tcp port
-	ln, err := net.Listen("tcp", "localhost:0")
+	listenAddress, port, err := getFreePort(true, false)
 	if err != nil {
 		return nil, err
 	}
-	defer ln.Close()
-	ln2, err := net.Listen("tcp", "localhost:0")
+	listenAddress2, port2, err := getFreePort(true, false)
 	if err != nil {
 		return nil, err
 	}
-	defer ln2.Close()
-
-	listenAddress := ln.Addr().(*net.TCPAddr).IP.String()
-	port := strconv.Itoa(ln.Addr().(*net.TCPAddr).Port)
-	listenAddress2 := ln2.Addr().(*net.TCPAddr).IP.String()
-	port2 := strconv.Itoa(ln2.Addr().(*net.TCPAddr).Port)
 
 	args := []string{}
 	args = append(args, fmt.Sprintf("--name=%s", id))
@@ -582,23 +574,23 @@ func NewTestConsul(t *testing.T, dir string, a ...string) (*TestStore, error) {
 
 	dataDir := filepath.Join(dir, "consul")
 
-	listenAddress, portHTTP, err := getFreeTCPPort()
+	listenAddress, portHTTP, err := getFreePort(true, false)
 	if err != nil {
 		return nil, err
 	}
-	_, portRPC, err := getFreeTCPPort()
+	_, portRPC, err := getFreePort(true, false)
 	if err != nil {
 		return nil, err
 	}
-	_, portSerfLan, err := getFreeTCPUDPPort()
+	_, portSerfLan, err := getFreePort(true, true)
 	if err != nil {
 		return nil, err
 	}
-	_, portSerfWan, err := getFreeTCPUDPPort()
+	_, portSerfWan, err := getFreePort(true, true)
 	if err != nil {
 		return nil, err
 	}
-	_, portServer, err := getFreeTCPPort()
+	_, portServer, err := getFreePort(true, false)
 	if err != nil {
 		return nil, err
 	}
@@ -738,40 +730,52 @@ func WaitClusterPhase(e *store.StoreManager, phase cluster.ClusterPhase, timeout
 	return fmt.Errorf("timeout")
 }
 
-// Hack to find a free tcp port
-func getFreeTCPPort() (string, string, error) {
-	ln, err := net.Listen("tcp", "localhost:0")
+func testFreeTCPPort(port int) error {
+	ln, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", curPort))
 	if err != nil {
-		return "", "", err
+		return err
 	}
-	defer ln.Close()
-
-	listenAddress := ln.Addr().(*net.TCPAddr).IP.String()
-	port := strconv.Itoa(ln.Addr().(*net.TCPAddr).Port)
-	return listenAddress, port, nil
+	ln.Close()
+	return nil
+}
+func testFreeUDPPort(port int) error {
+	ln, err := net.ListenPacket("udp", fmt.Sprintf("localhost:%d", curPort))
+	if err != nil {
+		return err
+	}
+	ln.Close()
+	return nil
 }
 
-// Hack to find a free tcp and udp port with same number
-func getFreeTCPUDPPort() (string, string, error) {
-	for c := 0; c < 10; c++ {
-		ln, err := net.Listen("tcp", "localhost:0")
-		if err != nil {
-			return "", "", err
-		}
+// Hack to find a free tcp and udp port
+func getFreePort(tcp bool, udp bool) (string, string, error) {
+	portMutex.Lock()
+	defer portMutex.Unlock()
 
-		listenAddress := ln.Addr().(*net.TCPAddr).IP.String()
-		port := strconv.Itoa(ln.Addr().(*net.TCPAddr).Port)
-
-		ln.Close()
-
-		lnudp, err := net.ListenPacket("udp", fmt.Sprintf("%s:%s", listenAddress, port))
-		if err != nil {
-			continue
-		}
-		lnudp.Close()
-		return listenAddress, port, nil
+	if !tcp && !udp {
+		return "", "", fmt.Errorf("at least one of tcp or udp port shuld be required")
 	}
-	return "", "", fmt.Errorf("failed to find free tcp and udp port")
+	localhostIP, err := net.ResolveIPAddr("ip", "localhost")
+	if err != nil {
+		return "", "", fmt.Errorf("failed to resolve ip addr: %v", err)
+	}
+	for {
+		curPort++
+		if curPort > MaxPort {
+			return "", "", fmt.Errorf("all available ports to test have been exausted")
+		}
+		if tcp {
+			if err := testFreeTCPPort(curPort); err != nil {
+				continue
+			}
+		}
+		if udp {
+			if err := testFreeUDPPort(curPort); err != nil {
+				continue
+			}
+		}
+		return localhostIP.IP.String(), strconv.Itoa(curPort), nil
+	}
 }
 
 func writeClusterSpec(dir string, cs *cluster.ClusterSpec) (string, error) {
