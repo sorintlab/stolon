@@ -37,7 +37,8 @@ const (
 )
 
 func UID() string {
-	return fmt.Sprintf("%x", uuid.NewV4().String()[:4])
+	u := uuid.NewV4()
+	return fmt.Sprintf("%x", u[:4])
 }
 
 const (
