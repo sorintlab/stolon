@@ -1230,9 +1230,9 @@ func TestUpdateCluster(t *testing.T) {
 	for i, tt := range tests {
 		s := &Sentinel{id: "id", UIDFn: testUIDFn, RandFn: testRandFn, dbConvergenceInfos: make(map[string]*DBConvergenceInfo)}
 
-		// Populate db convergence timers, these are populated with a 0 timer to make them result like not converged.
+		// Populate db convergence timers, these are populated with a negative timer to make them result like not converged.
 		for _, db := range tt.cd.DBs {
-			s.dbConvergenceInfos[db.UID] = &DBConvergenceInfo{Generation: 0, Timer: 0}
+			s.dbConvergenceInfos[db.UID] = &DBConvergenceInfo{Generation: 0, Timer: int64(-1000 * time.Hour)}
 		}
 
 		outcd, err := s.updateCluster(tt.cd)
