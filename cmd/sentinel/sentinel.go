@@ -352,7 +352,7 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 					panic(fmt.Errorf("db %q object doesn't exists. This shouldn't happen", cd.Cluster.Status.Master))
 				}
 				// Check that the choosed db for being the master has correctly initialized
-				switch s.dbConvergenceState(cd, db, cd.Cluster.Spec.InitTimeout.Duration) {
+				switch s.dbConvergenceState(db, cd.Cluster.Spec.InitTimeout.Duration) {
 				case Converged:
 					if db.Status.Healthy {
 						log.Info("db initialized", zap.String("db", db.UID), zap.String("keeper", db.Spec.KeeperUID))
@@ -411,7 +411,7 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 				}
 				// Check that the choosed db for being the master has correctly initialized
 				// TODO(sgotti) set a timeout (the max time for a noop operation, just a start/restart)
-				if db.Status.Healthy && s.dbConvergenceState(cd, db, 0) == Converged {
+				if db.Status.Healthy && s.dbConvergenceState(db, 0) == Converged {
 					log.Info("db initialized", zap.String("db", db.UID), zap.String("keeper", db.Spec.KeeperUID))
 					// Don't include previous config anymore
 					db.Spec.IncludeConfig = false
@@ -455,7 +455,7 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 				}
 				// Check that the choosed db for being the master has correctly initialized
 				// TODO(sgotti) set a timeout (the max time for a restore operation)
-				switch s.dbConvergenceState(cd, db, 0) {
+				switch s.dbConvergenceState(db, 0) {
 				case Converged:
 					if db.Status.Healthy {
 						log.Info("db initialized", zap.String("db", db.UID), zap.String("keeper", db.Spec.KeeperUID))
@@ -521,7 +521,7 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 		}
 
 		// Check that the wanted master is in master state (i.e. check that promotion from standby to master happened)
-		if s.dbConvergenceState(cd, curMasterDB, newcd.Cluster.Spec.ConvergenceTimeout.Duration) == ConvergenceFailed {
+		if s.dbConvergenceState(curMasterDB, newcd.Cluster.Spec.ConvergenceTimeout.Duration) == ConvergenceFailed {
 			log.Info("db not converged", zap.String("db", curMasterDB.UID), zap.String("keeper", curMasterDB.Spec.KeeperUID))
 			masterOK = false
 		}
@@ -559,7 +559,7 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 		if curMasterDBUID == wantedMasterDBUID {
 			masterDB := newcd.DBs[curMasterDBUID]
 			// Set standbys to follow master only if it's healthy and converged
-			if masterDB.Status.Healthy && s.dbConvergenceState(newcd, masterDB, newcd.Cluster.Spec.ConvergenceTimeout.Duration) == Converged {
+			if masterDB.Status.Healthy && s.dbConvergenceState(masterDB, newcd.Cluster.Spec.ConvergenceTimeout.Duration) == Converged {
 				// Tell proxy that there's a new active master
 				newcd.Proxy.Spec.MasterDBUID = wantedMasterDBUID
 				newcd.Proxy.ChangeTime = time.Now()
@@ -646,12 +646,32 @@ func (s *Sentinel) isDBHealthy(cd *cluster.ClusterData, db *cluster.DB) bool {
 	return true
 }
 
-func (s *Sentinel) dbConvergenceState(cd *cluster.ClusterData, db *cluster.DB, timeout time.Duration) ConvergenceState {
+func (s *Sentinel) updateDBConvergenceInfos(cd *cluster.ClusterData) {
+	for _, db := range cd.DBs {
+		if db.Status.CurrentGeneration == db.Generation {
+			delete(s.dbConvergenceInfos, db.UID)
+			continue
+		}
+		nd := &DBConvergenceInfo{Generation: db.Generation, Timer: timer.Now()}
+		d, ok := s.dbConvergenceInfos[db.UID]
+		if !ok {
+			s.dbConvergenceInfos[db.UID] = nd
+		} else if d.Generation != db.Generation {
+			s.dbConvergenceInfos[db.UID] = nd
+		}
+	}
+}
+
+func (s *Sentinel) dbConvergenceState(db *cluster.DB, timeout time.Duration) ConvergenceState {
 	if db.Status.CurrentGeneration == db.Generation {
 		return Converged
 	}
 	if timeout != 0 {
-		if time.Now().After(db.ChangeTime.Add(timeout)) {
+		d, ok := s.dbConvergenceInfos[db.UID]
+		if !ok {
+			panic(fmt.Errorf("no db convergence info for db %q, this shouldn't happen!", db.UID))
+		}
+		if timer.Since(d.Timer) > timeout {
 			return ConvergenceFailed
 		}
 	}
@@ -681,6 +701,11 @@ func (k KeeperInfoHistories) DeepCopy() KeeperInfoHistories {
 	return nk.(KeeperInfoHistories)
 }
 
+type DBConvergenceInfo struct {
+	Generation int64
+	Timer      int64
+}
+
 type Sentinel struct {
 	id  string
 	cfg *config
@@ -708,8 +733,9 @@ type Sentinel struct {
 	// Make RandFn settable to ease testing with reproducible "random" numbers
 	RandFn func(int) int
 
-	keeperErrorTimers map[string]int64
-	dbErrorTimers     map[string]int64
+	keeperErrorTimers  map[string]int64
+	dbErrorTimers      map[string]int64
+	dbConvergenceInfos map[string]*DBConvergenceInfo
 
 	keeperInfoHistories KeeperInfoHistories
 }
@@ -864,6 +890,10 @@ func (s *Sentinel) clusterSentinelCheck(pctx context.Context) {
 		s.keeperErrorTimers = make(map[string]int64)
 		s.dbErrorTimers = make(map[string]int64)
 		s.keeperInfoHistories = make(KeeperInfoHistories)
+		s.dbConvergenceInfos = make(map[string]*DBConvergenceInfo)
+
+		// Update db convergence timers since its the first run
+		s.updateDBConvergenceInfos(cd)
 	}
 
 	newcd, newKeeperInfoHistories := s.updateKeepersStatus(cd, keepersInfo, firstRun)
@@ -885,6 +915,9 @@ func (s *Sentinel) clusterSentinelCheck(pctx context.Context) {
 	// update or in the next run we'll think that the saved keeperInfo was
 	// already applied.
 	s.keeperInfoHistories = newKeeperInfoHistories
+
+	// Update db convergence timers using the new cluster data
+	s.updateDBConvergenceInfos(newcd)
 }
 
 func sigHandler(sigs chan os.Signal, stop chan bool) {
