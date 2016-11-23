@@ -77,7 +77,7 @@ DOCKERIMAGE=${BASEDIR}/examples/kubernetes/image/docker
 
 mkdir -p ${DOCKERIMAGE}/bin/
 rm -f ${DOCKERIMAGE}/bin/*
-for cmd in stolon-keeper stolon-sentinel stolon-proxy; do
+for cmd in stolon-keeper stolon-sentinel stolon-proxy stolonctl; do
 	cp ${BINDIR}/${cmd} ${DOCKERIMAGE}/bin/
 done
 
