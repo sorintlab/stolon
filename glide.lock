@@ -1,5 +1,5 @@
-hash: fbda1183a0947b03c695b5b5d2f3b8a6a697392c0f819d010eaf496dc09476db
-updated: 2016-11-10T16:59:56.823996052+01:00
+hash: 37ad54dfd451cec30e56572eb271771b8407095136ddc26c1e0db59999bdfcb1
+updated: 2016-11-23T11:24:52.287567975+01:00
 imports:
 - name: github.com/coreos/etcd
   version: bc9ddf260115d2680191c46977ae72b837785472
@@ -60,7 +60,7 @@ imports:
 - name: github.com/satori/go.uuid
   version: 879c5887cd475cd7864858769793b2ceb0d44feb
 - name: github.com/sgotti/gexpect
-  version: 81b69f472c22d5a42aefcf07b58015d0ef4da2e1
+  version: 0afc6c19f50a08b5f97f8c75f4b417f496d92377
 - name: github.com/sorintlab/pollon
   version: 279eb94a1432a0656f6da72d36f133dc68c2e064
 - name: github.com/spf13/cobra
