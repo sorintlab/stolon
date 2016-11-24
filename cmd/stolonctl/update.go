@@ -19,11 +19,8 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"path/filepath"
 
-	"github.com/sorintlab/stolon/common"
 	"github.com/sorintlab/stolon/pkg/cluster"
-	"github.com/sorintlab/stolon/pkg/store"
 
 	libkvstore "github.com/docker/libkv/store"
 	"github.com/spf13/cobra"
@@ -96,12 +93,10 @@ func update(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	storePath := filepath.Join(common.StoreBasePath, cfg.clusterName)
-	kvstore, err := store.NewStore(store.Backend(cfg.storeBackend), cfg.storeEndpoints)
+	e, err := NewStore()
 	if err != nil {
 		die("cannot create store: %v", err)
 	}
-	e := store.NewStoreManager(kvstore, storePath)
 
 	retry := 0
 	for retry < maxRetries {

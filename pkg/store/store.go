@@ -15,8 +15,10 @@
 package store
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"time"
@@ -44,6 +46,8 @@ const (
 )
 
 const (
+	sentinelLeaderKey = "sentinel-leader"
+
 	keepersInfoDir         = "/keepers/info/"
 	clusterDataFile        = "clusterdata"
 	leaderSentinelInfoFile = "/sentinels/leaderinfo"
@@ -52,8 +56,8 @@ const (
 )
 
 const (
-	DefaultEtcdEndpoints   = "127.0.0.1:2379"
-	DefaultConsulEndpoints = "127.0.0.1:8500"
+	DefaultEtcdEndpoints   = "http://127.0.0.1:2379"
+	DefaultConsulEndpoints = "http://127.0.0.1:8500"
 )
 
 const (
@@ -62,34 +66,85 @@ const (
 	MinTTL = 20 * time.Second
 )
 
+type Config struct {
+	Backend       Backend
+	Endpoints     string
+	CertFile      string
+	KeyFile       string
+	CAFile        string
+	SkipTLSVerify bool
+}
+
 type StoreManager struct {
 	clusterPath string
 	store       kvstore.Store
 }
 
-func NewStore(backend Backend, addrsStr string) (kvstore.Store, error) {
-
-	var kvbackend kvstore.Backend
-	switch backend {
+func NewStore(cfg Config) (kvstore.Store, error) {
+	var kvBackend kvstore.Backend
+	switch cfg.Backend {
 	case CONSUL:
-		kvbackend = kvstore.CONSUL
+		kvBackend = kvstore.CONSUL
 	case ETCD:
-		kvbackend = kvstore.ETCD
+		kvBackend = kvstore.ETCD
 	default:
-		return nil, fmt.Errorf("Unknown store backend: %q", backend)
+		return nil, fmt.Errorf("Unknown store backend: %q", cfg.Backend)
 	}
 
-	if addrsStr == "" {
-		switch backend {
+	endpointsStr := cfg.Endpoints
+	if endpointsStr == "" {
+		switch cfg.Backend {
 		case CONSUL:
-			addrsStr = DefaultConsulEndpoints
+			endpointsStr = DefaultConsulEndpoints
 		case ETCD:
-			addrsStr = DefaultEtcdEndpoints
+			endpointsStr = DefaultEtcdEndpoints
 		}
 	}
-	addrs := strings.Split(addrsStr, ",")
+	endpoints := strings.Split(endpointsStr, ",")
 
-	store, err := libkv.NewStore(kvbackend, addrs, &kvstore.Config{ConnectionTimeout: 10 * time.Second})
+	// 1) since libkv wants endpoints as a list of IP and not URLs but we
+	// want to also support them then parse and strip them
+	// 2) since libkv will enable TLS for all endpoints when config.TLS
+	// isn't nil we have to check that all the endpoints have the same
+	// scheme
+	addrs := []string{}
+	var scheme string
+	for _, e := range endpoints {
+		var addr string
+		u, err := url.Parse(e)
+		if err != nil {
+			return nil, fmt.Errorf("cannot parse endpoint %q: %v", e, err)
+		}
+		if u.Scheme == "" {
+			u.Scheme = "http"
+			addr = e
+		} else {
+			addr = u.Host
+		}
+		if scheme == "" {
+			scheme = u.Scheme
+		}
+		if scheme != u.Scheme {
+			return nil, fmt.Errorf("all the endpoints must have the same scheme")
+		}
+		addrs = append(addrs, addr)
+	}
+
+	var tlsConfig *tls.Config
+	if scheme == "https" {
+		var err error
+		tlsConfig, err = common.NewTLSConfig(cfg.CertFile, cfg.KeyFile, cfg.CAFile, cfg.SkipTLSVerify)
+		if err != nil {
+			return nil, fmt.Errorf("cannot create store tls config: %v", err)
+		}
+	}
+
+	config := &kvstore.Config{
+		TLS:               tlsConfig,
+		ConnectionTimeout: 10 * time.Second,
+	}
+
+	store, err := libkv.NewStore(kvBackend, addrs, config)
 	if err != nil {
 		return nil, err
 	}
@@ -247,7 +302,7 @@ func (e *StoreManager) GetSentinelsInfo() (cluster.SentinelsInfo, error) {
 }
 
 func (e *StoreManager) GetLeaderSentinelId() (string, error) {
-	pair, err := e.store.Get(filepath.Join(e.clusterPath, common.SentinelLeaderKey))
+	pair, err := e.store.Get(filepath.Join(e.clusterPath, sentinelLeaderKey))
 	if err != nil {
 		if err != kvstore.ErrKeyNotFound {
 			return "", err

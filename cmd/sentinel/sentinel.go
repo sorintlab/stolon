@@ -49,6 +49,10 @@ var cmdSentinel = &cobra.Command{
 type config struct {
 	storeBackend           string
 	storeEndpoints         string
+	storeCertFile          string
+	storeKeyFile           string
+	storeCAFile            string
+	storeSkipTlsVerify     bool
 	clusterName            string
 	initialClusterSpecFile string
 	debug                  bool
@@ -58,7 +62,11 @@ var cfg config
 
 func init() {
 	cmdSentinel.PersistentFlags().StringVar(&cfg.storeBackend, "store-backend", "", "store backend type (etcd or consul)")
-	cmdSentinel.PersistentFlags().StringVar(&cfg.storeEndpoints, "store-endpoints", "", "a comma-delimited list of store endpoints (defaults: 127.0.0.1:2379 for etcd, 127.0.0.1:8500 for consul)")
+	cmdSentinel.PersistentFlags().StringVar(&cfg.storeEndpoints, "store-endpoints", "", "a comma-delimited list of store endpoints (use https scheme for tls communication) (defaults: http://127.0.0.1:2379 for etcd, http://127.0.0.1:8500 for consul)")
+	cmdSentinel.PersistentFlags().StringVar(&cfg.storeCertFile, "store-cert-file", "", "certificate file for client identification to the store")
+	cmdSentinel.PersistentFlags().StringVar(&cfg.storeKeyFile, "store-key", "", "private key file for client identification to the store")
+	cmdSentinel.PersistentFlags().BoolVar(&cfg.storeSkipTlsVerify, "store-skip-tls-verify", false, "skip store certificate verification (insecure!!!)")
+	cmdSentinel.PersistentFlags().StringVar(&cfg.storeCAFile, "store-ca-file", "", "verify certificates of HTTPS-enabled store servers using this CA bundle")
 	cmdSentinel.PersistentFlags().StringVar(&cfg.clusterName, "cluster-name", "", "cluster name")
 	cmdSentinel.PersistentFlags().StringVar(&cfg.initialClusterSpecFile, "initial-cluster-spec", "", "a file providing the initial cluster specification, used only at cluster initialization, ignored if cluster is already initialized")
 	cmdSentinel.PersistentFlags().BoolVar(&cfg.debug, "debug", false, "enable debug logging")
@@ -760,7 +768,15 @@ func NewSentinel(id string, cfg *config, stop chan bool, end chan bool) (*Sentin
 	}
 
 	storePath := filepath.Join(common.StoreBasePath, cfg.clusterName)
-	kvstore, err := store.NewStore(store.Backend(cfg.storeBackend), cfg.storeEndpoints)
+
+	kvstore, err := store.NewStore(store.Config{
+		Backend:       store.Backend(cfg.storeBackend),
+		Endpoints:     cfg.storeEndpoints,
+		CertFile:      cfg.storeCertFile,
+		KeyFile:       cfg.storeKeyFile,
+		CAFile:        cfg.storeCAFile,
+		SkipTLSVerify: cfg.storeSkipTlsVerify,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("cannot create store: %v", err)
 	}

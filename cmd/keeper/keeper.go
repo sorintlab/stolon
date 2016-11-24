@@ -68,6 +68,10 @@ type config struct {
 	id                      string
 	storeBackend            string
 	storeEndpoints          string
+	storeCertFile           string
+	storeKeyFile            string
+	storeCAFile             string
+	storeSkipTlsVerify      bool
 	dataDir                 string
 	clusterName             string
 	debug                   bool
@@ -95,7 +99,11 @@ func init() {
 
 	cmdKeeper.PersistentFlags().StringVar(&cfg.id, "id", "", "keeper id (must be unique in the cluster and can contain only lower-case letters, numbers and the underscore character). If not provided a random id will be generated.")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.storeBackend, "store-backend", "", "store backend type (etcd or consul)")
-	cmdKeeper.PersistentFlags().StringVar(&cfg.storeEndpoints, "store-endpoints", "", "a comma-delimited list of store endpoints (defaults: 127.0.0.1:2379 for etcd, 127.0.0.1:8500 for consul)")
+	cmdKeeper.PersistentFlags().StringVar(&cfg.storeEndpoints, "store-endpoints", "", "a comma-delimited list of store endpoints (use https scheme for tls communication) (defaults: http://127.0.0.1:2379 for etcd, http://127.0.0.1:8500 for consul)")
+	cmdKeeper.PersistentFlags().StringVar(&cfg.storeCertFile, "store-cert-file", "", "certificate file for client identification to the store")
+	cmdKeeper.PersistentFlags().StringVar(&cfg.storeKeyFile, "store-key", "", "private key file for client identification to the store")
+	cmdKeeper.PersistentFlags().StringVar(&cfg.storeCAFile, "store-ca-file", "", "verify certificates of HTTPS-enabled store servers using this CA bundle")
+	cmdKeeper.PersistentFlags().BoolVar(&cfg.storeSkipTlsVerify, "store-skip-tls-verify", false, "skip store certificate verification (insecure!!!)")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.dataDir, "data-dir", "", "data directory")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.clusterName, "cluster-name", "", "cluster name")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.pgListenAddress, "pg-listen-address", "localhost", "postgresql instance listening address")
@@ -304,7 +312,14 @@ type PostgresKeeper struct {
 func NewPostgresKeeper(cfg *config, stop chan bool, end chan error) (*PostgresKeeper, error) {
 	storePath := filepath.Join(common.StoreBasePath, cfg.clusterName)
 
-	kvstore, err := store.NewStore(store.Backend(cfg.storeBackend), cfg.storeEndpoints)
+	kvstore, err := store.NewStore(store.Config{
+		Backend:       store.Backend(cfg.storeBackend),
+		Endpoints:     cfg.storeEndpoints,
+		CertFile:      cfg.storeCertFile,
+		KeyFile:       cfg.storeKeyFile,
+		CAFile:        cfg.storeCAFile,
+		SkipTLSVerify: cfg.storeSkipTlsVerify,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("cannot create store: %v", err)
 	}

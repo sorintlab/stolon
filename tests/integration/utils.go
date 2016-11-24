@@ -545,7 +545,11 @@ func NewTestEtcd(t *testing.T, dir string, a ...string) (*TestStore, error) {
 
 	storeEndpoints := fmt.Sprintf("%s:%s", listenAddress, port)
 
-	kvstore, err := store.NewStore(store.ETCD, storeEndpoints)
+	storeConfig := store.Config{
+		Backend:   store.ETCD,
+		Endpoints: storeEndpoints,
+	}
+	kvstore, err := store.NewStore(storeConfig)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create store: %v", err)
 	}
@@ -627,7 +631,11 @@ func NewTestConsul(t *testing.T, dir string, a ...string) (*TestStore, error) {
 
 	storeEndpoints := fmt.Sprintf("%s:%s", listenAddress, portHTTP)
 
-	kvstore, err := store.NewStore(store.CONSUL, storeEndpoints)
+	storeConfig := store.Config{
+		Backend:   store.CONSUL,
+		Endpoints: storeEndpoints,
+	}
+	kvstore, err := store.NewStore(storeConfig)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create store: %v", err)
 	}

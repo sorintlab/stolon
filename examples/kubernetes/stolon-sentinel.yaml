@@ -24,7 +24,7 @@ spec:
           - name: STSENTINEL_STORE_BACKEND
             value: "etcd" # Or consul
           - name: STSENTINEL_STORE_ENDPOINTS
-            value: "10.245.1.1:2379"
+            value: "http://10.245.1.1:2379"
             # Enable debugging
           - name: STSENTINEL_DEBUG
             value: "true"
