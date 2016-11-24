@@ -47,10 +47,6 @@ postgres0 (master)
 
 ```
 
-### list-clusters ###
-
-List all the cluster available under the default store base path
-
 ### init ###
 
 Initialize a new cluster
