@@ -236,11 +236,13 @@ func (s *Sentinel) updateKeepersStatus(cd *cluster.ClusterData, keepersInfo clus
 
 	// Mark keepers without a keeperInfo (cleaned up above from not updated
 	// ones) as in error
-	for keeperUID, _ := range cd.Keepers {
-		if _, ok := keepersInfo[keeperUID]; !ok {
+	for keeperUID, k := range cd.Keepers {
+		if ki, ok := keepersInfo[keeperUID]; !ok {
 			s.SetKeeperError(keeperUID)
 		} else {
 			s.CleanKeeperError(keeperUID)
+			// Update keeper status infos
+			k.Status.BootUUID = ki.BootUUID
 		}
 	}
 

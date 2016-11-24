@@ -25,7 +25,7 @@ import:
 - package: github.com/satori/go.uuid
   version: v1.1.0
 - package: github.com/sgotti/gexpect
-  version: 81b69f472c22d5a42aefcf07b58015d0ef4da2e1
+  version: 0afc6c19f50a08b5f97f8c75f4b417f496d92377
 - package: github.com/sorintlab/pollon
   version: 279eb94a1432a0656f6da72d36f133dc68c2e064
 - package: github.com/spf13/cobra

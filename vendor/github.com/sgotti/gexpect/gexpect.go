@@ -20,6 +20,9 @@ type ExpectSubprocess struct {
 	Output       io.Writer
 	buf          *buffer
 	outputBuffer []byte
+
+	//TODO(sgotti) protect this with a mutex?
+	cont bool
 }
 
 type buffer struct {
@@ -294,6 +297,8 @@ func (expect *ExpectSubprocess) ExpectTimeout(searchString string, timeout time.
 }
 
 func (expect *ExpectSubprocess) Expect(searchString string) (e error) {
+	expect.Stop()
+
 	chunk := make([]byte, len(searchString)*2)
 	target := len(searchString)
 	if expect.outputBuffer != nil {
@@ -367,8 +372,9 @@ func (expect *ExpectSubprocess) Interact() {
 }
 
 func (expect *ExpectSubprocess) Continue() {
+	expect.cont = true
 	go func() {
-		for {
+		for expect.cont {
 			chunk := make([]byte, 255)
 			_, err := expect.buf.Read(chunk)
 			if err != nil {
@@ -376,6 +382,10 @@ func (expect *ExpectSubprocess) Continue() {
 			}
 		}
 	}()
+}
+
+func (expect *ExpectSubprocess) Stop() {
+	expect.cont = false
 }
 
 func (expect *ExpectSubprocess) ReadUntil(delim byte) ([]byte, error) {

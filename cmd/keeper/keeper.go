@@ -267,6 +267,8 @@ func (p *PostgresKeeper) createRecoveryParameters(standbySettings *cluster.Stand
 type PostgresKeeper struct {
 	cfg *config
 
+	bootUUID string
+
 	dataDir             string
 	storeBackend        string
 	storeEndpoints      string
@@ -310,6 +312,8 @@ func NewPostgresKeeper(cfg *config, stop chan bool, end chan error) (*PostgresKe
 
 	p := &PostgresKeeper{
 		cfg: cfg,
+
+		bootUUID: common.UUID(),
 
 		dataDir:        cfg.dataDir,
 		storeBackend:   cfg.storeBackend,
@@ -383,6 +387,7 @@ func (p *PostgresKeeper) updateKeeperInfo() error {
 		InfoUID:       common.UID(),
 		UID:           keeperUID,
 		ClusterUID:    clusterUID,
+		BootUUID:      p.bootUUID,
 		PostgresState: p.getLastPGState(),
 	}
 
@@ -679,14 +684,18 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 		log.Info("our keeper data is not available, waiting for it to appear")
 		return
 	}
-	// TODO(sgotti) Check that the Keeper.Status address:port has been updated
 
 	db := cd.FindDB(k)
 	if db == nil {
 		log.Info("no db assigned")
 		return
 	}
-	// TODO(sgotti) Check that the DB.Status address:port has been updated
+
+	if p.bootUUID != k.Status.BootUUID {
+		log.Info("our db boot UID is different than the cluster data one, waiting for it to be updated", zap.String("bootUUID", p.bootUUID), zap.String("clusterBootUUID", k.Status.BootUUID))
+		pgm.Stop(true)
+		return
+	}
 
 	followersUIDs := db.Spec.Followers
 
