@@ -77,12 +77,7 @@ func TestProxyListening(t *testing.T) {
 
 	storePath := filepath.Join(common.StoreBasePath, clusterName)
 
-	kvstore, err := store.NewStore(tstore.storeBackend, storeEndpoints)
-	if err != nil {
-		t.Fatalf("cannot create store: %v", err)
-	}
-
-	e := store.NewStoreManager(kvstore, storePath)
+	sm := store.NewStoreManager(tstore.store, storePath)
 
 	cd := &cluster.ClusterData{
 		FormatVersion: cluster.CurrentCDFormatVersion,
@@ -130,7 +125,7 @@ func TestProxyListening(t *testing.T) {
 			},
 		},
 	}
-	pair, err := e.AtomicPutClusterData(cd, nil)
+	pair, err := sm.AtomicPutClusterData(cd, nil)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -174,7 +169,7 @@ func TestProxyListening(t *testing.T) {
 	t.Logf("test proxyConf removed. Should continue listening")
 	// remove proxyConf
 	cd.Proxy.Spec.MasterDBUID = ""
-	pair, err = e.AtomicPutClusterData(cd, pair)
+	pair, err = sm.AtomicPutClusterData(cd, pair)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -187,7 +182,7 @@ func TestProxyListening(t *testing.T) {
 	t.Logf("test proxyConf restored. Should continue listening")
 	// Set proxyConf again
 	cd.Proxy.Spec.MasterDBUID = "01"
-	pair, err = e.AtomicPutClusterData(cd, pair)
+	pair, err = sm.AtomicPutClusterData(cd, pair)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -199,7 +194,7 @@ func TestProxyListening(t *testing.T) {
 
 	t.Logf("test clusterView removed. Should continue listening")
 	// remove whole clusterview
-	_, err = e.AtomicPutClusterData(nil, pair)
+	_, err = sm.AtomicPutClusterData(nil, pair)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}

@@ -55,11 +55,7 @@ func TestServerParameters(t *testing.T) {
 
 	storePath := filepath.Join(common.StoreBasePath, clusterName)
 
-	kvstore, err := store.NewStore(tstore.storeBackend, storeEndpoints)
-	if err != nil {
-		t.Fatalf("cannot create store: %v", err)
-	}
-	e := store.NewStoreManager(kvstore, storePath)
+	sm := store.NewStoreManager(tstore.store, storePath)
 
 	initialClusterSpec := &cluster.ClusterSpec{
 		InitMode:           cluster.ClusterInitModeNew,
@@ -86,7 +82,7 @@ func TestServerParameters(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	if err := WaitClusterPhase(e, cluster.ClusterPhaseNormal, 60*time.Second); err != nil {
+	if err := WaitClusterPhase(sm, cluster.ClusterPhaseNormal, 60*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	if err := tk.WaitDBUp(60 * time.Second); err != nil {

@@ -552,7 +552,7 @@ func NewTestEtcd(t *testing.T, dir string, a ...string) (*TestStore, error) {
 	if bin == "" {
 		return nil, fmt.Errorf("missing ETCD_BIN env")
 	}
-	te := &TestStore{
+	tstore := &TestStore{
 		t: t,
 		Process: Process{
 			t:    t,
@@ -566,7 +566,7 @@ func NewTestEtcd(t *testing.T, dir string, a ...string) (*TestStore, error) {
 		store:         kvstore,
 		storeBackend:  store.ETCD,
 	}
-	return te, nil
+	return tstore, nil
 }
 
 func NewTestConsul(t *testing.T, dir string, a ...string) (*TestStore, error) {

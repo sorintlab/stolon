@@ -56,12 +56,7 @@ func TestPITR(t *testing.T) {
 
 	storePath := filepath.Join(common.StoreBasePath, clusterName)
 
-	kvstore, err := store.NewStore(tstore.storeBackend, storeEndpoints)
-	if err != nil {
-		t.Fatalf("cannot create store: %v", err)
-	}
-
-	e := store.NewStoreManager(kvstore, storePath)
+	sm := store.NewStoreManager(tstore.store, storePath)
 
 	initialClusterSpec := &cluster.ClusterSpec{
 		InitMode:           cluster.ClusterInitModeNew,
@@ -96,7 +91,7 @@ func TestPITR(t *testing.T) {
 	}
 
 	// Wait for clusterView containing a master
-	_, err = WaitClusterDataWithMaster(e, 30*time.Second)
+	_, err = WaitClusterDataWithMaster(sm, 30*time.Second)
 	if err != nil {
 		t.Fatal("expected a master in cluster view")
 	}
@@ -170,10 +165,10 @@ func TestPITR(t *testing.T) {
 	}
 	defer ts.Stop()
 
-	if err := WaitClusterPhase(e, cluster.ClusterPhaseNormal, 60*time.Second); err != nil {
+	if err := WaitClusterPhase(sm, cluster.ClusterPhaseNormal, 60*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	_, err = WaitClusterDataWithMaster(e, 30*time.Second)
+	_, err = WaitClusterDataWithMaster(sm, 30*time.Second)
 	if err != nil {
 		t.Fatal("expected a master in cluster view")
 	}

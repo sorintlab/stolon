@@ -105,11 +105,7 @@ func testInitNew(t *testing.T, merge bool) {
 	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
 	storePath := filepath.Join(common.StoreBasePath, clusterName)
 
-	kvstore, err := store.NewStore(tstore.storeBackend, storeEndpoints)
-	if err != nil {
-		t.Fatalf("cannot create store: %v", err)
-	}
-	e := store.NewStoreManager(kvstore, storePath)
+	sm := store.NewStoreManager(tstore.store, storePath)
 
 	initialClusterSpec := &cluster.ClusterSpec{
 		InitMode:           cluster.ClusterInitModeNew,
@@ -138,7 +134,7 @@ func testInitNew(t *testing.T, merge bool) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	if err := WaitClusterPhase(e, cluster.ClusterPhaseNormal, 60*time.Second); err != nil {
+	if err := WaitClusterPhase(sm, cluster.ClusterPhaseNormal, 60*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
@@ -146,7 +142,7 @@ func testInitNew(t *testing.T, merge bool) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	cd, _, err := e.GetClusterData()
+	cd, _, err := sm.GetClusterData()
 	// max_connection should be set by initdb
 	_, ok := cd.Cluster.Spec.PGParameters["max_connections"]
 	if merge && !ok {
@@ -184,11 +180,7 @@ func testInitExisting(t *testing.T, merge bool) {
 	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
 	storePath := filepath.Join(common.StoreBasePath, clusterName)
 
-	kvstore, err := store.NewStore(tstore.storeBackend, storeEndpoints)
-	if err != nil {
-		t.Fatalf("cannot create store: %v", err)
-	}
-	e := store.NewStoreManager(kvstore, storePath)
+	sm := store.NewStoreManager(tstore.store, storePath)
 
 	initialClusterSpec := &cluster.ClusterSpec{
 		InitMode:           cluster.ClusterInitModeNew,
@@ -220,7 +212,7 @@ func testInitExisting(t *testing.T, merge bool) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	if err := WaitClusterPhase(e, cluster.ClusterPhaseNormal, 60*time.Second); err != nil {
+	if err := WaitClusterPhase(sm, cluster.ClusterPhaseNormal, 60*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
@@ -258,10 +250,10 @@ func testInitExisting(t *testing.T, merge bool) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	if err := WaitClusterPhase(e, cluster.ClusterPhaseInitializing, 60*time.Second); err != nil {
+	if err := WaitClusterPhase(sm, cluster.ClusterPhaseInitializing, 60*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	if err := WaitClusterPhase(e, cluster.ClusterPhaseNormal, 60*time.Second); err != nil {
+	if err := WaitClusterPhase(sm, cluster.ClusterPhaseNormal, 60*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	if err := tk.WaitDBUp(60 * time.Second); err != nil {
@@ -288,7 +280,7 @@ func testInitExisting(t *testing.T, merge bool) {
 		t.Fatalf("expected archive_mode empty")
 	}
 
-	cd, _, err := e.GetClusterData()
+	cd, _, err := sm.GetClusterData()
 	// max_connection should be set by initdb
 	v, ok = cd.Cluster.Spec.PGParameters["archive_mode"]
 	if merge && v != "on" {
@@ -333,11 +325,7 @@ func TestInitUsers(t *testing.T) {
 	clusterName = uuid.NewV4().String()
 	storePath := filepath.Join(common.StoreBasePath, clusterName)
 
-	kvstore, err := store.NewStore(tstore.storeBackend, storeEndpoints)
-	if err != nil {
-		t.Fatalf("cannot create store: %v", err)
-	}
-	e := store.NewStoreManager(kvstore, storePath)
+	sm := store.NewStoreManager(tstore.store, storePath)
 
 	initialClusterSpec := &cluster.ClusterSpec{
 		InitMode:           cluster.ClusterInitModeNew,
@@ -359,7 +347,7 @@ func TestInitUsers(t *testing.T) {
 	}
 	defer ts.Stop()
 
-	if err := WaitClusterPhase(e, cluster.ClusterPhaseInitializing, 30*time.Second); err != nil {
+	if err := WaitClusterPhase(sm, cluster.ClusterPhaseInitializing, 30*time.Second); err != nil {
 		t.Fatal("expected cluster in initializing phase")
 	}
 
@@ -379,12 +367,7 @@ func TestInitUsers(t *testing.T) {
 	clusterName = uuid.NewV4().String()
 	storePath = filepath.Join(common.StoreBasePath, clusterName)
 
-	kvstore, err = store.NewStore(tstore.storeBackend, storeEndpoints)
-	if err != nil {
-		t.Fatalf("cannot create store: %v", err)
-	}
-
-	e = store.NewStoreManager(kvstore, storePath)
+	sm = store.NewStoreManager(tstore.store, storePath)
 
 	ts2, err := NewTestSentinel(t, dir, clusterName, tstore.storeBackend, storeEndpoints, fmt.Sprintf("--initial-cluster-spec=%s", initialClusterSpecFile))
 	if err != nil {
@@ -395,7 +378,7 @@ func TestInitUsers(t *testing.T) {
 	}
 	defer ts2.Stop()
 
-	if err := WaitClusterPhase(e, cluster.ClusterPhaseInitializing, 60*time.Second); err != nil {
+	if err := WaitClusterPhase(sm, cluster.ClusterPhaseInitializing, 60*time.Second); err != nil {
 		t.Fatal("expected cluster in initializing phase")
 	}
 
@@ -432,12 +415,7 @@ func TestInitialClusterSpec(t *testing.T) {
 	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
 	storePath := filepath.Join(common.StoreBasePath, clusterName)
 
-	kvstore, err := store.NewStore(tstore.storeBackend, storeEndpoints)
-	if err != nil {
-		t.Fatalf("cannot create store: %v", err)
-	}
-
-	e := store.NewStoreManager(kvstore, storePath)
+	sm := store.NewStoreManager(tstore.store, storePath)
 
 	initialClusterSpec := &cluster.ClusterSpec{
 		InitMode:               cluster.ClusterInitModeNew,
@@ -460,11 +438,11 @@ func TestInitialClusterSpec(t *testing.T) {
 	}
 	defer ts.Stop()
 
-	if err := WaitClusterPhase(e, cluster.ClusterPhaseInitializing, 60*time.Second); err != nil {
+	if err := WaitClusterPhase(sm, cluster.ClusterPhaseInitializing, 60*time.Second); err != nil {
 		t.Fatal("expected cluster in initializing phase")
 	}
 
-	cd, _, err := e.GetClusterData()
+	cd, _, err := sm.GetClusterData()
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
