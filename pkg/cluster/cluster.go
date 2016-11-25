@@ -39,6 +39,7 @@ const (
 	DefaultRequestTimeout              = 10 * time.Second
 	DefaultConvergenceTimeout          = 30 * time.Second
 	DefaultInitTimeout                 = 5 * time.Minute
+	DefaultSyncTimeout                 = 30 * time.Minute
 	DefaultFailInterval                = 20 * time.Second
 	DefaultMaxStandbys          uint16 = 20
 	DefaultMaxStandbysPerSender uint16 = 3
@@ -143,10 +144,13 @@ type ClusterSpec struct {
 	SleepInterval Duration `json:"sleepInterval,omitempty"`
 	// Time after which any request (keepers checks from sentinel etc...) will fail.
 	RequestTimeout Duration `json:"requestTimeout,omitempty"`
-	// Interval to wait for a db to be converged to the required state.
+	// Interval to wait for a db to be converged to the required state when
+	// no long operation are expected.
 	ConvergenceTimeout Duration `json:"convergenceTimeout,omitempty"`
 	// Interval to wait for a db to be initialized (doing a initdb)
 	InitTimeout Duration `json:"initTimeout,omitempty"`
+	// Interval to wait for a db to be synced with a master
+	SyncTimeout Duration `json:"syncTimeout,omitempty"`
 	// Interval after the first fail to declare a keeper or a db as not healthy.
 	FailInterval Duration `json:"failInterval,omitempty"`
 	// Max number of standbys. This needs to be greater enough to cover both
@@ -222,6 +226,9 @@ func (s *ClusterSpec) SetDefaults() {
 	if s.InitTimeout == ZeroDuration {
 		s.InitTimeout = Duration{Duration: DefaultInitTimeout}
 	}
+	if s.SyncTimeout == ZeroDuration {
+		s.SyncTimeout = Duration{Duration: DefaultSyncTimeout}
+	}
 	if s.FailInterval == ZeroDuration {
 		s.FailInterval = Duration{Duration: DefaultFailInterval}
 	}
@@ -249,6 +256,9 @@ func (s *ClusterSpec) Validate() error {
 	}
 	if s.InitTimeout.Duration < 0 {
 		return fmt.Errorf("initTimeout must be positive")
+	}
+	if s.SyncTimeout.Duration < 0 {
+		return fmt.Errorf("syncTimeout must be positive")
 	}
 	if s.FailInterval.Duration < 0 {
 		return fmt.Errorf("failInterval must be positive")

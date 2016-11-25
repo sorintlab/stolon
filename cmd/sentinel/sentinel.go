@@ -327,6 +327,80 @@ func (s *Sentinel) setDBSpecFromClusterSpec(cd *cluster.ClusterData) {
 	}
 }
 
+func (s *Sentinel) freeKeepers(cd *cluster.ClusterData) []*cluster.Keeper {
+	freeKeepers := []*cluster.Keeper{}
+K:
+	for _, keeper := range cd.Keepers {
+		if !keeper.Status.Healthy {
+			continue
+		}
+		for _, db := range cd.DBs {
+			if db.Spec.KeeperUID == keeper.UID {
+				continue K
+			}
+		}
+		freeKeepers = append(freeKeepers, keeper)
+	}
+	return freeKeepers
+}
+
+func (s *Sentinel) standbys(cd *cluster.ClusterData) map[string]*cluster.DB {
+	// A standby is a db that:
+	// * Isn't the master
+	// * Is an "internal standby". Not a db marked to replicate from an external db
+	standbys := map[string]*cluster.DB{}
+	for _, db := range cd.DBs {
+		if db.UID == cd.Cluster.Status.Master {
+			continue
+		}
+		if db.Spec.Role != common.RoleStandby {
+			continue
+		}
+		// Skip db with follow type != internal (for example a master in a standby stolon cluster)
+		if db.Spec.FollowConfig.Type != cluster.FollowTypeInternal {
+			continue
+		}
+		standbys[db.UID] = db
+	}
+	return standbys
+}
+
+func (s *Sentinel) standbysByStatus(cd *cluster.ClusterData) (map[string]*cluster.DB, map[string]*cluster.DB, map[string]*cluster.DB) {
+	goodStandbys := map[string]*cluster.DB{}
+	failedStandbys := map[string]*cluster.DB{}
+	convergingStandbys := map[string]*cluster.DB{}
+	for _, db := range s.standbys(cd) {
+		// if keeper failed then mark as failed
+		keeper := cd.Keepers[db.Spec.KeeperUID]
+		if !keeper.Status.Healthy {
+			failedStandbys[db.UID] = db
+			continue
+		}
+		// TODO(sgotti) find a way to determine if the db is syncing or
+		// is doing a base convergence (i.e. changed parameters)
+		convergenceState := s.dbConvergenceState(db, cd.Cluster.Spec.SyncTimeout.Duration)
+		// if converging then it's not failed (it can also be not healthy since it could be resyncing
+		// if convergence failed then mark as failed
+		switch convergenceState {
+		case ConvergenceFailed:
+			failedStandbys[db.UID] = db
+			continue
+		case Converging:
+			convergingStandbys[db.UID] = db
+			continue
+		}
+		// if converged but not healthy mark as failed
+		if !db.Status.Healthy {
+			failedStandbys[db.UID] = db
+			continue
+		}
+
+		// db is good
+		goodStandbys[db.UID] = db
+	}
+	return goodStandbys, failedStandbys, convergingStandbys
+}
+
 func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData, error) {
 	newcd := cd.DeepCopy()
 	switch cd.Cluster.Status.Phase {
@@ -420,8 +494,7 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 					panic(fmt.Errorf("db %q object doesn't exists. This shouldn't happen", cd.Cluster.Status.Master))
 				}
 				// Check that the choosed db for being the master has correctly initialized
-				// TODO(sgotti) set a timeout (the max time for a noop operation, just a start/restart)
-				if db.Status.Healthy && s.dbConvergenceState(db, 0) == Converged {
+				if db.Status.Healthy && s.dbConvergenceState(db, cd.Cluster.Spec.ConvergenceTimeout.Duration) == Converged {
 					log.Info("db initialized", zap.String("db", db.UID), zap.String("keeper", db.Spec.KeeperUID))
 					// Don't include previous config anymore
 					db.Spec.IncludeConfig = false
@@ -494,24 +567,6 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 			return nil, fmt.Errorf("unknown init mode %q", cd.Cluster.Spec.InitMode)
 		}
 	case cluster.ClusterPhaseNormal:
-		// Add missing DBs
-		for _, k := range cd.Keepers {
-			if db := cd.FindDB(k); db == nil {
-				db := &cluster.DB{
-					UID:        s.UIDFn(),
-					Generation: cluster.InitialGeneration,
-					ChangeTime: time.Now(),
-					Spec: &cluster.DBSpec{
-						KeeperUID: k.UID,
-						InitMode:  cluster.DBInitModeNone,
-						Role:      common.RoleUndefined,
-						Followers: []string{},
-					},
-				}
-				newcd.DBs[db.UID] = db
-			}
-		}
-
 		// TODO(sgotti) When keeper removal is implemented, remove DBs for unexistent keepers
 
 		// Calculate current master status
@@ -574,11 +629,80 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 				newcd.Proxy.Spec.MasterDBUID = wantedMasterDBUID
 				newcd.Proxy.ChangeTime = time.Now()
 
-				// TODO(sgotti) do this only for the defined number of MaxStandbysPerSender (needs also to detect unhealthy standbys and switch to healthy one)
+				standbys := s.standbys(newcd)
+				standbysCount := len(standbys)
+
+				goodStandbys, failedStandbys, convergingStandbys := s.standbysByStatus(newcd)
+				goodStandbysCount := len(goodStandbys)
+				failedStandbysCount := len(failedStandbys)
+				convergingStandbysCount := len(convergingStandbys)
+				log.Debug("standbys states", zap.Int("n", goodStandbysCount), zap.Int("failed", failedStandbysCount), zap.Int("converging", convergingStandbysCount))
+
+				// NotFailed != Good since there can be some dbs that are converging
+				// it's the total number of standbys - the failed standbys
+				// or the sum of good + converging standbys
+				notFailedStandbysCount := standbysCount - failedStandbysCount
+
+				// Add new dbs to substitute failed dbs. we
+				// don't remove failed db until the number of
+				// good db is >= MaxStandbysPerSender since they can come back
+
+				// define, if there're available keepers, new dbs
+				// nc can be negative if MaxStandbysPerSender has been lowered
+				nc := int(newcd.Cluster.Spec.MaxStandbysPerSender - uint16(notFailedStandbysCount))
+				// Add missing DBs until MaxStandbysPerSender
+				freeKeepers := s.freeKeepers(newcd)
+				nf := len(freeKeepers)
+				for i := 0; i < nc && i < nf; i++ {
+					freeKeeper := freeKeepers[i]
+					db := &cluster.DB{
+						UID:        s.UIDFn(),
+						Generation: cluster.InitialGeneration,
+						ChangeTime: time.Now(),
+						Spec: &cluster.DBSpec{
+							KeeperUID: freeKeeper.UID,
+							InitMode:  cluster.DBInitModeNone,
+							Role:      common.RoleUndefined,
+							Followers: []string{},
+						},
+					}
+					newcd.DBs[db.UID] = db
+					log.Info("added new standby db", zap.String("db", db.UID), zap.String("keeper", db.Spec.KeeperUID))
+				}
+
+				// Remove dbs if we have a good number >= MaxStandbysPerSender
+				if uint16(goodStandbysCount) >= newcd.Cluster.Spec.MaxStandbysPerSender {
+					toRemove := []*cluster.DB{}
+					log.Info("removing non good standbys", zap.Int("n", standbysCount-goodStandbysCount))
+					// Remove all non good standbys
+					for _, db := range standbys {
+						if _, ok := goodStandbys[db.UID]; !ok {
+							toRemove = append(toRemove, db)
+						}
+					}
+					// Remove good standbys in excess
+					nr := int(uint16(goodStandbysCount) - newcd.Cluster.Spec.MaxStandbysPerSender)
+					log.Info("removing good standbys in excess", zap.Int("n", nr))
+					i := 0
+					for _, db := range goodStandbys {
+						if i >= nr {
+							break
+						}
+						toRemove = append(toRemove, db)
+						i++
+					}
+					for _, db := range toRemove {
+						delete(newcd.DBs, db.UID)
+					}
+
+				}
+
+				// Reconfigure all db except the master as followers of the current master
 				for id, db := range newcd.DBs {
 					if id == wantedMasterDBUID {
 						continue
 					}
+
 					db.Spec.Role = common.RoleStandby
 					// Remove followers
 					db.Spec.Followers = []string{}
@@ -595,7 +719,7 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 					if fc != nil {
 						if fc.Type == cluster.FollowTypeInternal && fc.DBUID == wantedMasterDBUID {
 							masterDB.Spec.Followers = append(masterDB.Spec.Followers, db.UID)
-							// Sort followers
+							// Sort followers so the slice won't be considered as changed due to different order of the same entries.
 							sort.Strings(masterDB.Spec.Followers)
 						}
 					}

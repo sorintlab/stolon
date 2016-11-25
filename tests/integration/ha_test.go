@@ -761,3 +761,163 @@ func TestMasterChangedAddress(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 }
+
+func TestFailedStandby(t *testing.T) {
+	t.Parallel()
+	dir, err := ioutil.TempDir("", "stolon")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer os.RemoveAll(dir)
+
+	clusterName := uuid.NewV4().String()
+
+	initialClusterSpec := &cluster.ClusterSpec{
+		InitMode:             cluster.ClusterInitModeNew,
+		SleepInterval:        cluster.Duration{Duration: 2 * time.Second},
+		FailInterval:         cluster.Duration{Duration: 5 * time.Second},
+		ConvergenceTimeout:   cluster.Duration{Duration: 30 * time.Second},
+		MaxStandbysPerSender: 1,
+		PGParameters:         make(cluster.PGParameters),
+	}
+
+	// Create 3 keepers
+	tks, tss, tstore := setupServersCustom(t, clusterName, dir, 3, 1, initialClusterSpec)
+	defer shutdown(tks, tss, tstore)
+
+	storePath := filepath.Join(common.StoreBasePath, clusterName)
+	sm := store.NewStoreManager(tstore.store, storePath)
+
+	// Wait for clusterView containing a master
+	masterUID, err := WaitClusterDataWithMaster(sm, 30*time.Second)
+	if err != nil {
+		t.Fatal("expected a master in cluster view")
+	}
+	master := tks[masterUID]
+	if err := master.WaitDBUp(60 * time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	if err := populate(t, master); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := write(t, master, 1, 1); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	c, err := getLines(t, master)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if c != 1 {
+		t.Fatalf("wrong number of lines, want: %d, got: %d", 1, c)
+	}
+
+	if err := WaitNumDBs(sm, 2, 30*time.Second); err != nil {
+		t.Fatalf("expected 2 DBs in cluster data: %v", err)
+	}
+
+	cd, _, err := sm.GetClusterData()
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	// Get current standby
+
+	var standby *TestKeeper
+	for _, db := range cd.DBs {
+		if db.UID == cd.Cluster.Status.Master {
+			continue
+		}
+		standby = tks[db.Spec.KeeperUID]
+	}
+	if err := waitLines(t, standby, 1, 30*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// Stop current standby. The other keeper should be choosed as new standby
+	t.Logf("Stopping current standby keeper: %s", standby.id)
+	standby.Stop()
+
+	// Wait for other keeper to have a standby db assigned
+	var newStandby *TestKeeper
+	for _, tk := range tks {
+		if tk.id != master.id && tk.id != standby.id {
+			newStandby = tk
+		}
+	}
+
+	if err := WaitStandbyKeeper(sm, newStandby.id, 20*time.Second); err != nil {
+		t.Fatalf("expected keeper %s to have a standby db assigned: %v", newStandby.id, err)
+	}
+
+	// Wait for new standby declared as good and remove of old standby
+	if err := WaitNumDBs(sm, 2, 30*time.Second); err != nil {
+		t.Fatalf("expected 2 DBs in cluster data: %v", err)
+	}
+}
+
+func TestLoweredMaxStandbysPerSender(t *testing.T) {
+	t.Parallel()
+	dir, err := ioutil.TempDir("", "stolon")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer os.RemoveAll(dir)
+
+	clusterName := uuid.NewV4().String()
+
+	initialClusterSpec := &cluster.ClusterSpec{
+		InitMode:             cluster.ClusterInitModeNew,
+		SleepInterval:        cluster.Duration{Duration: 2 * time.Second},
+		FailInterval:         cluster.Duration{Duration: 5 * time.Second},
+		ConvergenceTimeout:   cluster.Duration{Duration: 30 * time.Second},
+		MaxStandbysPerSender: 2,
+		PGParameters:         make(cluster.PGParameters),
+	}
+
+	// Create 3 keepers
+	tks, tss, tstore := setupServersCustom(t, clusterName, dir, 3, 1, initialClusterSpec)
+	defer shutdown(tks, tss, tstore)
+
+	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
+	storePath := filepath.Join(common.StoreBasePath, clusterName)
+	sm := store.NewStoreManager(tstore.store, storePath)
+
+	// Wait for clusterView containing a master
+	masterUID, err := WaitClusterDataWithMaster(sm, 30*time.Second)
+	if err != nil {
+		t.Fatal("expected a master in cluster view")
+	}
+	master := tks[masterUID]
+	if err := master.WaitDBUp(60 * time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	if err := populate(t, master); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := write(t, master, 1, 1); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	c, err := getLines(t, master)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if c != 1 {
+		t.Fatalf("wrong number of lines, want: %d, got: %d", 1, c)
+	}
+
+	if err := WaitNumDBs(sm, 3, 30*time.Second); err != nil {
+		t.Fatalf("expected 3 DBs in cluster data: %v", err)
+	}
+
+	// Set MaxStandbysPerSender to 1
+	err = StolonCtl(clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "maxStandbysPerSender" : 1 }`)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// Wait for only 1 standby
+	if err := WaitNumDBs(sm, 2, 30*time.Second); err != nil {
+		t.Fatalf("expected 2 DBs in cluster data: %v", err)
+	}
+}
