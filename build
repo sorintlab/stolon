@@ -2,7 +2,12 @@
 
 set -e
 
-BASEDIR=$(readlink -f $(dirname $0))
+if [[ "$OSTYPE" == "darwin"* ]]; then
+        BASEDIR=$(perl -MCwd=abs_path -le 'print abs_path readlink("$0")')
+else
+        BASEDIR=$(readlink -f $(dirname $0))
+fi
+
 BINDIR=${BASEDIR}/bin
 
 if [ $PWD != $BASEDIR ]; then
