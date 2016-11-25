@@ -41,6 +41,8 @@ import (
 )
 
 const (
+	sleepInterval = 500 * time.Millisecond
+
 	MinPort = 2048
 	MaxPort = 16384
 )
@@ -250,7 +252,7 @@ func (tk *TestKeeper) WaitDBUp(timeout time.Duration) error {
 			return nil
 		}
 		tk.t.Logf("tk: %v, error: %v", tk.id, err)
-		time.Sleep(2 * time.Second)
+		time.Sleep(sleepInterval)
 	}
 	return fmt.Errorf("timeout")
 }
@@ -262,7 +264,7 @@ func (tk *TestKeeper) WaitDBDown(timeout time.Duration) error {
 		if err != nil {
 			return nil
 		}
-		time.Sleep(2 * time.Second)
+		time.Sleep(sleepInterval)
 	}
 	return fmt.Errorf("timeout")
 }
@@ -317,7 +319,7 @@ func (tk *TestKeeper) IsMaster() (bool, error) {
 func (tk *TestKeeper) WaitRole(r common.Role, timeout time.Duration) error {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
-		time.Sleep(2 * time.Second)
+		time.Sleep(sleepInterval)
 		ok, err := tk.IsMaster()
 		if err != nil {
 			continue
@@ -463,7 +465,7 @@ func (tp *TestProxy) WaitListening(timeout time.Duration) error {
 			return nil
 		}
 		tp.t.Logf("tp: %v, error: %v", tp.id, err)
-		time.Sleep(2 * time.Second)
+		time.Sleep(sleepInterval)
 	}
 	return fmt.Errorf("timeout")
 }
@@ -476,7 +478,7 @@ func (tp *TestProxy) WaitNotListening(timeout time.Duration) error {
 			return nil
 		}
 		tp.t.Logf("tp: %v, error: %v", tp.id, err)
-		time.Sleep(2 * time.Second)
+		time.Sleep(sleepInterval)
 	}
 	return fmt.Errorf("timeout")
 }
@@ -662,7 +664,7 @@ func (ts *TestStore) WaitUp(timeout time.Duration) error {
 		if err == nil {
 			return nil
 		}
-		time.Sleep(1 * time.Second)
+		time.Sleep(sleepInterval)
 	}
 
 	return fmt.Errorf("timeout")
@@ -675,7 +677,7 @@ func (ts *TestStore) WaitDown(timeout time.Duration) error {
 		if err != nil && err != kvstore.ErrKeyNotFound {
 			return nil
 		}
-		time.Sleep(2 * time.Second)
+		time.Sleep(sleepInterval)
 	}
 
 	return fmt.Errorf("timeout")
@@ -692,7 +694,7 @@ func WaitClusterDataWithMaster(e *store.StoreManager, timeout time.Duration) (st
 			return cd.DBs[cd.Cluster.Status.Master].Spec.KeeperUID, nil
 		}
 	end:
-		time.Sleep(2 * time.Second)
+		time.Sleep(sleepInterval)
 	}
 	return "", fmt.Errorf("timeout")
 }
@@ -710,7 +712,7 @@ func WaitClusterDataMaster(master string, e *store.StoreManager, timeout time.Du
 			}
 		}
 	end:
-		time.Sleep(2 * time.Second)
+		time.Sleep(sleepInterval)
 	}
 	return fmt.Errorf("timeout")
 }
@@ -726,7 +728,7 @@ func WaitClusterPhase(e *store.StoreManager, phase cluster.ClusterPhase, timeout
 			return nil
 		}
 	end:
-		time.Sleep(2 * time.Second)
+		time.Sleep(sleepInterval)
 	}
 	return fmt.Errorf("timeout")
 }
