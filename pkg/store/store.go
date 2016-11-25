@@ -109,7 +109,16 @@ func (e *StoreManager) AtomicPutClusterData(cd *cluster.ClusterData, previous *k
 		return nil, err
 	}
 	path := filepath.Join(e.clusterPath, clusterDataFile)
-	_, pair, err := e.store.AtomicPut(path, cdj, previous, nil)
+	// Skip prev Value since LastIndex is enough for a CAS and it gives
+	// problem with etcd v2 api with big prev values.
+	var prev *kvstore.KVPair
+	if previous != nil {
+		prev = &kvstore.KVPair{
+			Key:       previous.Key,
+			LastIndex: previous.LastIndex,
+		}
+	}
+	_, pair, err := e.store.AtomicPut(path, cdj, prev, nil)
 	return pair, err
 }
 
