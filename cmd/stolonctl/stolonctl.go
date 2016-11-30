@@ -18,8 +18,10 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
+	"github.com/sorintlab/stolon/common"
 	"github.com/sorintlab/stolon/pkg/cluster"
 	"github.com/sorintlab/stolon/pkg/flagutil"
 	"github.com/sorintlab/stolon/pkg/store"
@@ -46,16 +48,24 @@ var cmdStolonCtl = &cobra.Command{
 }
 
 type config struct {
-	storeBackend   string
-	storeEndpoints string
-	clusterName    string
+	storeBackend       string
+	storeEndpoints     string
+	storeCertFile      string
+	storeKeyFile       string
+	storeCAFile        string
+	storeSkipTlsVerify bool
+	clusterName        string
 }
 
 var cfg config
 
 func init() {
 	cmdStolonCtl.PersistentFlags().StringVar(&cfg.storeBackend, "store-backend", "", "store backend type (etcd or consul)")
-	cmdStolonCtl.PersistentFlags().StringVar(&cfg.storeEndpoints, "store-endpoints", "", "a comma-delimited list of store endpoints (defaults: 127.0.0.1:2379 for etcd, 127.0.0.1:8500 for consul)")
+	cmdStolonCtl.PersistentFlags().StringVar(&cfg.storeEndpoints, "store-endpoints", "", "a comma-delimited list of store endpoints (use https scheme for tls communication) (defaults: http://127.0.0.1:2379 for etcd, http://127.0.0.1:8500 for consul)")
+	cmdStolonCtl.PersistentFlags().StringVar(&cfg.storeCertFile, "store-cert-file", "", "certificate file for client identification to the store")
+	cmdStolonCtl.PersistentFlags().StringVar(&cfg.storeKeyFile, "store-key", "", "private key file for client identification to the store")
+	cmdStolonCtl.PersistentFlags().StringVar(&cfg.storeCAFile, "store-ca-file", "", "verify certificates of HTTPS-enabled store servers using this CA bundle")
+	cmdStolonCtl.PersistentFlags().BoolVar(&cfg.storeSkipTlsVerify, "store-skip-tls-verify", false, "skip store certificate verification (insecure!!!)")
 	cmdStolonCtl.PersistentFlags().StringVar(&cfg.clusterName, "cluster-name", "", "cluster name")
 }
 
@@ -78,6 +88,23 @@ func stdout(format string, a ...interface{}) {
 func die(format string, a ...interface{}) {
 	stderr(format, a...)
 	os.Exit(1)
+}
+
+func NewStore() (*store.StoreManager, error) {
+	storePath := filepath.Join(common.StoreBasePath, cfg.clusterName)
+
+	kvstore, err := store.NewStore(store.Config{
+		Backend:       store.Backend(cfg.storeBackend),
+		Endpoints:     cfg.storeEndpoints,
+		CertFile:      cfg.storeCertFile,
+		KeyFile:       cfg.storeKeyFile,
+		CAFile:        cfg.storeCAFile,
+		SkipTLSVerify: cfg.storeSkipTlsVerify,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("cannot create store: %v", err)
+	}
+	return store.NewStoreManager(kvstore, storePath), nil
 }
 
 func getClusterData(e *store.StoreManager) (*cluster.ClusterData, *kvstore.KVPair, error) {
