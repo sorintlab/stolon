@@ -80,3 +80,10 @@ We are open to alternative solutions (PRs are welcome) like using haproxy if the
 ## Contributing to stolon
 
 stolon is an open source project under the Apache 2.0 license, and contributions are gladly welcomed!
+To submit your changes please open a pull request.
+
+## Contacts
+
+* For bugs and feature requests file an [issue](https://github.com/sorintlab/stolon/issues/new)
+* For general discussion about using and developing stolon, join the [stolon](https://groups.google.com/forum/#!forum/stolon) mailing list
+* For real-time discussion, join us on [Gitter](https://gitter.im/sorintlab/stolon)
