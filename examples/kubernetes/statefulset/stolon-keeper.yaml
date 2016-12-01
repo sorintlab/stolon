@@ -1,0 +1,77 @@
+# TODO(sgotti) update this to StatefulSet (PetSet where renamed to StatefulSet) when k8s 1.5 is released
+## apiVersion: apps/v1beta1
+## kind: StatefulSet
+apiVersion: apps/v1alpha1
+kind: PetSet
+metadata:
+  name: stolon-keeper
+spec:
+  serviceName: "stolon-keeper"
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: stolon-keeper
+      annotations:
+        pod.alpha.kubernetes.io/initialized: "true"
+    spec:
+      terminationGracePeriodSeconds: 10
+      containers:
+      - name: stolon-keeper
+        image: sorintlab/stolon:master-pg9.6
+        command:
+          - "/bin/bash"
+          - "-ec"
+          - |
+            # Generate our keeper uid using the pod index
+            IFS='-' read -ra ADDR <<< "$(hostname)"
+            export STKEEPER_ID="keeper${ADDR[-1]}"
+            export POD_IP=$(hostname -i)
+            export STKEEPER_PG_LISTEN_ADDRESS=$POD_IP
+            chown stolon:stolon $PGDATA
+            exec gosu stolon stolon-keeper --data-dir $PGDATA
+        env:
+          - name: KEEPER
+            value: "true"
+          - name: STKEEPER_CLUSTER_NAME
+          # TODO(sgotti) Get cluster name from "stoloncluster" label using a downward volume api instead of duplicating the name here
+            value: "kube-stolon"
+          - name: STKEEPER_STORE_BACKEND
+            value: "etcd" # Or consul
+          - name: STKEEPER_STORE_ENDPOINTS
+            value: "http://192.168.122.1:2379"
+            # Enable debugging
+          - name: STKEEPER_PG_REPL_USERNAME
+            value: "repluser"
+            # Or use a password file like in the below supersuser password
+          - name: STKEEPER_PG_REPL_PASSWORD
+            value: "replpassword"
+          - name: STKEEPER_PG_SU_USERNAME
+            value: "stolon"
+          - name: STKEEPER_PG_SU_PASSWORDFILE
+            value: "/etc/secrets/stolon/password"
+          - name: STKEEPER_DEBUG
+            value: "true"
+        ports:
+          - containerPort: 5432
+        volumeMounts:
+        - mountPath: /stolon-data
+          name: data
+        - mountPath: /etc/secrets/stolon
+          name: stolon
+      volumes:
+        - name: stolon
+          secret:
+            secretName: stolon
+  ## Define your own volumeClaimTemplate. This example uses a dynamic provisioning with a storage class of type "anything" that works also with minikube and will provision volume using the hostPath provider, but this shouldn't be used in production and won't work in multi-node cluster.
+  ## In production you should use your own defined storage-class and configure your persistent volumes (statically or dynamic using a provisioner, see k8s doc).
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+      annotations:
+        volume.alpha.kubernetes.io/storage-class: anything
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 512Mi

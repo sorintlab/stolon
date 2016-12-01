@@ -1,9 +1,11 @@
 apiVersion: v1
 kind: ReplicationController
 metadata:
-  name: stolon-keeper-rc
+  name: stolon-keeper0
 spec:
+  ## the number of replicas must be 1
   replicas: 1
+  ## don't do rolling upgrades on update
   selector:
     name: stolon-keeper
   template:
@@ -13,19 +15,30 @@ spec:
         stolon-cluster: "kube-stolon"
         stolon-keeper: "true"
     spec:
+      terminationGracePeriodSeconds: 10
       containers:
       - name: stolon-keeper
         image: sorintlab/stolon:master-pg9.6
+        command:
+          - "/bin/bash"
+          - "-ec"
+          - |
+            export POD_IP=$(hostname -i)
+            export STKEEPER_PG_LISTEN_ADDRESS=$POD_IP
+            chown stolon:stolon $PGDATA
+            exec gosu stolon stolon-keeper --data-dir $PGDATA
         env:
           - name: KEEPER
             value: "true"
+          - name: STKEEPER_ID
+            value: "keeper0"
           - name: STKEEPER_CLUSTER_NAME
-          # TODO(sgotti) Get cluster name from "stoloncluster" label using a downward volume api instead of duplicating the name here
+          # TODO(sgotti) Get cluster name from "stoloncluster" label using a downward volume api instead of duplicating the name here?
             value: "kube-stolon"
           - name: STKEEPER_STORE_BACKEND
             value: "etcd" # Or consul
           - name: STKEEPER_STORE_ENDPOINTS
-            value: "http://10.245.1.1:2379"
+            value: "http://192.168.122.1:2379"
             # Enable debugging
           - name: STKEEPER_PG_REPL_USERNAME
             value: "repluser"
@@ -46,8 +59,14 @@ spec:
         - mountPath: /etc/secrets/stolon
           name: stolon
       volumes:
-        - name: data
-          emptyDir: {}
         - name: stolon
           secret:
             secretName: stolon
+      ## Define your own persistent volume type. For testing we use an hostPath, but this shouldn't be used in production and won't work in multi-node cluster. See below example for using a persistentVolumeClaim.
+        - name: data
+          hostPath:
+              path: /data/keeper0-data
+    ## In production you should use a persistentVolumeClaim and configure your persistent volumes (statically or dynamic using a provisioner, see k8s doc)
+    ##    - name: data
+    ##      persistentVolumeClaim:
+    ##        claimName: keeper0-data-pv-claim
