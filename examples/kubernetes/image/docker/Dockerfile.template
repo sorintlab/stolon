@@ -1,0 +1,11 @@
+FROM postgres:${PGVERSION}
+
+RUN useradd -ms /bin/bash stolon
+
+EXPOSE 5432
+
+ENTRYPOINT ["/usr/local/bin/run.sh"]
+
+ADD run.sh bin/stolon-keeper bin/stolon-sentinel bin/stolon-proxy bin/stolonctl /usr/local/bin/
+
+RUN chmod +x /usr/local/bin/stolon-keeper /usr/local/bin/stolon-sentinel /usr/local/bin/stolon-proxy /usr/local/bin/stolonctl /usr/local/bin/run.sh

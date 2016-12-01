@@ -4,23 +4,29 @@ In this example you'll see how stolon can provide an high available postgreSQL c
 
 
 ## Docker image
-Prebuilt images are available on the dockerhub, the images' tags are their release version. Additional images are available:
+Prebuilt images are available on the dockerhub, the images' tags are made of the stolon release version plus the postgresql version (for example v0.5.0-pg9.6). Additional images are available:
 
-* `latest`: latest released image (actually v0.4.0).
-* `master`: automatically built after every commit to the master branch.
+* `latest-pg9.6`: latest released image (after v0.4.0).
+* `master-pg9.6`: automatically built after every commit to the master branch.
+* `latest`: latest released image (until v0.4.0).
 
 
-In the [image](examples/kubernetes/image/docker) directory you'll find the Dockerfile to build the image used in this example. Once the image is built you should push it to the docker registry used by your kubernetes infrastructure.
+In the [image](examples/kubernetes/image/docker) directory you'll find a Makefile to build the image used in this example (starting from the official postgreSQL images). The Makefile generates the Dockefile from a template Dockerfile where you have to define the wanted postgres version and image tag (`PGVERSION` adn `TAG` mandatory variables).
+For example, if you want to build an image named `stolon:master-pg9.6` that uses postgresql 9.6 you should execute:
 
-`sorintlab/stolon:master` is the one used by the kubernetes definitions in this example.
-For a more stable testing you can use `sorintlab/stolon:latest`
+```
+make PGVERSION=9.6 TAG=stolon:master-pg9.6
+```
+
+Once the image is built you should push it to the docker registry used by your kubernetes infrastructure.
+
+`sorintlab/stolon:master-pg9.6` is the one used by the kubernetes definitions in this example.
 
 ## Cluster setup and tests
 
 This example has some predefined values that you'd like to change:
-* The cluster name is `kube-cluster`
-* It points to a single node etcd cluster on `10.245.1.1:2379` without tls. You can change the ST${COMPONENT}_STORE_ENDPOINTS environment variables in the definitions to point to the right etcd cluster.
-
+* The cluster name is `kube-stolon`
+* It points to a single node etcd cluster on `10.245.1.1:2379` without tls. You can change the `ST${COMPONENT}_STORE_ENDPOINTS` environment variables in the definitions to point to the right etcd cluster.
 
 ### Initialize the cluster
 
