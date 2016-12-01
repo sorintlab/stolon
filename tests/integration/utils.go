@@ -741,6 +741,44 @@ func WaitClusterPhase(e *store.StoreManager, phase cluster.ClusterPhase, timeout
 	return fmt.Errorf("timeout")
 }
 
+func WaitNumDBs(e *store.StoreManager, n int, timeout time.Duration) error {
+	start := time.Now()
+	for time.Now().Add(-timeout).Before(start) {
+		cd, _, err := e.GetClusterData()
+		if err != nil || cd == nil {
+			goto end
+		}
+		if len(cd.DBs) == n {
+			return nil
+		}
+	end:
+		time.Sleep(sleepInterval)
+	}
+	return fmt.Errorf("timeout")
+}
+
+func WaitStandbyKeeper(e *store.StoreManager, keeperUID string, timeout time.Duration) error {
+	start := time.Now()
+	for time.Now().Add(-timeout).Before(start) {
+		cd, _, err := e.GetClusterData()
+		if err != nil || cd == nil {
+			goto end
+		}
+
+		for _, db := range cd.DBs {
+			if db.UID == cd.Cluster.Status.Master {
+				continue
+			}
+			if db.Spec.KeeperUID == keeperUID && db.Spec.Role == common.RoleStandby {
+				return nil
+			}
+		}
+	end:
+		time.Sleep(sleepInterval)
+	}
+	return fmt.Errorf("timeout")
+}
+
 func testFreeTCPPort(port int) error {
 	ln, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", curPort))
 	if err != nil {
