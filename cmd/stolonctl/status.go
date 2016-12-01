@@ -20,7 +20,6 @@ import (
 	"sort"
 	"text/tabwriter"
 
-	"github.com/sorintlab/stolon/common"
 	"github.com/sorintlab/stolon/pkg/cluster"
 
 	"github.com/spf13/cobra"
@@ -155,30 +154,44 @@ func status(cmd *cobra.Command, args []string) {
 		stdout("")
 	} else {
 		kssKeys := cd.Keepers.SortedKeys()
-		fmt.Fprintf(tabOut, "UID\t\tPG LISTENADDRESS\tHEALTHY\tPGWANTEDGENERATION\tPGCURRENTGENERATION\n")
+		fmt.Fprintf(tabOut, "UID\tPG LISTENADDRESS\tHEALTHY\tPGWANTEDGENERATION\tPGCURRENTGENERATION\n")
 		for _, kuid := range kssKeys {
 			k := cd.Keepers[kuid]
 			db := cd.FindDB(k)
-			fmt.Fprintf(tabOut, "%s\t%s:%s\t%t\t%d\t%d\n", k.UID, db.Status.ListenAddress, db.Status.Port, k.Status.Healthy, db.Generation, db.Status.CurrentGeneration)
+			if db != nil {
+				if db.Status.ListenAddress != "" {
+					fmt.Fprintf(tabOut, "%s\t%s:%s\t%t\t%d\t%d\n", k.UID, db.Status.ListenAddress, db.Status.Port, k.Status.Healthy, db.Generation, db.Status.CurrentGeneration)
+				} else {
+					fmt.Fprintf(tabOut, "%s\t(unknown)\t%t\t%d\t%d\n", k.UID, k.Status.Healthy, db.Generation, db.Status.CurrentGeneration)
+				}
+			} else {
+				fmt.Fprintf(tabOut, "%s\n", k.UID)
+			}
 		}
 	}
 	tabOut.Flush()
 
-	stdout("")
-	stdout("=== Required Cluster ===")
-	stdout("")
 	if cd.Cluster == nil || cd.DBs == nil {
 		stdout("No cluster available")
 		return
 	}
-	stdout("Master: %s", cd.Keepers[cd.DBs[cd.Cluster.Status.Master].Spec.KeeperUID].UID)
+
+	master := cd.Cluster.Status.Master
 	stdout("")
-	stdout("===== Keepers tree =====")
-	for _, db := range cd.DBs {
-		if db.Spec.Role == common.RoleMaster {
-			stdout("")
-			printTree(db.UID, cd, 0, "", true)
-		}
+	stdout("=== Cluster Info ===")
+	stdout("")
+	if master != "" {
+		stdout("Master: %s", cd.Keepers[cd.DBs[master].Spec.KeeperUID].UID)
+	} else {
+		stdout("Master Keeper: (none)")
+	}
+
+	if master != "" {
+		stdout("")
+		stdout("===== Keepers tree =====")
+		masterDB := cd.DBs[master]
+		stdout("")
+		printTree(masterDB.UID, cd, 0, "", true)
 	}
 
 	stdout("")
