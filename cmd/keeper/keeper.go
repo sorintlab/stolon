@@ -578,13 +578,8 @@ func (p *PostgresKeeper) Start() {
 	}
 }
 
-func (p *PostgresKeeper) resync(db, followedDB *cluster.DB, tryPgrewind, started bool) error {
+func (p *PostgresKeeper) resync(db, followedDB *cluster.DB, tryPgrewind bool) error {
 	pgm := p.pgm
-	if started {
-		if err := pgm.Stop(true); err != nil {
-			return fmt.Errorf("failed to stop pg instance: %v", err)
-		}
-	}
 	replConnParams := p.getReplConnParams(db, followedDB)
 	standbySettings := &cluster.StandbySettings{PrimaryConninfo: replConnParams.ConnString(), PrimarySlotName: common.StolonName(db.UID)}
 
@@ -626,6 +621,7 @@ func (p *PostgresKeeper) resync(db, followedDB *cluster.DB, tryPgrewind, started
 	return nil
 }
 
+// TODO(sgotti) unify this with the sentinel one. They have the same logic but one uses *cluster.PostgresState while the other *cluster.DB
 func (p *PostgresKeeper) isDifferentTimelineBranch(followedDB *cluster.DB, pgState *cluster.PostgresState) bool {
 	if followedDB.Status.TimelineID < pgState.TimelineID {
 		log.Info("followed instance timeline < than our timeline", zap.Uint64("followedTimeline", followedDB.Status.TimelineID), zap.Uint64("timeline", pgState.TimelineID))
@@ -910,6 +906,95 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				log.Error("failed to stop pg instance", zap.Error(err))
 				return
 			}
+		case cluster.DBInitModeResync:
+			log.Info("resyncing the database cluster")
+			// replace our current db uid with the required one.
+			p.localStateMutex.Lock()
+			dbls.UID = db.UID
+			// Set a no generation since we aren't already converged.
+			dbls.Generation = cluster.NoGeneration
+			dbls.InitPGParameters = nil
+			dbls.Initializing = true
+			p.localStateMutex.Unlock()
+			if err = p.saveDBLocalState(); err != nil {
+				log.Error("error", zap.Error(err))
+				return
+			}
+
+			if started {
+				if err = pgm.Stop(true); err != nil {
+					log.Error("failed to stop pg instance", zap.Error(err))
+					return
+				}
+				started = false
+			}
+
+			// create postgres parameteres with empty InitPGParameters
+			pgParameters = p.createPGParameters(db)
+			// update pgm postgres parameters
+			pgm.SetParameters(pgParameters)
+
+			var systemID string
+			if !initialized {
+				log.Info("database cluster not initialized")
+			} else {
+				systemID, err = pgm.GetSystemdID()
+				if err != nil {
+					log.Error("error retrieving systemd ID", zap.Error(err))
+					return
+				}
+			}
+
+			followedUID := db.Spec.FollowConfig.DBUID
+			followedDB, ok := cd.DBs[followedUID]
+			if !ok {
+				log.Error("no db data available for followed db", zap.String("followedDB", followedUID))
+				return
+			}
+
+			tryPgrewind := true
+			if !initialized {
+				tryPgrewind = false
+			}
+			if systemID != followedDB.Status.SystemID {
+				tryPgrewind = false
+			}
+
+			// TODO(sgotti) pg_rewind considers databases on the same timeline as in sync and doesn't check if they diverged at different position in previous timelines.
+			// So check that the db as been synced or resync again with pg_rewind disabled. Will need to report this upstream.
+
+			if err = p.resync(db, followedDB, tryPgrewind); err != nil {
+				log.Error("failed to resync from followed instance", zap.Error(err))
+				return
+			}
+			if err = pgm.Start(); err != nil {
+				log.Error("err", zap.Error(err))
+				return
+			}
+			started = true
+
+			// Check again if it was really synced
+			var pgState *cluster.PostgresState
+			pgState, err = p.GetPGState(pctx)
+			if err != nil {
+				log.Error("cannot get current pgstate", zap.Error(err))
+				return
+			}
+			if p.isDifferentTimelineBranch(followedDB, pgState) {
+				if started {
+					if err = pgm.Stop(true); err != nil {
+						log.Error("failed to stop pg instance", zap.Error(err))
+						return
+					}
+					started = false
+				}
+				if err = p.resync(db, followedDB, false); err != nil {
+					log.Error("failed to resync from followed instance", zap.Error(err))
+					return
+				}
+			}
+			initialized = true
+
 		case cluster.DBInitModeExisting:
 			// replace our current db uid with the required one.
 			p.localStateMutex.Lock()
@@ -992,7 +1077,6 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 	pgm.SetParameters(pgParameters)
 
 	var localRole common.Role
-	var systemID string
 	if !initialized {
 		log.Info("database cluster not initialized")
 		localRole = common.RoleUndefined
@@ -1000,11 +1084,6 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 		localRole, err = pgm.GetRole()
 		if err != nil {
 			log.Error("error retrieving current pg role", zap.Error(err))
-			return
-		}
-		systemID, err = p.pgm.GetSystemdID()
-		if err != nil {
-			log.Error("error retrieving systemd ID", zap.Error(err))
 			return
 		}
 	}
@@ -1081,85 +1160,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 		}
 		switch localRole {
 		case common.RoleMaster:
-			if systemID == followedDB.Status.SystemID {
-				// There can be the possibility that this
-				// database is on the same branch of the
-				// current followed instance.
-				// So we try to put it in recovery and then
-				// check if it's on the same branch or force a
-				// resync
-				replConnParams := p.getReplConnParams(db, followedDB)
-				standbySettings := &cluster.StandbySettings{PrimaryConninfo: replConnParams.ConnString(), PrimarySlotName: common.StolonName(db.UID)}
-				if err = pgm.WriteRecoveryConf(p.createRecoveryParameters(standbySettings, nil)); err != nil {
-					log.Error("err", zap.Error(err))
-					return
-				}
-				if !started {
-					if err = pgm.Start(); err != nil {
-						log.Error("err", zap.Error(err))
-						return
-					}
-					started = true
-				} else {
-					if err = pgm.Restart(true); err != nil {
-						log.Error("err", zap.Error(err))
-						return
-					}
-				}
-
-				// TODO(sgotti) pg_rewind considers databases on the same timeline as in sync and doesn't check if they diverged at different position in previous timelines.
-				// So check that the db as been synced or resync again with pg_rewind disabled. Will need to report this upstream.
-
-				// Check timeline history
-				// We need to update our pgState to avoid dealing with
-				// an old pgState not reflecting the real state
-				var pgState *cluster.PostgresState
-				pgState, err = p.GetPGState(pctx)
-				if err != nil {
-					log.Error("cannot get current pgstate", zap.Error(err))
-					return
-				}
-
-				if p.isDifferentTimelineBranch(followedDB, pgState) {
-					if err = p.resync(db, followedDB, true, started); err != nil {
-						log.Error("failed to resync from followed instance", zap.Error(err))
-						return
-					}
-					if err = pgm.Start(); err != nil {
-						log.Error("err", zap.Error(err))
-						return
-					}
-					started = true
-
-					// Check again if it was really synced
-					pgState, err = p.GetPGState(pctx)
-					if err != nil {
-						log.Error("cannot get current pgstate", zap.Error(err))
-						return
-					}
-					if p.isDifferentTimelineBranch(followedDB, pgState) {
-						if err = p.resync(db, followedDB, false, started); err != nil {
-							log.Error("failed to resync from followed instance", zap.Error(err))
-							return
-						}
-						if err = pgm.Start(); err != nil {
-							log.Error("err", zap.Error(err))
-							return
-						}
-						started = true
-					}
-				}
-			} else {
-				if err = p.resync(db, followedDB, false, started); err != nil {
-					log.Error("failed to resync from followed instance", zap.Error(err))
-					return
-				}
-				if err = pgm.Start(); err != nil {
-					log.Error("err", zap.Error(err))
-					return
-				}
-				started = true
-			}
+			log.Error("cannot move from master role to standby role")
 		case common.RoleStandby:
 			log.Info("already standby")
 			if !started {
@@ -1174,58 +1175,6 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 					return
 				}
 				started = true
-			}
-
-			// Check that we can sync with followed instance
-
-			// We need to update our pgState to avoid dealing with
-			// an old pgState not reflecting the real state
-			var pgState *cluster.PostgresState
-			pgState, err = p.GetPGState(pctx)
-			if err != nil {
-				log.Error("cannot get current pgstate", zap.Error(err))
-				return
-			}
-			needsResync := false
-			tryPgrewind := false
-			// If the db has a different systemdID then a resync is needed
-			if systemID != followedDB.Status.SystemID {
-				needsResync = true
-				// Check timeline history
-			} else if p.isDifferentTimelineBranch(followedDB, pgState) {
-				needsResync = true
-				tryPgrewind = true
-			}
-			if needsResync {
-				// TODO(sgotti) pg_rewind considers databases on the same timeline as in sync and doesn't check if they diverged at different position in previous timelines.
-				// So check that the db as been synced or resync again with pg_rewind disabled. Will need to report this upstream.
-				if err = p.resync(db, followedDB, tryPgrewind, started); err != nil {
-					log.Error("failed to full resync from followed instance", zap.Error(err))
-					return
-				}
-				if err = pgm.Start(); err != nil {
-					log.Error("err", zap.Error(err))
-					return
-				}
-				started = true
-
-				// Check again if it was really synced
-				pgState, err = p.GetPGState(pctx)
-				if err != nil {
-					log.Error("cannot get current pgstate", zap.Error(err))
-					return
-				}
-				if p.isDifferentTimelineBranch(followedDB, pgState) {
-					if err = p.resync(db, followedDB, false, started); err != nil {
-						log.Error("failed to resync from followed instance", zap.Error(err))
-						return
-					}
-					if err = pgm.Start(); err != nil {
-						log.Error("err", zap.Error(err))
-						return
-					}
-					started = true
-				}
 			}
 
 			// TODO(sgotti) Check that the followed instance has all the needed WAL segments
@@ -1256,15 +1205,8 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				}
 			}
 		case common.RoleUndefined:
-			if err = p.resync(db, followedDB, false, started); err != nil {
-				log.Error("failed to full resync from followed instance", zap.Error(err))
-				return
-			}
-			if err = pgm.Start(); err != nil {
-				log.Error("err", zap.Error(err))
-				return
-			}
-			started = true
+			log.Info("our db role is none")
+			return
 		}
 	case common.RoleUndefined:
 		log.Info("our db requested role is none")
