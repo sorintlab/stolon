@@ -239,12 +239,22 @@ func (p *PostgresKeeper) createPGParameters(db *cluster.DB) common.Parameters {
 	}
 
 	// Setup synchronous replication
-	if db.Spec.SynchronousReplication {
-		standbyNames := []string{}
-		for _, follower := range db.Spec.Followers {
-			standbyNames = append(standbyNames, common.StolonName(follower))
+	if db.Spec.SynchronousReplication && len(db.Spec.SynchronousStandbys) > 0 {
+		synchronousStandbys := []string{}
+		for _, synchronousStandby := range db.Spec.SynchronousStandbys {
+			synchronousStandbys = append(synchronousStandbys, common.StolonName(synchronousStandby))
 		}
-		parameters["synchronous_standby_names"] = strings.Join(standbyNames, ",")
+		// TODO(sgotti) Find a way to detect the pg major version also
+		// when the instance is empty. Parsing the postgres --version
+		// is not always reliable (for example we can get `10devel` for
+		// development version).
+		// Now this will lead to problems starting the instance (or
+		// warning reloading the parameters) with postgresql < 9.6
+		if len(synchronousStandbys) > 1 {
+			parameters["synchronous_standby_names"] = fmt.Sprintf("%d (%s)", len(synchronousStandbys), strings.Join(synchronousStandbys, ","))
+		} else {
+			parameters["synchronous_standby_names"] = strings.Join(synchronousStandbys, ",")
+		}
 	} else {
 		parameters["synchronous_standby_names"] = ""
 	}
@@ -458,6 +468,16 @@ func (p *PostgresKeeper) GetPGState(pctx context.Context) (*cluster.PostgresStat
 		}
 		log.Debug("filtered out managed pg parameters", zap.Object("filteredPGParameters", filteredPGParameters))
 		pgState.PGParameters = filteredPGParameters
+
+		synchronousStandbyNames := strings.Split(pgParameters["synchronous_standby_names"], ",")
+		synchronousStandbys := []string{}
+		for _, n := range synchronousStandbyNames {
+			if !common.IsStolonName(n) {
+				continue
+			}
+			synchronousStandbys = append(synchronousStandbys, common.NameFromStolonName(n))
+		}
+		pgState.SynchronousStandbys = synchronousStandbys
 
 		sd, err := p.pgm.GetSystemData()
 		if err != nil {

@@ -24,6 +24,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
+	"sort"
 	"strconv"
 	"sync"
 	"testing"
@@ -739,6 +741,52 @@ func WaitClusterDataKeeperInitialized(keeperUID string, e *store.StoreManager, t
 					return nil
 				}
 			}
+		}
+	end:
+		time.Sleep(sleepInterval)
+	}
+	return fmt.Errorf("timeout")
+}
+
+// WaitClusterDataSynchronousStandbys waits for:
+// * synchrnous standby defined in masterdb spec
+// * synchrnous standby reported from masterdb status
+func WaitClusterDataSynchronousStandbys(synchronousStandbys []string, e *store.StoreManager, timeout time.Duration) error {
+	sort.Sort(sort.StringSlice(synchronousStandbys))
+	start := time.Now()
+	for time.Now().Add(-timeout).Before(start) {
+		cd, _, err := e.GetClusterData()
+		if err != nil || cd == nil {
+			goto end
+		}
+		if cd.Cluster.Status.Phase == cluster.ClusterPhaseNormal && cd.Cluster.Status.Master != "" {
+			masterDB := cd.DBs[cd.Cluster.Status.Master]
+			// get keepers for db spec synchronousStandbys
+			keepersUIDs := []string{}
+			for _, dbUID := range masterDB.Spec.SynchronousStandbys {
+				db, ok := cd.DBs[dbUID]
+				if ok {
+					keepersUIDs = append(keepersUIDs, db.Spec.KeeperUID)
+				}
+			}
+			sort.Sort(sort.StringSlice(keepersUIDs))
+			if !reflect.DeepEqual(synchronousStandbys, keepersUIDs) {
+				goto end
+			}
+
+			// get keepers for db status synchronousStandbys
+			keepersUIDs = []string{}
+			for _, dbUID := range masterDB.Status.SynchronousStandbys {
+				db, ok := cd.DBs[dbUID]
+				if ok {
+					keepersUIDs = append(keepersUIDs, db.Spec.KeeperUID)
+				}
+			}
+			sort.Sort(sort.StringSlice(keepersUIDs))
+			if !reflect.DeepEqual(synchronousStandbys, keepersUIDs) {
+				goto end
+			}
+			return nil
 		}
 	end:
 		time.Sleep(sleepInterval)

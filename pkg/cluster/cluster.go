@@ -52,6 +52,8 @@ const (
 	DefaultMaxStandbys            uint16      = 20
 	DefaultMaxStandbysPerSender   uint16      = 3
 	DefaultSynchronousReplication             = false
+	DefaultMaxSynchronousStandbys uint16      = 1
+	DefaultMinSynchronousStandbys uint16      = 1
 	DefaultUsePgrewind                        = false
 	DefaultMergePGParameter                   = true
 	DefaultRole                   ClusterRole = ClusterRoleMaster
@@ -184,6 +186,12 @@ type ClusterSpec struct {
 	MaxStandbysPerSender *uint16 `json:"maxStandbysPerSender,omitempty"`
 	// Use Synchronous replication between master and its standbys
 	SynchronousReplication *bool `json:"synchronousReplication,omitempty"`
+	// MinSynchronousStandbys is the mininum number if synchronous standbys
+	// to be configured when SynchronousReplication is true
+	MinSynchronousStandbys *uint16 `json:"minSynchronousStandbys,omitempty"`
+	// MaxSynchronousStandbys is the maximum number if synchronous standbys
+	// to be configured when SynchronousReplication is true
+	MaxSynchronousStandbys *uint16 `json:"maxSynchronousStandbys,omitempty"`
 	// Whether to use pg_rewind
 	UsePgrewind *bool `json:"usePgrewind,omitempty"`
 	// InitMode defines the cluster initialization mode. Current modes are: new, existing, pitr
@@ -285,6 +293,12 @@ func (os *ClusterSpec) WithDefaults() *ClusterSpec {
 	if s.UsePgrewind == nil {
 		s.UsePgrewind = BoolP(DefaultUsePgrewind)
 	}
+	if s.MinSynchronousStandbys == nil {
+		s.MinSynchronousStandbys = Uint16P(DefaultMinSynchronousStandbys)
+	}
+	if s.MaxSynchronousStandbys == nil {
+		s.MaxSynchronousStandbys = Uint16P(DefaultMaxSynchronousStandbys)
+	}
 	if s.MergePgParameters == nil {
 		s.MergePgParameters = BoolP(DefaultMergePGParameter)
 	}
@@ -321,6 +335,15 @@ func (os *ClusterSpec) Validate() error {
 	}
 	if *s.MaxStandbysPerSender < 1 {
 		return fmt.Errorf("maxStandbysPerSender must be at least 1")
+	}
+	if *s.MinSynchronousStandbys < 1 {
+		return fmt.Errorf("minSynchronousStandbys must be at least 1")
+	}
+	if *s.MaxSynchronousStandbys < 1 {
+		return fmt.Errorf("maxSynchronousStandbys must be at least 1")
+	}
+	if *s.MaxSynchronousStandbys < *s.MinSynchronousStandbys {
+		return fmt.Errorf("maxSynchronousStandbys must be greater or equal to minSynchronousStandbys")
 	}
 	if s.InitMode == nil {
 		return fmt.Errorf("initMode undefined")
@@ -451,6 +474,8 @@ type DBSpec struct {
 	Followers []string `json:"followers"`
 	// Whether to include previous postgresql.conf
 	IncludeConfig bool `json:"includePreviousConfig,omitempty"`
+	// SynchronousStandbys are the standbys to be configured as synchronous
+	SynchronousStandbys []string `json:"synchronousStandbys"`
 }
 
 type DBStatus struct {
@@ -466,7 +491,8 @@ type DBStatus struct {
 	XLogPos          uint64                   `json:"xLogPos,omitempty"`
 	TimelinesHistory PostgresTimelinesHistory `json:"timelinesHistory,omitempty"`
 
-	PGParameters PGParameters `json:"pgParameters,omitempty"`
+	PGParameters        PGParameters `json:"pgParameters,omitempty"`
+	SynchronousStandbys []string     `json:"synchronousStandbys"`
 }
 
 type DB struct {

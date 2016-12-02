@@ -1966,7 +1966,7 @@ func TestUpdateCluster(t *testing.T) {
 				DBs: cluster.DBs{
 					"db1": &cluster.DB{
 						UID:        "db1",
-						Generation: 1,
+						Generation: 2,
 						ChangeTime: time.Time{},
 						Spec: &cluster.DBSpec{
 							KeeperUID:              "keeper1",
@@ -1977,6 +1977,7 @@ func TestUpdateCluster(t *testing.T) {
 							PGParameters:           cluster.PGParameters{"param01": "value01", "param02": "value02"},
 							Role:                   common.RoleMaster,
 							Followers:              []string{"db2"},
+							SynchronousStandbys:    []string{"db2"},
 						},
 						Status: cluster.DBStatus{
 							Healthy:           true,
@@ -1985,7 +1986,7 @@ func TestUpdateCluster(t *testing.T) {
 					},
 					"db2": &cluster.DB{
 						UID:        "db2",
-						Generation: 1,
+						Generation: 2,
 						ChangeTime: time.Time{},
 						Spec: &cluster.DBSpec{
 							KeeperUID:              "keeper2",
