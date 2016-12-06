@@ -725,6 +725,27 @@ func WaitClusterDataMaster(master string, e *store.StoreManager, timeout time.Du
 	return fmt.Errorf("timeout")
 }
 
+func WaitClusterDataKeeperInitialized(keeperUID string, e *store.StoreManager, timeout time.Duration) error {
+	start := time.Now()
+	for time.Now().Add(-timeout).Before(start) {
+		cd, _, err := e.GetClusterData()
+		if err != nil || cd == nil {
+			goto end
+		}
+		// Check for db on keeper to be initialized
+		for _, db := range cd.DBs {
+			if db.Spec.KeeperUID == keeperUID {
+				if db.Status.CurrentGeneration >= cluster.InitialGeneration {
+					return nil
+				}
+			}
+		}
+	end:
+		time.Sleep(sleepInterval)
+	}
+	return fmt.Errorf("timeout")
+}
+
 func WaitClusterPhase(e *store.StoreManager, phase cluster.ClusterPhase, timeout time.Duration) error {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {

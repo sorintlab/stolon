@@ -103,8 +103,10 @@ const (
 	DBInitModeExisting DBInitMode = "existing"
 	// Initialize a db starting from a freshly initialized database cluster
 	DBInitModeNew DBInitMode = "new"
-	// Initialize a db doing a point in time recovery.
+	// Initialize a db doing a point in time recovery
 	DBInitModePITR DBInitMode = "pitr"
+	// Initialize a db doing a resync to a target database cluster
+	DBInitModeResync DBInitMode = "resync"
 )
 
 type PITRConfig struct {

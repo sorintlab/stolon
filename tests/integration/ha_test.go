@@ -116,9 +116,7 @@ func TestInitWithMultipleKeepers(t *testing.T) {
 	if err != nil {
 		t.Fatal("expected a master in cluster view")
 	}
-	if err := tks[masterUID].WaitDBUp(60 * time.Second); err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
+	waitKeeperReady(t, sm, tks[masterUID])
 }
 
 func setupServers(t *testing.T, clusterName, dir string, numKeepers, numSentinels uint8, syncRepl bool, usePgrewind bool) (testKeepers, testSentinels, *TestStore) {
@@ -228,7 +226,16 @@ func shutdown(tks map[string]*TestKeeper, tss map[string]*TestSentinel, tstore *
 	}
 }
 
-func waitMasterStandbysReady(t *testing.T, sm *store.StoreManager, tks testKeepers) (master *TestKeeper, standbys []*TestKeeper, err error) {
+func waitKeeperReady(t *testing.T, sm *store.StoreManager, keeper *TestKeeper) {
+	if err := WaitClusterDataKeeperInitialized(keeper.id, sm, 60*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := keeper.WaitDBUp(60 * time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+}
+
+func waitMasterStandbysReady(t *testing.T, sm *store.StoreManager, tks testKeepers) (master *TestKeeper, standbys []*TestKeeper) {
 	// Wait for normal cluster phase (master ready)
 	masterUID, err := WaitClusterDataWithMaster(sm, 30*time.Second)
 	if err != nil {
@@ -242,13 +249,9 @@ func waitMasterStandbysReady(t *testing.T, sm *store.StoreManager, tks testKeepe
 		}
 		standbys = append(standbys, tk)
 	}
-	if err := master.WaitDBUp(60 * time.Second); err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
+	waitKeeperReady(t, sm, master)
 	for _, standby := range standbys {
-		if err := standby.WaitDBUp(60 * time.Second); err != nil {
-			t.Fatalf("unexpected err: %v", err)
-		}
+		waitKeeperReady(t, sm, standby)
 	}
 	return
 }
@@ -268,10 +271,7 @@ func testMasterStandby(t *testing.T, syncRepl bool) {
 	storePath := filepath.Join(common.StoreBasePath, clusterName)
 	sm := store.NewStoreManager(tstore.store, storePath)
 
-	master, standbys, err := waitMasterStandbysReady(t, sm, tks)
-	if err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
+	master, standbys := waitMasterStandbysReady(t, sm, tks)
 
 	if err := populate(t, master); err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -316,10 +316,7 @@ func testFailover(t *testing.T, syncRepl bool) {
 	storePath := filepath.Join(common.StoreBasePath, clusterName)
 	sm := store.NewStoreManager(tstore.store, storePath)
 
-	master, standbys, err := waitMasterStandbysReady(t, sm, tks)
-	if err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
+	master, standbys := waitMasterStandbysReady(t, sm, tks)
 
 	if err := populate(t, master); err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -372,10 +369,7 @@ func testFailoverFailed(t *testing.T, syncRepl bool) {
 	storePath := filepath.Join(common.StoreBasePath, clusterName)
 	sm := store.NewStoreManager(tstore.store, storePath)
 
-	master, standbys, err := waitMasterStandbysReady(t, sm, tks)
-	if err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
+	master, standbys := waitMasterStandbysReady(t, sm, tks)
 	standby := standbys[0]
 
 	if err := populate(t, master); err != nil {
@@ -432,10 +426,7 @@ func testOldMasterRestart(t *testing.T, syncRepl, usePgrewind bool) {
 	storePath := filepath.Join(common.StoreBasePath, clusterName)
 	sm := store.NewStoreManager(tstore.store, storePath)
 
-	master, standbys, err := waitMasterStandbysReady(t, sm, tks)
-	if err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
+	master, standbys := waitMasterStandbysReady(t, sm, tks)
 
 	if err := populate(t, master); err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -513,10 +504,7 @@ func testPartition1(t *testing.T, syncRepl, usePgrewind bool) {
 	storePath := filepath.Join(common.StoreBasePath, clusterName)
 	sm := store.NewStoreManager(tstore.store, storePath)
 
-	master, standbys, err := waitMasterStandbysReady(t, sm, tks)
-	if err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
+	master, standbys := waitMasterStandbysReady(t, sm, tks)
 
 	if err := populate(t, master); err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -603,10 +591,7 @@ func testTimelineFork(t *testing.T, syncRepl, usePgrewind bool) {
 	storePath := filepath.Join(common.StoreBasePath, clusterName)
 	sm := store.NewStoreManager(tstore.store, storePath)
 
-	master, standbys, err := waitMasterStandbysReady(t, sm, tks)
-	if err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
+	master, standbys := waitMasterStandbysReady(t, sm, tks)
 
 	if err := populate(t, master); err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -652,9 +637,7 @@ func testTimelineFork(t *testing.T, syncRepl, usePgrewind bool) {
 	// Start standby[0]. It will be elected as master but it'll be behind (having only one line).
 	t.Logf("Starting standby[0]: %s", standbys[0].id)
 	standbys[0].Start()
-	if err := standbys[0].WaitDBUp(60 * time.Second); err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
+	waitKeeperReady(t, sm, standbys[0])
 	if err := standbys[0].WaitRole(common.RoleMaster, 60*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -720,10 +703,7 @@ func TestMasterChangedAddress(t *testing.T) {
 	storePath := filepath.Join(common.StoreBasePath, clusterName)
 	sm := store.NewStoreManager(tstore.store, storePath)
 
-	master, standbys, err := waitMasterStandbysReady(t, sm, tks)
-	if err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
+	master, standbys := waitMasterStandbysReady(t, sm, tks)
 
 	if err := populate(t, master); err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -794,9 +774,7 @@ func TestFailedStandby(t *testing.T) {
 		t.Fatal("expected a master in cluster view")
 	}
 	master := tks[masterUID]
-	if err := master.WaitDBUp(60 * time.Second); err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
+	waitKeeperReady(t, sm, master)
 
 	if err := populate(t, master); err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -888,9 +866,7 @@ func TestLoweredMaxStandbysPerSender(t *testing.T) {
 		t.Fatal("expected a master in cluster view")
 	}
 	master := tks[masterUID]
-	if err := master.WaitDBUp(60 * time.Second); err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
+	waitKeeperReady(t, sm, master)
 
 	if err := populate(t, master); err != nil {
 		t.Fatalf("unexpected err: %v", err)
