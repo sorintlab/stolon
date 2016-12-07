@@ -190,6 +190,11 @@ func (c *ClusterChecker) Check() error {
 		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
 		return nil
 	}
+	if err = cd.Cluster.Spec.Validate(); err != nil {
+		log.Error("clusterdata validation failed", zap.Error(err))
+		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
+		return nil
+	}
 
 	// Start pollon if not active
 	if err = c.startPollonProxy(); err != nil {

@@ -135,15 +135,9 @@ func status(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	cd, _, err := e.GetClusterData()
+	cd, _, err := getClusterData(e)
 	if err != nil {
-		die("cannot get cluster data: %v", err)
-	}
-	if cd == nil {
-		die("cluster data not available: %v", err)
-	}
-	if cd.FormatVersion != cluster.CurrentCDFormatVersion {
-		die("unsupported cluster data format version %d", cd.FormatVersion)
+		die("%v", err)
 	}
 
 	stdout("")

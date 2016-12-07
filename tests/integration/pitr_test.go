@@ -59,10 +59,10 @@ func TestPITR(t *testing.T) {
 	sm := store.NewStoreManager(tstore.store, storePath)
 
 	initialClusterSpec := &cluster.ClusterSpec{
-		InitMode:           cluster.ClusterInitModeNew,
-		SleepInterval:      cluster.Duration{Duration: 2 * time.Second},
-		FailInterval:       cluster.Duration{Duration: 5 * time.Second},
-		ConvergenceTimeout: cluster.Duration{Duration: 30 * time.Second},
+		InitMode:           cluster.ClusterInitModeP(cluster.ClusterInitModeNew),
+		SleepInterval:      &cluster.Duration{Duration: 2 * time.Second},
+		FailInterval:       &cluster.Duration{Duration: 5 * time.Second},
+		ConvergenceTimeout: &cluster.Duration{Duration: 30 * time.Second},
 		PGParameters: cluster.PGParameters{
 			"archive_mode":    "on",
 			"archive_command": fmt.Sprintf("cp %%p %s/%%f", archiveBackupDir),
@@ -140,10 +140,10 @@ func TestPITR(t *testing.T) {
 
 	// Now initialize a new cluster with the existing keeper
 	initialClusterSpec = &cluster.ClusterSpec{
-		InitMode:           cluster.ClusterInitModePITR,
-		SleepInterval:      cluster.Duration{Duration: 2 * time.Second},
-		FailInterval:       cluster.Duration{Duration: 5 * time.Second},
-		ConvergenceTimeout: cluster.Duration{Duration: 30 * time.Second},
+		InitMode:           cluster.ClusterInitModeP(cluster.ClusterInitModePITR),
+		SleepInterval:      &cluster.Duration{Duration: 2 * time.Second},
+		FailInterval:       &cluster.Duration{Duration: 5 * time.Second},
+		ConvergenceTimeout: &cluster.Duration{Duration: 30 * time.Second},
 		PITRConfig: &cluster.PITRConfig{
 			DataRestoreCommand: fmt.Sprintf("tar xvf %s/base.tar -C %%d", baseBackupDir),
 			ArchiveRecoverySettings: &cluster.ArchiveRecoverySettings{

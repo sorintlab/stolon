@@ -58,10 +58,10 @@ func TestServerParameters(t *testing.T) {
 	sm := store.NewStoreManager(tstore.store, storePath)
 
 	initialClusterSpec := &cluster.ClusterSpec{
-		InitMode:           cluster.ClusterInitModeNew,
-		SleepInterval:      cluster.Duration{Duration: 2 * time.Second},
-		FailInterval:       cluster.Duration{Duration: 5 * time.Second},
-		ConvergenceTimeout: cluster.Duration{Duration: 30 * time.Second},
+		InitMode:           cluster.ClusterInitModeP(cluster.ClusterInitModeNew),
+		SleepInterval:      &cluster.Duration{Duration: 2 * time.Second},
+		FailInterval:       &cluster.Duration{Duration: 5 * time.Second},
+		ConvergenceTimeout: &cluster.Duration{Duration: 30 * time.Second},
 	}
 	initialClusterSpecFile, err := writeClusterSpec(dir, initialClusterSpec)
 	if err != nil {

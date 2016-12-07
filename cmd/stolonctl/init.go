@@ -105,14 +105,13 @@ func initCluster(cmd *cobra.Command, args []string) {
 	if len(data) == 0 {
 		// Define a new cluster spec with initMode "new"
 		cs = &cluster.ClusterSpec{}
-		cs.InitMode = cluster.ClusterInitModeNew
+		cs.InitMode = cluster.ClusterInitModeP(cluster.ClusterInitModeNew)
 	} else {
 		if err := json.Unmarshal(data, &cs); err != nil {
 			die("failed to unmarshal cluster spec: %v", err)
 		}
 	}
 
-	cs.SetDefaults()
 	if err := cs.Validate(); err != nil {
 		die("invalid cluster spec: %v", err)
 	}

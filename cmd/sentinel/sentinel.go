@@ -281,11 +281,11 @@ func (s *Sentinel) findInitialKeeper(cd *cluster.ClusterData) (*cluster.Keeper, 
 func (s *Sentinel) setDBSpecFromClusterSpec(cd *cluster.ClusterData) {
 	// Update dbSpec values with the related clusterSpec ones
 	for _, db := range cd.DBs {
-		db.Spec.RequestTimeout = cd.Cluster.Spec.RequestTimeout
-		db.Spec.MaxStandbys = cd.Cluster.Spec.MaxStandbys
-		db.Spec.SynchronousReplication = cd.Cluster.Spec.SynchronousReplication
-		db.Spec.UsePgrewind = cd.Cluster.Spec.UsePgrewind
-		db.Spec.PGParameters = cd.Cluster.Spec.PGParameters
+		db.Spec.RequestTimeout = *cd.Cluster.DefSpec().RequestTimeout
+		db.Spec.MaxStandbys = *cd.Cluster.DefSpec().MaxStandbys
+		db.Spec.SynchronousReplication = *cd.Cluster.DefSpec().SynchronousReplication
+		db.Spec.UsePgrewind = *cd.Cluster.DefSpec().UsePgrewind
+		db.Spec.PGParameters = cd.Cluster.DefSpec().PGParameters
 	}
 }
 
@@ -428,11 +428,11 @@ func (s *Sentinel) dbStatus(cd *cluster.ClusterData, dbUID string) dbStatus {
 		return dbStatusFailed
 	}
 
-	convergenceTimeout := cd.Cluster.Spec.ConvergenceTimeout.Duration
+	convergenceTimeout := cd.Cluster.DefSpec().ConvergenceTimeout.Duration
 	// check if db should be in init mode and adjust convergence timeout
 	if db.Generation == cluster.InitialGeneration {
 		if db.Spec.InitMode == cluster.DBInitModeResync {
-			convergenceTimeout = cd.Cluster.Spec.SyncTimeout.Duration
+			convergenceTimeout = cd.Cluster.DefSpec().SyncTimeout.Duration
 		}
 
 	}
@@ -556,7 +556,7 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 	newcd := cd.DeepCopy()
 	switch cd.Cluster.Status.Phase {
 	case cluster.ClusterPhaseInitializing:
-		switch cd.Cluster.Spec.InitMode {
+		switch *cd.Cluster.DefSpec().InitMode {
 		case cluster.ClusterInitModeNew:
 			// Is there already a keeper choosed to be the new master?
 			if cd.Cluster.Status.Master == "" {
@@ -575,7 +575,7 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 						InitMode:      cluster.DBInitModeNew,
 						Role:          common.RoleMaster,
 						Followers:     []string{},
-						IncludeConfig: *cd.Cluster.Spec.MergePgParameters,
+						IncludeConfig: *cd.Cluster.DefSpec().MergePgParameters,
 					},
 				}
 				newcd.DBs[db.UID] = db
@@ -587,7 +587,7 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 					panic(fmt.Errorf("db %q object doesn't exists. This shouldn't happen", cd.Cluster.Status.Master))
 				}
 				// Check that the choosed db for being the master has correctly initialized
-				switch s.dbConvergenceState(db, cd.Cluster.Spec.InitTimeout.Duration) {
+				switch s.dbConvergenceState(db, cd.Cluster.DefSpec().InitTimeout.Duration) {
 				case Converged:
 					if db.Status.Healthy {
 						log.Info("db initialized", zap.String("db", db.UID), zap.String("keeper", db.Spec.KeeperUID))
@@ -596,7 +596,7 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 						// Don't include previous config anymore
 						db.Spec.IncludeConfig = false
 						// Replace reported pg parameters in cluster spec
-						if *cd.Cluster.Spec.MergePgParameters {
+						if *cd.Cluster.DefSpec().MergePgParameters {
 							newcd.Cluster.Spec.PGParameters = db.Status.PGParameters
 						}
 						// Cluster initialized, switch to Normal state
@@ -614,7 +614,7 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 			}
 		case cluster.ClusterInitModeExisting:
 			if cd.Cluster.Status.Master == "" {
-				wantedKeeper := cd.Cluster.Spec.ExistingConfig.KeeperUID
+				wantedKeeper := cd.Cluster.DefSpec().ExistingConfig.KeeperUID
 				log.Info("trying to use keeper as initial master", zap.String("keeper", wantedKeeper))
 
 				k, ok := cd.Keepers[wantedKeeper]
@@ -633,7 +633,7 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 						InitMode:      cluster.DBInitModeExisting,
 						Role:          common.RoleMaster,
 						Followers:     []string{},
-						IncludeConfig: *cd.Cluster.Spec.MergePgParameters,
+						IncludeConfig: *cd.Cluster.DefSpec().MergePgParameters,
 					},
 				}
 				newcd.DBs[db.UID] = db
@@ -645,12 +645,12 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 					panic(fmt.Errorf("db %q object doesn't exists. This shouldn't happen", cd.Cluster.Status.Master))
 				}
 				// Check that the choosed db for being the master has correctly initialized
-				if db.Status.Healthy && s.dbConvergenceState(db, cd.Cluster.Spec.ConvergenceTimeout.Duration) == Converged {
+				if db.Status.Healthy && s.dbConvergenceState(db, cd.Cluster.DefSpec().ConvergenceTimeout.Duration) == Converged {
 					log.Info("db initialized", zap.String("db", db.UID), zap.String("keeper", db.Spec.KeeperUID))
 					// Don't include previous config anymore
 					db.Spec.IncludeConfig = false
 					// Replace reported pg parameters in cluster spec
-					if *cd.Cluster.Spec.MergePgParameters {
+					if *cd.Cluster.DefSpec().MergePgParameters {
 						newcd.Cluster.Spec.PGParameters = db.Status.PGParameters
 					}
 					// Cluster initialized, switch to Normal state
@@ -673,10 +673,10 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 					Spec: &cluster.DBSpec{
 						KeeperUID:     k.UID,
 						InitMode:      cluster.DBInitModePITR,
-						PITRConfig:    cd.Cluster.Spec.PITRConfig,
+						PITRConfig:    cd.Cluster.DefSpec().PITRConfig,
 						Role:          common.RoleMaster,
 						Followers:     []string{},
-						IncludeConfig: *cd.Cluster.Spec.MergePgParameters,
+						IncludeConfig: *cd.Cluster.DefSpec().MergePgParameters,
 					},
 				}
 				newcd.DBs[db.UID] = db
@@ -698,7 +698,7 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 						// Don't include previous config anymore
 						db.Spec.IncludeConfig = false
 						// Replace reported pg parameters in cluster spec
-						if *cd.Cluster.Spec.MergePgParameters {
+						if *cd.Cluster.DefSpec().MergePgParameters {
 							newcd.Cluster.Spec.PGParameters = db.Status.PGParameters
 						}
 						// Cluster initialized, switch to Normal state
@@ -715,7 +715,7 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 				}
 			}
 		default:
-			return nil, fmt.Errorf("unknown init mode %q", cd.Cluster.Spec.InitMode)
+			return nil, fmt.Errorf("unknown init mode %q", cd.Cluster.DefSpec().InitMode)
 		}
 	case cluster.ClusterPhaseNormal:
 		// TODO(sgotti) When keeper removal is implemented, remove DBs for unexistent keepers
@@ -737,7 +737,7 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 		}
 
 		// Check that the wanted master is in master state (i.e. check that promotion from standby to master happened)
-		if s.dbConvergenceState(curMasterDB, newcd.Cluster.Spec.ConvergenceTimeout.Duration) == ConvergenceFailed {
+		if s.dbConvergenceState(curMasterDB, newcd.Cluster.DefSpec().ConvergenceTimeout.Duration) == ConvergenceFailed {
 			log.Info("db not converged", zap.String("db", curMasterDB.UID), zap.String("keeper", curMasterDB.Spec.KeeperUID))
 			masterOK = false
 		}
@@ -776,7 +776,7 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 		if curMasterDBUID == wantedMasterDBUID {
 			masterDB := newcd.DBs[curMasterDBUID]
 			// Set standbys to follow master only if it's healthy and converged
-			if masterDB.Status.Healthy && s.dbConvergenceState(masterDB, newcd.Cluster.Spec.ConvergenceTimeout.Duration) == Converged {
+			if masterDB.Status.Healthy && s.dbConvergenceState(masterDB, newcd.Cluster.DefSpec().ConvergenceTimeout.Duration) == Converged {
 				// Tell proxy that there's a new active master
 				newcd.Proxy.Spec.MasterDBUID = wantedMasterDBUID
 				newcd.Proxy.ChangeTime = time.Now()
@@ -825,7 +825,7 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 				notFailedStandbysCount := goodStandbysCount + convergingStandbysCount
 
 				// Remove dbs in excess if we have a good number >= MaxStandbysPerSender
-				if uint16(goodStandbysCount) >= newcd.Cluster.Spec.MaxStandbysPerSender {
+				if uint16(goodStandbysCount) >= *newcd.Cluster.DefSpec().MaxStandbysPerSender {
 					toRemove := []*cluster.DB{}
 					// Remove all non good standbys
 					for _, db := range newcd.DBs {
@@ -838,7 +838,7 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 						}
 					}
 					// Remove good standbys in excess
-					nr := int(uint16(goodStandbysCount) - newcd.Cluster.Spec.MaxStandbysPerSender)
+					nr := int(uint16(goodStandbysCount) - *newcd.Cluster.DefSpec().MaxStandbysPerSender)
 					i := 0
 					for _, db := range goodStandbys {
 						if i >= nr {
@@ -859,7 +859,7 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 
 					// define, if there're available keepers, new dbs
 					// nc can be negative if MaxStandbysPerSender has been lowered
-					nc := int(newcd.Cluster.Spec.MaxStandbysPerSender - uint16(notFailedStandbysCount))
+					nc := int(*newcd.Cluster.DefSpec().MaxStandbysPerSender - uint16(notFailedStandbysCount))
 					// Add missing DBs until MaxStandbysPerSender
 					freeKeepers := s.freeKeepers(newcd)
 					nf := len(freeKeepers)
@@ -948,7 +948,7 @@ func (s *Sentinel) isKeeperHealthy(cd *cluster.ClusterData, keeper *cluster.Keep
 	if !ok {
 		return true
 	}
-	if timer.Since(t) > cd.Cluster.Spec.FailInterval.Duration {
+	if timer.Since(t) > cd.Cluster.DefSpec().FailInterval.Duration {
 		return false
 	}
 	return true
@@ -959,7 +959,7 @@ func (s *Sentinel) isDBHealthy(cd *cluster.ClusterData, db *cluster.DB) bool {
 	if !ok {
 		return true
 	}
-	if timer.Since(t) > cd.Cluster.Spec.FailInterval.Duration {
+	if timer.Since(t) > cd.Cluster.DefSpec().FailInterval.Duration {
 		return false
 	}
 	return true
@@ -1013,7 +1013,6 @@ func (k KeeperInfoHistories) DeepCopy() KeeperInfoHistories {
 	if err != nil {
 		panic(err)
 	}
-	log.Debug("", zap.String("k", spew.Sdump(k)), zap.String("nk", spew.Sdump(nk)))
 	if !reflect.DeepEqual(k, nk) {
 		panic("not equal")
 	}
@@ -1069,7 +1068,6 @@ func NewSentinel(id string, cfg *config, stop chan bool, end chan bool) (*Sentin
 		if err := json.Unmarshal(configData, &initialClusterSpec); err != nil {
 			return nil, fmt.Errorf("cannot parse provided initial cluster config: %v", err)
 		}
-		initialClusterSpec.SetDefaults()
 		log.Debug("initialClusterSpec dump", zap.String("initialClusterSpec", spew.Sdump(initialClusterSpec)))
 		if err := initialClusterSpec.Validate(); err != nil {
 			return nil, fmt.Errorf("invalid initial cluster: %v", err)
@@ -1161,9 +1159,13 @@ func (s *Sentinel) clusterSentinelCheck(pctx context.Context) {
 			log.Error("unsupported clusterdata format version", zap.Uint64("version", cd.FormatVersion))
 			return
 		}
+		if err = cd.Cluster.Spec.Validate(); err != nil {
+			log.Error("clusterdata validation failed", zap.Error(err))
+			return
+		}
 		if cd.Cluster != nil {
-			s.sleepInterval = cd.Cluster.Spec.SleepInterval.Duration
-			s.requestTimeout = cd.Cluster.Spec.RequestTimeout.Duration
+			s.sleepInterval = cd.Cluster.DefSpec().SleepInterval.Duration
+			s.requestTimeout = cd.Cluster.DefSpec().RequestTimeout.Duration
 		}
 
 	}

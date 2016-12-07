@@ -28,6 +28,14 @@ import (
 	"github.com/mitchellh/copystructure"
 )
 
+func Uint16P(u uint16) *uint16 {
+	return &u
+}
+
+func BoolP(b bool) *bool {
+	return &b
+}
+
 const (
 	CurrentCDFormatVersion uint64 = 1
 )
@@ -35,15 +43,18 @@ const (
 const (
 	DefaultProxyCheckInterval = 5 * time.Second
 
-	DefaultSleepInterval               = 5 * time.Second
-	DefaultRequestTimeout              = 10 * time.Second
-	DefaultConvergenceTimeout          = 30 * time.Second
-	DefaultInitTimeout                 = 5 * time.Minute
-	DefaultSyncTimeout                 = 30 * time.Minute
-	DefaultFailInterval                = 20 * time.Second
-	DefaultMaxStandbys          uint16 = 20
-	DefaultMaxStandbysPerSender uint16 = 3
-	DefaultMergePGParameter            = true
+	DefaultSleepInterval                      = 5 * time.Second
+	DefaultRequestTimeout                     = 10 * time.Second
+	DefaultConvergenceTimeout                 = 30 * time.Second
+	DefaultInitTimeout                        = 5 * time.Minute
+	DefaultSyncTimeout                        = 30 * time.Minute
+	DefaultFailInterval                       = 20 * time.Second
+	DefaultMaxStandbys            uint16      = 20
+	DefaultMaxStandbysPerSender   uint16      = 3
+	DefaultSynchronousReplication             = false
+	DefaultUsePgrewind                        = false
+	DefaultMergePGParameter                   = true
+	DefaultRole                   ClusterRole = ClusterRoleMaster
 )
 
 const (
@@ -95,6 +106,10 @@ const (
 	ClusterInitModeExisting ClusterInitMode = "existing"
 )
 
+func ClusterInitModeP(s ClusterInitMode) *ClusterInitMode {
+	return &s
+}
+
 type DBInitMode string
 
 const (
@@ -143,18 +158,18 @@ type StandbySettings struct {
 
 type ClusterSpec struct {
 	// Interval to wait before next check
-	SleepInterval Duration `json:"sleepInterval,omitempty"`
+	SleepInterval *Duration `json:"sleepInterval,omitempty"`
 	// Time after which any request (keepers checks from sentinel etc...) will fail.
-	RequestTimeout Duration `json:"requestTimeout,omitempty"`
+	RequestTimeout *Duration `json:"requestTimeout,omitempty"`
 	// Interval to wait for a db to be converged to the required state when
 	// no long operation are expected.
-	ConvergenceTimeout Duration `json:"convergenceTimeout,omitempty"`
+	ConvergenceTimeout *Duration `json:"convergenceTimeout,omitempty"`
 	// Interval to wait for a db to be initialized (doing a initdb)
-	InitTimeout Duration `json:"initTimeout,omitempty"`
+	InitTimeout *Duration `json:"initTimeout,omitempty"`
 	// Interval to wait for a db to be synced with a master
-	SyncTimeout Duration `json:"syncTimeout,omitempty"`
+	SyncTimeout *Duration `json:"syncTimeout,omitempty"`
 	// Interval after the first fail to declare a keeper or a db as not healthy.
-	FailInterval Duration `json:"failInterval,omitempty"`
+	FailInterval *Duration `json:"failInterval,omitempty"`
 	// Max number of standbys. This needs to be greater enough to cover both
 	// standby managed by stolon and additional standbys configured by the
 	// user. Its value affect different postgres parameters like
@@ -163,22 +178,22 @@ type ClusterSpec struct {
 	// standbys will have unpredicatable effects due to problems creating
 	// replication slots or replication problems due to exhausted wal
 	// senders.
-	MaxStandbys uint16 `json:"maxStandbys,omitempty"`
+	MaxStandbys *uint16 `json:"maxStandbys,omitempty"`
 	// Max number of standbys for every sender. A sender can be a master or
 	// another standby (if/when implementing cascading replication).
-	MaxStandbysPerSender uint16 `json:"maxStandbysPerSender,omitempty"`
+	MaxStandbysPerSender *uint16 `json:"maxStandbysPerSender,omitempty"`
 	// Use Synchronous replication between master and its standbys
-	SynchronousReplication bool `json:"synchronousReplication,omitempty"`
+	SynchronousReplication *bool `json:"synchronousReplication,omitempty"`
 	// Whether to use pg_rewind
-	UsePgrewind bool `json:"usePgrewind,omitempty"`
+	UsePgrewind *bool `json:"usePgrewind,omitempty"`
 	// InitMode defines the cluster initialization mode. Current modes are: new, existing, pitr
-	InitMode ClusterInitMode `json:"initMode,omitempty"`
+	InitMode *ClusterInitMode `json:"initMode,omitempty"`
 	// Whether to merge pgParameters of the initialized db cluster, useful
 	// the retain initdb generated parameters when InitMode is new, retain
 	// current parameters when initMode is existing or pitr.
 	MergePgParameters *bool `json:"mergePgParameters,omitempty"`
 	// Role defines the cluster operating role (master or standby of an external database)
-	Role ClusterRole `json:"role,omitempty"`
+	Role *ClusterRole `json:"role,omitempty"`
 	// Point in time recovery init configuration used when InitMode is "pitr"
 	PITRConfig *PITRConfig `json:"pitrConfig,omitempty"`
 	// Existing init configuration used when InitMode is "existing"
@@ -212,41 +227,77 @@ func (c *Cluster) DeepCopy() *Cluster {
 	if err != nil {
 		panic(err)
 	}
+	if !reflect.DeepEqual(c, nc) {
+		panic("not equal")
+	}
 	return nc.(*Cluster)
 }
 
-func (s *ClusterSpec) SetDefaults() {
-	if s.SleepInterval == ZeroDuration {
-		s.SleepInterval = Duration{Duration: DefaultSleepInterval}
+func (c *ClusterSpec) DeepCopy() *ClusterSpec {
+	nc, err := copystructure.Copy(c)
+	if err != nil {
+		panic(err)
 	}
-	if s.RequestTimeout == ZeroDuration {
-		s.RequestTimeout = Duration{Duration: DefaultRequestTimeout}
+	if !reflect.DeepEqual(c, nc) {
+		panic("not equal")
 	}
-	if s.ConvergenceTimeout == ZeroDuration {
-		s.ConvergenceTimeout = Duration{Duration: DefaultConvergenceTimeout}
-	}
-	if s.InitTimeout == ZeroDuration {
-		s.InitTimeout = Duration{Duration: DefaultInitTimeout}
-	}
-	if s.SyncTimeout == ZeroDuration {
-		s.SyncTimeout = Duration{Duration: DefaultSyncTimeout}
-	}
-	if s.FailInterval == ZeroDuration {
-		s.FailInterval = Duration{Duration: DefaultFailInterval}
-	}
-	if s.MaxStandbys == 0 {
-		s.MaxStandbys = DefaultMaxStandbys
-	}
-	if s.MaxStandbysPerSender == 0 {
-		s.MaxStandbysPerSender = DefaultMaxStandbysPerSender
-	}
-	if s.MergePgParameters == nil {
-		v := DefaultMergePGParameter
-		s.MergePgParameters = &v
-	}
+	return nc.(*ClusterSpec)
 }
 
-func (s *ClusterSpec) Validate() error {
+// DefSpec returns a new ClusterSpec with unspecified values populated with
+// their defaults
+func (c *Cluster) DefSpec() *ClusterSpec {
+	return c.Spec.WithDefaults()
+}
+
+// WithDefaults returns a new ClusterSpec with unspecified values populated with
+// their defaults
+func (os *ClusterSpec) WithDefaults() *ClusterSpec {
+	// Take a copy of the input ClusterSpec since we don't want to change the original
+	s := os.DeepCopy()
+	if s.SleepInterval == nil {
+		s.SleepInterval = &Duration{Duration: DefaultSleepInterval}
+	}
+	if s.RequestTimeout == nil {
+		s.RequestTimeout = &Duration{Duration: DefaultRequestTimeout}
+	}
+	if s.ConvergenceTimeout == nil {
+		s.ConvergenceTimeout = &Duration{Duration: DefaultConvergenceTimeout}
+	}
+	if s.InitTimeout == nil {
+		s.InitTimeout = &Duration{Duration: DefaultInitTimeout}
+	}
+	if s.SyncTimeout == nil {
+		s.SyncTimeout = &Duration{Duration: DefaultSyncTimeout}
+	}
+	if s.FailInterval == nil {
+		s.FailInterval = &Duration{Duration: DefaultFailInterval}
+	}
+	if s.MaxStandbys == nil {
+		s.MaxStandbys = Uint16P(DefaultMaxStandbys)
+	}
+	if s.MaxStandbysPerSender == nil {
+		s.MaxStandbysPerSender = Uint16P(DefaultMaxStandbysPerSender)
+	}
+	if s.SynchronousReplication == nil {
+		s.SynchronousReplication = BoolP(DefaultSynchronousReplication)
+	}
+	if s.UsePgrewind == nil {
+		s.UsePgrewind = BoolP(DefaultUsePgrewind)
+	}
+	if s.MergePgParameters == nil {
+		s.MergePgParameters = BoolP(DefaultMergePGParameter)
+	}
+	if s.Role == nil {
+		v := DefaultRole
+		s.Role = &v
+	}
+	return s
+}
+
+// Validate validates a cluster spec.
+func (os *ClusterSpec) Validate() error {
+	s := os.WithDefaults()
 	if s.SleepInterval.Duration < 0 {
 		return fmt.Errorf("sleepInterval must be positive")
 	}
@@ -265,36 +316,56 @@ func (s *ClusterSpec) Validate() error {
 	if s.FailInterval.Duration < 0 {
 		return fmt.Errorf("failInterval must be positive")
 	}
-	if s.MaxStandbys < 1 {
+	if *s.MaxStandbys < 1 {
 		return fmt.Errorf("maxStandbys must be at least 1")
 	}
-	if s.MaxStandbysPerSender < 1 {
+	if *s.MaxStandbysPerSender < 1 {
 		return fmt.Errorf("maxStandbysPerSender must be at least 1")
 	}
-	if s.InitMode == "" {
+	if s.InitMode == nil {
 		return fmt.Errorf("initMode undefined")
 	}
-	if s.InitMode == ClusterInitModeExisting {
+	switch *s.InitMode {
+	case ClusterInitModeNew:
+	case ClusterInitModeExisting:
 		if s.ExistingConfig == nil {
 			return fmt.Errorf("existingConfig undefined. Required when initMode is \"existing\"")
 		}
 		if s.ExistingConfig.KeeperUID == "" {
 			return fmt.Errorf("existingConfig.keeperUID undefined")
 		}
+	case ClusterInitModePITR:
+		if s.PITRConfig == nil {
+			return fmt.Errorf("pitrConfig undefined. Required when initMode is \"pitr\"")
+		}
+		if s.PITRConfig.DataRestoreCommand == "" {
+			return fmt.Errorf("pitrConfig.DataRestoreCommand undefined")
+		}
+	default:
+		return fmt.Errorf("unknown initMode: %q", *s.InitMode)
+
+	}
+
+	switch *s.Role {
+	case ClusterRoleMaster:
+	case ClusterRoleStandby:
+	default:
+		return fmt.Errorf("unknown role: %q", *s.InitMode)
 	}
 	return nil
 }
 
 func (c *Cluster) UpdateSpec(ns *ClusterSpec) error {
 	s := c.Spec
-	ns.SetDefaults()
 	if err := ns.Validate(); err != nil {
 		return fmt.Errorf("invalid cluster spec: %v", err)
 	}
-	if s.InitMode != ns.InitMode {
+	ds := s.WithDefaults()
+	dns := ns.WithDefaults()
+	if *ds.InitMode != *dns.InitMode {
 		return fmt.Errorf("cannot change cluster init mode")
 	}
-	if s.Role == ClusterRoleMaster && ns.Role == ClusterRoleStandby {
+	if *ds.Role == ClusterRoleMaster && *dns.Role == ClusterRoleStandby {
 		return fmt.Errorf("cannot update a cluster from master role to standby role")
 	}
 	c.Spec = ns
@@ -311,7 +382,6 @@ func NewCluster(uid string, cs *ClusterSpec) *Cluster {
 			Phase: ClusterPhaseInitializing,
 		},
 	}
-	c.Spec.SetDefaults()
 	return c
 }
 
@@ -434,8 +504,6 @@ type Proxy struct {
 type Duration struct {
 	time.Duration
 }
-
-var ZeroDuration = Duration{}
 
 func (d Duration) MarshalJSON() ([]byte, error) {
 	return json.Marshal(d.String())

@@ -123,7 +123,6 @@ func update(cmd *cobra.Command, args []string) {
 				die("failed to unmarshal cluster spec: %v", err)
 			}
 		}
-		newcs.SetDefaults()
 		if err := cd.Cluster.UpdateSpec(newcs); err != nil {
 			die("Cannot update cluster spec: %v", err)
 		}
