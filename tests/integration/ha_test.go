@@ -73,9 +73,9 @@ func TestInitWithMultipleKeepers(t *testing.T) {
 	sm := store.NewStoreManager(tstore.store, storePath)
 
 	initialClusterSpec := &cluster.ClusterSpec{
-		InitMode:           cluster.ClusterInitModeNew,
-		FailInterval:       cluster.Duration{Duration: 10 * time.Second},
-		ConvergenceTimeout: cluster.Duration{Duration: 30 * time.Second},
+		InitMode:           cluster.ClusterInitModeP(cluster.ClusterInitModeNew),
+		FailInterval:       &cluster.Duration{Duration: 10 * time.Second},
+		ConvergenceTimeout: &cluster.Duration{Duration: 30 * time.Second},
 	}
 	initialClusterSpecFile, err := writeClusterSpec(dir, initialClusterSpec)
 	if err != nil {
@@ -121,12 +121,12 @@ func TestInitWithMultipleKeepers(t *testing.T) {
 
 func setupServers(t *testing.T, clusterName, dir string, numKeepers, numSentinels uint8, syncRepl bool, usePgrewind bool) (testKeepers, testSentinels, *TestStore) {
 	initialClusterSpec := &cluster.ClusterSpec{
-		InitMode:               cluster.ClusterInitModeNew,
-		SleepInterval:          cluster.Duration{Duration: 2 * time.Second},
-		FailInterval:           cluster.Duration{Duration: 5 * time.Second},
-		ConvergenceTimeout:     cluster.Duration{Duration: 30 * time.Second},
-		SynchronousReplication: syncRepl,
-		UsePgrewind:            usePgrewind,
+		InitMode:               cluster.ClusterInitModeP(cluster.ClusterInitModeNew),
+		SleepInterval:          &cluster.Duration{Duration: 2 * time.Second},
+		FailInterval:           &cluster.Duration{Duration: 5 * time.Second},
+		ConvergenceTimeout:     &cluster.Duration{Duration: 30 * time.Second},
+		SynchronousReplication: cluster.BoolP(syncRepl),
+		UsePgrewind:            cluster.BoolP(usePgrewind),
 		PGParameters:           make(cluster.PGParameters),
 	}
 	return setupServersCustom(t, clusterName, dir, numKeepers, numSentinels, initialClusterSpec)
@@ -753,11 +753,11 @@ func TestFailedStandby(t *testing.T) {
 	clusterName := uuid.NewV4().String()
 
 	initialClusterSpec := &cluster.ClusterSpec{
-		InitMode:             cluster.ClusterInitModeNew,
-		SleepInterval:        cluster.Duration{Duration: 2 * time.Second},
-		FailInterval:         cluster.Duration{Duration: 5 * time.Second},
-		ConvergenceTimeout:   cluster.Duration{Duration: 30 * time.Second},
-		MaxStandbysPerSender: 1,
+		InitMode:             cluster.ClusterInitModeP(cluster.ClusterInitModeNew),
+		SleepInterval:        &cluster.Duration{Duration: 2 * time.Second},
+		FailInterval:         &cluster.Duration{Duration: 5 * time.Second},
+		ConvergenceTimeout:   &cluster.Duration{Duration: 30 * time.Second},
+		MaxStandbysPerSender: cluster.Uint16P(1),
 		PGParameters:         make(cluster.PGParameters),
 	}
 
@@ -844,11 +844,11 @@ func TestLoweredMaxStandbysPerSender(t *testing.T) {
 	clusterName := uuid.NewV4().String()
 
 	initialClusterSpec := &cluster.ClusterSpec{
-		InitMode:             cluster.ClusterInitModeNew,
-		SleepInterval:        cluster.Duration{Duration: 2 * time.Second},
-		FailInterval:         cluster.Duration{Duration: 5 * time.Second},
-		ConvergenceTimeout:   cluster.Duration{Duration: 30 * time.Second},
-		MaxStandbysPerSender: 2,
+		InitMode:             cluster.ClusterInitModeP(cluster.ClusterInitModeNew),
+		SleepInterval:        &cluster.Duration{Duration: 2 * time.Second},
+		FailInterval:         &cluster.Duration{Duration: 5 * time.Second},
+		ConvergenceTimeout:   &cluster.Duration{Duration: 30 * time.Second},
+		MaxStandbysPerSender: cluster.Uint16P(2),
 		PGParameters:         make(cluster.PGParameters),
 	}
 

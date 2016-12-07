@@ -46,10 +46,10 @@ func TestInit(t *testing.T) {
 	clusterName := uuid.NewV4().String()
 
 	initialClusterSpec := &cluster.ClusterSpec{
-		InitMode:           cluster.ClusterInitModeNew,
-		SleepInterval:      cluster.Duration{Duration: 2 * time.Second},
-		FailInterval:       cluster.Duration{Duration: 5 * time.Second},
-		ConvergenceTimeout: cluster.Duration{Duration: 30 * time.Second},
+		InitMode:           cluster.ClusterInitModeP(cluster.ClusterInitModeNew),
+		SleepInterval:      &cluster.Duration{Duration: 2 * time.Second},
+		FailInterval:       &cluster.Duration{Duration: 5 * time.Second},
+		ConvergenceTimeout: &cluster.Duration{Duration: 30 * time.Second},
 	}
 	initialClusterSpecFile, err := writeClusterSpec(dir, initialClusterSpec)
 	if err != nil {
@@ -108,9 +108,9 @@ func testInitNew(t *testing.T, merge bool) {
 	sm := store.NewStoreManager(tstore.store, storePath)
 
 	initialClusterSpec := &cluster.ClusterSpec{
-		InitMode:           cluster.ClusterInitModeNew,
-		FailInterval:       cluster.Duration{Duration: 10 * time.Second},
-		ConvergenceTimeout: cluster.Duration{Duration: 30 * time.Second},
+		InitMode:           cluster.ClusterInitModeP(cluster.ClusterInitModeNew),
+		FailInterval:       &cluster.Duration{Duration: 10 * time.Second},
+		ConvergenceTimeout: &cluster.Duration{Duration: 30 * time.Second},
 		MergePgParameters:  &merge,
 	}
 	initialClusterSpecFile, err := writeClusterSpec(dir, initialClusterSpec)
@@ -183,10 +183,10 @@ func testInitExisting(t *testing.T, merge bool) {
 	sm := store.NewStoreManager(tstore.store, storePath)
 
 	initialClusterSpec := &cluster.ClusterSpec{
-		InitMode:           cluster.ClusterInitModeNew,
-		SleepInterval:      cluster.Duration{Duration: 2 * time.Second},
-		FailInterval:       cluster.Duration{Duration: 5 * time.Second},
-		ConvergenceTimeout: cluster.Duration{Duration: 30 * time.Second},
+		InitMode:           cluster.ClusterInitModeP(cluster.ClusterInitModeNew),
+		SleepInterval:      &cluster.Duration{Duration: 2 * time.Second},
+		FailInterval:       &cluster.Duration{Duration: 5 * time.Second},
+		ConvergenceTimeout: &cluster.Duration{Duration: 30 * time.Second},
 		PGParameters: cluster.PGParameters{
 			"archive_mode": "on",
 		},
@@ -229,10 +229,10 @@ func testInitExisting(t *testing.T, merge bool) {
 
 	// Now initialize a new cluster with the existing keeper
 	initialClusterSpec = &cluster.ClusterSpec{
-		InitMode:           cluster.ClusterInitModeExisting,
-		SleepInterval:      cluster.Duration{Duration: 2 * time.Second},
-		FailInterval:       cluster.Duration{Duration: 5 * time.Second},
-		ConvergenceTimeout: cluster.Duration{Duration: 30 * time.Second},
+		InitMode:           cluster.ClusterInitModeP(cluster.ClusterInitModeExisting),
+		SleepInterval:      &cluster.Duration{Duration: 2 * time.Second},
+		FailInterval:       &cluster.Duration{Duration: 5 * time.Second},
+		ConvergenceTimeout: &cluster.Duration{Duration: 30 * time.Second},
 		MergePgParameters:  &merge,
 		ExistingConfig: &cluster.ExistingConfig{
 			KeeperUID: tk.id,
@@ -328,10 +328,10 @@ func TestInitUsers(t *testing.T) {
 	sm := store.NewStoreManager(tstore.store, storePath)
 
 	initialClusterSpec := &cluster.ClusterSpec{
-		InitMode:           cluster.ClusterInitModeNew,
-		SleepInterval:      cluster.Duration{Duration: 2 * time.Second},
-		FailInterval:       cluster.Duration{Duration: 5 * time.Second},
-		ConvergenceTimeout: cluster.Duration{Duration: 30 * time.Second},
+		InitMode:           cluster.ClusterInitModeP(cluster.ClusterInitModeNew),
+		SleepInterval:      &cluster.Duration{Duration: 2 * time.Second},
+		FailInterval:       &cluster.Duration{Duration: 5 * time.Second},
+		ConvergenceTimeout: &cluster.Duration{Duration: 30 * time.Second},
 	}
 	initialClusterSpecFile, err := writeClusterSpec(dir, initialClusterSpec)
 	if err != nil {
@@ -418,11 +418,11 @@ func TestInitialClusterSpec(t *testing.T) {
 	sm := store.NewStoreManager(tstore.store, storePath)
 
 	initialClusterSpec := &cluster.ClusterSpec{
-		InitMode:               cluster.ClusterInitModeNew,
-		SleepInterval:          cluster.Duration{Duration: 2 * time.Second},
-		FailInterval:           cluster.Duration{Duration: 5 * time.Second},
-		ConvergenceTimeout:     cluster.Duration{Duration: 30 * time.Second},
-		SynchronousReplication: true,
+		InitMode:               cluster.ClusterInitModeP(cluster.ClusterInitModeNew),
+		SleepInterval:          &cluster.Duration{Duration: 2 * time.Second},
+		FailInterval:           &cluster.Duration{Duration: 5 * time.Second},
+		ConvergenceTimeout:     &cluster.Duration{Duration: 30 * time.Second},
+		SynchronousReplication: cluster.BoolP(true),
 	}
 	initialClusterSpecFile, err := writeClusterSpec(dir, initialClusterSpec)
 	if err != nil {
@@ -446,7 +446,7 @@ func TestInitialClusterSpec(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	if !cd.Cluster.Spec.SynchronousReplication {
+	if !*cd.Cluster.Spec.SynchronousReplication {
 		t.Fatal("expected cluster spec with SynchronousReplication enabled")
 	}
 }

@@ -118,6 +118,9 @@ func getClusterData(e *store.StoreManager) (*cluster.ClusterData, *kvstore.KVPai
 	if cd.FormatVersion != cluster.CurrentCDFormatVersion {
 		return nil, nil, fmt.Errorf("unsupported cluster data format version %d", cd.FormatVersion)
 	}
+	if err := cd.Cluster.Spec.Validate(); err != nil {
+		return nil, nil, fmt.Errorf("clusterdata validation failed: %v", err)
+	}
 	return cd, pair, nil
 }
 

@@ -516,8 +516,8 @@ func (p *PostgresKeeper) Start() {
 		if cd.FormatVersion != cluster.CurrentCDFormatVersion {
 			log.Error("unsupported clusterdata format version", zap.Uint64("version", cd.FormatVersion))
 		} else if cd.Cluster != nil {
-			p.sleepInterval = cd.Cluster.Spec.SleepInterval.Duration
-			p.requestTimeout = cd.Cluster.Spec.RequestTimeout.Duration
+			p.sleepInterval = cd.Cluster.DefSpec().SleepInterval.Duration
+			p.requestTimeout = cd.Cluster.DefSpec().RequestTimeout.Duration
 		}
 	}
 
@@ -677,9 +677,13 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 		log.Error("unsupported clusterdata format version", zap.Uint64("version", cd.FormatVersion))
 		return
 	}
+	if err = cd.Cluster.Spec.Validate(); err != nil {
+		log.Error("clusterdata validation failed", zap.Error(err))
+		return
+	}
 	if cd.Cluster != nil {
-		p.sleepInterval = cd.Cluster.Spec.SleepInterval.Duration
-		p.requestTimeout = cd.Cluster.Spec.RequestTimeout.Duration
+		p.sleepInterval = cd.Cluster.DefSpec().SleepInterval.Duration
+		p.requestTimeout = cd.Cluster.DefSpec().RequestTimeout.Duration
 
 		if p.keeperLocalState.ClusterUID != cd.Cluster.UID {
 			p.keeperLocalState.ClusterUID = cd.Cluster.UID
