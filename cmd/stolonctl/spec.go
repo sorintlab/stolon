@@ -26,7 +26,15 @@ var cmdSpec = &cobra.Command{
 	Short: "Retrieve the current cluster specification",
 }
 
+type specOptions struct {
+	defaults bool
+}
+
+var specOpts specOptions
+
 func init() {
+	cmdSpec.PersistentFlags().BoolVar(&specOpts.defaults, "defaults", false, "also show default values")
+
 	cmdStolonCtl.AddCommand(cmdSpec)
 }
 
@@ -46,7 +54,11 @@ func spec(cmd *cobra.Command, args []string) {
 	if cd.Cluster.Spec == nil {
 		die("no cluster spec available")
 	}
-	specj, err := json.MarshalIndent(cd.Cluster.Spec, "", "\t")
+	cs := cd.Cluster.Spec
+	if specOpts.defaults {
+		cs = cd.Cluster.DefSpec()
+	}
+	specj, err := json.MarshalIndent(cs, "", "\t")
 	if err != nil {
 		die("failed to marshall spec: %v", err)
 	}
