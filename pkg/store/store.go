@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"net/url"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -66,6 +67,8 @@ const (
 	MinTTL = 20 * time.Second
 )
 
+var URLSchemeRegexp = regexp.MustCompile(`^([a-zA-Z][a-zA-Z0-9+-.]*)://`)
+
 type Config struct {
 	Backend       Backend
 	Endpoints     string
@@ -110,27 +113,32 @@ func NewStore(cfg Config) (kvstore.Store, error) {
 	addrs := []string{}
 	var scheme string
 	for _, e := range endpoints {
-		var addr string
-		u, err := url.Parse(e)
-		if err != nil {
-			return nil, fmt.Errorf("cannot parse endpoint %q: %v", e, err)
-		}
-		if u.Scheme == "" {
-			u.Scheme = "http"
-			addr = e
-		} else {
+		var curscheme, addr string
+		if URLSchemeRegexp.Match([]byte(e)) {
+			u, err := url.Parse(e)
+			if err != nil {
+				return nil, fmt.Errorf("cannot parse endpoint %q: %v", e, err)
+			}
+			curscheme = u.Scheme
 			addr = u.Host
+		} else {
+			// Assume it's a schemeless endpoint
+			curscheme = "http"
+			addr = e
 		}
 		if scheme == "" {
-			scheme = u.Scheme
+			scheme = curscheme
 		}
-		if scheme != u.Scheme {
+		if scheme != curscheme {
 			return nil, fmt.Errorf("all the endpoints must have the same scheme")
 		}
 		addrs = append(addrs, addr)
 	}
 
 	var tlsConfig *tls.Config
+	if scheme != "http" && scheme != "https" {
+		return nil, fmt.Errorf("endpoints scheme must be http or https")
+	}
 	if scheme == "https" {
 		var err error
 		tlsConfig, err = common.NewTLSConfig(cfg.CertFile, cfg.KeyFile, cfg.CAFile, cfg.SkipTLSVerify)
