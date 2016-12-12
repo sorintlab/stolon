@@ -235,7 +235,7 @@ func testInitExisting(t *testing.T, merge bool) {
 		ConvergenceTimeout: &cluster.Duration{Duration: 30 * time.Second},
 		MergePgParameters:  &merge,
 		ExistingConfig: &cluster.ExistingConfig{
-			KeeperUID: tk.id,
+			KeeperUID: tk.uid,
 		},
 	}
 	initialClusterSpecFile, err = writeClusterSpec(dir, initialClusterSpec)

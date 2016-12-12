@@ -116,7 +116,7 @@ func (s *Sentinel) electionLoop() {
 
 func (s *Sentinel) setSentinelInfo(ttl time.Duration) error {
 	sentinelInfo := &cluster.SentinelInfo{
-		UID: s.id,
+		UID: s.uid,
 	}
 	log.Debug("sentinelInfod dump", zap.String("sentinelInfo", spew.Sdump(sentinelInfo)))
 
@@ -130,27 +130,27 @@ func (s *Sentinel) getKeepersInfo(ctx context.Context) (cluster.KeepersInfo, err
 	return s.e.GetKeepersInfo()
 }
 
-func (s *Sentinel) SetKeeperError(id string) {
-	if _, ok := s.keeperErrorTimers[id]; !ok {
-		s.keeperErrorTimers[id] = timer.Now()
+func (s *Sentinel) SetKeeperError(uid string) {
+	if _, ok := s.keeperErrorTimers[uid]; !ok {
+		s.keeperErrorTimers[uid] = timer.Now()
 	}
 }
 
-func (s *Sentinel) CleanKeeperError(id string) {
-	if _, ok := s.keeperErrorTimers[id]; ok {
-		delete(s.keeperErrorTimers, id)
+func (s *Sentinel) CleanKeeperError(uid string) {
+	if _, ok := s.keeperErrorTimers[uid]; ok {
+		delete(s.keeperErrorTimers, uid)
 	}
 }
 
-func (s *Sentinel) SetDBError(id string) {
-	if _, ok := s.dbErrorTimers[id]; !ok {
-		s.dbErrorTimers[id] = timer.Now()
+func (s *Sentinel) SetDBError(uid string) {
+	if _, ok := s.dbErrorTimers[uid]; !ok {
+		s.dbErrorTimers[uid] = timer.Now()
 	}
 }
 
-func (s *Sentinel) CleanDBError(id string) {
-	if _, ok := s.dbErrorTimers[id]; ok {
-		delete(s.dbErrorTimers, id)
+func (s *Sentinel) CleanDBError(uid string) {
+	if _, ok := s.dbErrorTimers[uid]; ok {
+		delete(s.dbErrorTimers, uid)
 	}
 }
 
@@ -1153,7 +1153,7 @@ type DBConvergenceInfo struct {
 }
 
 type Sentinel struct {
-	id  string
+	uid string
 	cfg *config
 	e   *store.StoreManager
 
@@ -1186,7 +1186,7 @@ type Sentinel struct {
 	keeperInfoHistories KeeperInfoHistories
 }
 
-func NewSentinel(id string, cfg *config, stop chan bool, end chan bool) (*Sentinel, error) {
+func NewSentinel(uid string, cfg *config, stop chan bool, end chan bool) (*Sentinel, error) {
 	var initialClusterSpec *cluster.ClusterSpec
 	if cfg.initialClusterSpecFile != "" {
 		configData, err := ioutil.ReadFile(cfg.initialClusterSpecFile)
@@ -1217,10 +1217,10 @@ func NewSentinel(id string, cfg *config, stop chan bool, end chan bool) (*Sentin
 	}
 	e := store.NewStoreManager(kvstore, storePath)
 
-	candidate := leadership.NewCandidate(kvstore, filepath.Join(storePath, common.SentinelLeaderKey), id, store.MinTTL)
+	candidate := leadership.NewCandidate(kvstore, filepath.Join(storePath, common.SentinelLeaderKey), uid, store.MinTTL)
 
 	return &Sentinel{
-		id:                 id,
+		uid:                uid,
 		cfg:                cfg,
 		e:                  e,
 		candidate:          candidate,
@@ -1404,8 +1404,8 @@ func sentinel(cmd *cobra.Command, args []string) {
 
 	}
 
-	id := common.UID()
-	log.Info("sentinel id", zap.String("id", id))
+	uid := common.UID()
+	log.Info("sentinel uid", zap.String("uid", uid))
 
 	stop := make(chan bool, 0)
 	end := make(chan bool, 0)
@@ -1413,7 +1413,7 @@ func sentinel(cmd *cobra.Command, args []string) {
 	signal.Notify(sigs, os.Interrupt, os.Kill)
 	go sigHandler(sigs, stop)
 
-	s, err := NewSentinel(id, &cfg, stop, end)
+	s, err := NewSentinel(uid, &cfg, stop, end)
 	if err != nil {
 		fmt.Printf("cannot create sentinel: %v\n", err)
 		os.Exit(1)

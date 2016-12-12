@@ -30,7 +30,7 @@ spec:
         env:
           - name: KEEPER
             value: "true"
-          - name: STKEEPER_ID
+          - name: STKEEPER_UID
             value: "keeper1"
           - name: STKEEPER_CLUSTER_NAME
           # TODO(sgotti) Get cluster name from "stoloncluster" label using a downward volume api instead of duplicating the name here?

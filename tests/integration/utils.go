@@ -54,7 +54,7 @@ var portMutex = sync.Mutex{}
 
 type Process struct {
 	t    *testing.T
-	id   string
+	uid  string
 	name string
 	args []string
 	cmd  *gexpect.ExpectSubprocess
@@ -63,7 +63,7 @@ type Process struct {
 
 func (p *Process) start() error {
 	if p.cmd != nil {
-		panic(fmt.Errorf("%s: cmd not cleanly stopped", p.id))
+		panic(fmt.Errorf("%s: cmd not cleanly stopped", p.uid))
 	}
 	cmd := exec.Command(p.bin, p.args...)
 	pr, pw, err := os.Pipe()
@@ -77,7 +77,7 @@ func (p *Process) start() error {
 	go func() {
 		scanner := bufio.NewScanner(pr)
 		for scanner.Scan() {
-			p.t.Logf("[%s %s]: %s", p.name, p.id, scanner.Text())
+			p.t.Logf("[%s %s]: %s", p.name, p.uid, scanner.Text())
 		}
 	}()
 
@@ -97,17 +97,17 @@ func (p *Process) StartExpect() error {
 }
 
 func (p *Process) Signal(sig os.Signal) error {
-	p.t.Logf("signalling %s %s with %s", p.name, p.id, sig)
+	p.t.Logf("signalling %s %s with %s", p.name, p.uid, sig)
 	if p.cmd == nil {
-		panic(fmt.Errorf("p: %s, cmd is empty", p.id))
+		panic(fmt.Errorf("p: %s, cmd is empty", p.uid))
 	}
 	return p.cmd.Cmd.Process.Signal(sig)
 }
 
 func (p *Process) Kill() {
-	p.t.Logf("killing %s %s", p.name, p.id)
+	p.t.Logf("killing %s %s", p.name, p.uid)
 	if p.cmd == nil {
-		panic(fmt.Errorf("p: %s, cmd is empty", p.id))
+		panic(fmt.Errorf("p: %s, cmd is empty", p.uid))
 	}
 	p.cmd.Cmd.Process.Signal(os.Kill)
 	p.cmd.Wait()
@@ -115,9 +115,9 @@ func (p *Process) Kill() {
 }
 
 func (p *Process) Stop() {
-	p.t.Logf("stopping %s %s", p.name, p.id)
+	p.t.Logf("stopping %s %s", p.name, p.uid)
 	if p.cmd == nil {
-		panic(fmt.Errorf("p: %s, cmd is empty", p.id))
+		panic(fmt.Errorf("p: %s, cmd is empty", p.uid))
 	}
 	p.cmd.Continue()
 	p.cmd.Cmd.Process.Signal(os.Interrupt)
@@ -153,17 +153,17 @@ type TestKeeper struct {
 	db              *sql.DB
 }
 
-func NewTestKeeperWithID(t *testing.T, dir, id, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword string, storeBackend store.Backend, storeEndpoints string, a ...string) (*TestKeeper, error) {
+func NewTestKeeperWithID(t *testing.T, dir, uid, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword string, storeBackend store.Backend, storeEndpoints string, a ...string) (*TestKeeper, error) {
 	args := []string{}
 
-	dataDir := filepath.Join(dir, fmt.Sprintf("st%s", id))
+	dataDir := filepath.Join(dir, fmt.Sprintf("st%s", uid))
 
 	pgListenAddress, pgPort, err := getFreePort(true, false)
 	if err != nil {
 		return nil, err
 	}
 
-	args = append(args, fmt.Sprintf("--id=%s", id))
+	args = append(args, fmt.Sprintf("--uid=%s", uid))
 	args = append(args, fmt.Sprintf("--cluster-name=%s", clusterName))
 	args = append(args, fmt.Sprintf("--pg-listen-address=%s", pgListenAddress))
 	args = append(args, fmt.Sprintf("--pg-port=%s", pgPort))
@@ -204,7 +204,7 @@ func NewTestKeeperWithID(t *testing.T, dir, id, clusterName, pgSUUsername, pgSUP
 		t: t,
 		Process: Process{
 			t:    t,
-			id:   id,
+			uid:  uid,
 			name: "keeper",
 			bin:  bin,
 			args: args,
@@ -223,9 +223,9 @@ func NewTestKeeperWithID(t *testing.T, dir, id, clusterName, pgSUUsername, pgSUP
 
 func NewTestKeeper(t *testing.T, dir, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword string, storeBackend store.Backend, storeEndpoints string, a ...string) (*TestKeeper, error) {
 	u := uuid.NewV4()
-	id := fmt.Sprintf("%x", u[:4])
+	uid := fmt.Sprintf("%x", u[:4])
 
-	return NewTestKeeperWithID(t, dir, id, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, storeBackend, storeEndpoints, a...)
+	return NewTestKeeperWithID(t, dir, uid, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, storeBackend, storeEndpoints, a...)
 }
 
 func (tk *TestKeeper) Exec(query string, args ...interface{}) (sql.Result, error) {
@@ -253,7 +253,7 @@ func (tk *TestKeeper) WaitDBUp(timeout time.Duration) error {
 		if err == nil {
 			return nil
 		}
-		tk.t.Logf("tk: %v, error: %v", tk.id, err)
+		tk.t.Logf("tk: %v, error: %v", tk.uid, err)
 		time.Sleep(sleepInterval)
 	}
 	return fmt.Errorf("timeout")
@@ -385,7 +385,7 @@ type TestSentinel struct {
 
 func NewTestSentinel(t *testing.T, dir string, clusterName string, storeBackend store.Backend, storeEndpoints string, a ...string) (*TestSentinel, error) {
 	u := uuid.NewV4()
-	id := fmt.Sprintf("%x", u[:4])
+	uid := fmt.Sprintf("%x", u[:4])
 
 	args := []string{}
 	args = append(args, fmt.Sprintf("--cluster-name=%s", clusterName))
@@ -404,7 +404,7 @@ func NewTestSentinel(t *testing.T, dir string, clusterName string, storeBackend 
 		t: t,
 		Process: Process{
 			t:    t,
-			id:   id,
+			uid:  uid,
 			name: "sentinel",
 			bin:  bin,
 			args: args,
@@ -422,7 +422,7 @@ type TestProxy struct {
 
 func NewTestProxy(t *testing.T, dir string, clusterName string, storeBackend store.Backend, storeEndpoints string, a ...string) (*TestProxy, error) {
 	u := uuid.NewV4()
-	id := fmt.Sprintf("%x", u[:4])
+	uid := fmt.Sprintf("%x", u[:4])
 
 	listenAddress, port, err := getFreePort(true, false)
 	if err != nil {
@@ -448,7 +448,7 @@ func NewTestProxy(t *testing.T, dir string, clusterName string, storeBackend sto
 		t: t,
 		Process: Process{
 			t:    t,
-			id:   id,
+			uid:  uid,
 			name: "proxy",
 			bin:  bin,
 			args: args,
@@ -466,7 +466,7 @@ func (tp *TestProxy) WaitListening(timeout time.Duration) error {
 		if err == nil {
 			return nil
 		}
-		tp.t.Logf("tp: %v, error: %v", tp.id, err)
+		tp.t.Logf("tp: %v, error: %v", tp.uid, err)
 		time.Sleep(sleepInterval)
 	}
 	return fmt.Errorf("timeout")
@@ -479,7 +479,7 @@ func (tp *TestProxy) WaitNotListening(timeout time.Duration) error {
 		if err != nil {
 			return nil
 		}
-		tp.t.Logf("tp: %v, error: %v", tp.id, err)
+		tp.t.Logf("tp: %v, error: %v", tp.uid, err)
 		time.Sleep(sleepInterval)
 	}
 	return fmt.Errorf("timeout")
@@ -522,7 +522,7 @@ func NewTestStore(t *testing.T, dir string, a ...string) (*TestStore, error) {
 
 func NewTestEtcd(t *testing.T, dir string, a ...string) (*TestStore, error) {
 	u := uuid.NewV4()
-	id := fmt.Sprintf("%x", u[:4])
+	uid := fmt.Sprintf("%x", u[:4])
 
 	dataDir := filepath.Join(dir, "etcd")
 
@@ -536,13 +536,13 @@ func NewTestEtcd(t *testing.T, dir string, a ...string) (*TestStore, error) {
 	}
 
 	args := []string{}
-	args = append(args, fmt.Sprintf("--name=%s", id))
+	args = append(args, fmt.Sprintf("--name=%s", uid))
 	args = append(args, fmt.Sprintf("--data-dir=%s", dataDir))
 	args = append(args, fmt.Sprintf("--listen-client-urls=http://%s:%s", listenAddress, port))
 	args = append(args, fmt.Sprintf("--advertise-client-urls=http://%s:%s", listenAddress, port))
 	args = append(args, fmt.Sprintf("--listen-peer-urls=http://%s:%s", listenAddress2, port2))
 	args = append(args, fmt.Sprintf("--initial-advertise-peer-urls=http://%s:%s", listenAddress2, port2))
-	args = append(args, fmt.Sprintf("--initial-cluster=%s=http://%s:%s", id, listenAddress2, port2))
+	args = append(args, fmt.Sprintf("--initial-cluster=%s=http://%s:%s", uid, listenAddress2, port2))
 	args = append(args, a...)
 
 	storeEndpoints := fmt.Sprintf("%s:%s", listenAddress, port)
@@ -564,7 +564,7 @@ func NewTestEtcd(t *testing.T, dir string, a ...string) (*TestStore, error) {
 		t: t,
 		Process: Process{
 			t:    t,
-			id:   id,
+			uid:  uid,
 			name: "etcd",
 			bin:  bin,
 			args: args,
@@ -579,7 +579,7 @@ func NewTestEtcd(t *testing.T, dir string, a ...string) (*TestStore, error) {
 
 func NewTestConsul(t *testing.T, dir string, a ...string) (*TestStore, error) {
 	u := uuid.NewV4()
-	id := fmt.Sprintf("%x", u[:4])
+	uid := fmt.Sprintf("%x", u[:4])
 
 	dataDir := filepath.Join(dir, "consul")
 
@@ -650,7 +650,7 @@ func NewTestConsul(t *testing.T, dir string, a ...string) (*TestStore, error) {
 		t: t,
 		Process: Process{
 			t:    t,
-			id:   id,
+			uid:  uid,
 			name: "consul",
 			bin:  bin,
 			args: args,

@@ -65,7 +65,7 @@ type DBLocalState struct {
 }
 
 type config struct {
-	id                      string
+	uid                     string
 	storeBackend            string
 	storeEndpoints          string
 	storeCertFile           string
@@ -97,7 +97,8 @@ func init() {
 		os.Exit(1)
 	}
 
-	cmdKeeper.PersistentFlags().StringVar(&cfg.id, "id", "", "keeper id (must be unique in the cluster and can contain only lower-case letters, numbers and the underscore character). If not provided a random id will be generated.")
+	cmdKeeper.PersistentFlags().StringVar(&cfg.uid, "id", "", "keeper uid (must be unique in the cluster and can contain only lower-case letters, numbers and the underscore character). If not provided a random uid will be generated.")
+	cmdKeeper.PersistentFlags().StringVar(&cfg.uid, "uid", "", "keeper uid (must be unique in the cluster and can contain only lower-case letters, numbers and the underscore character). If not provided a random uid will be generated.")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.storeBackend, "store-backend", "", "store backend type (etcd or consul)")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.storeEndpoints, "store-endpoints", "", "a comma-delimited list of store endpoints (use https scheme for tls communication) (defaults: http://127.0.0.1:2379 for etcd, http://127.0.0.1:8500 for consul)")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.storeCertFile, "store-cert-file", "", "certificate file for client identification to the store")
@@ -116,6 +117,8 @@ func init() {
 	cmdKeeper.PersistentFlags().StringVar(&cfg.pgSUPassword, "pg-su-password", "", "postgres superuser password. Needed for pg_rewind based synchronization. If provided it'll be configured on db initialization. Only one of --pg-su-password or --pg-su-passwordfile is required. Must be the same for all keepers.")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.pgSUPasswordFile, "pg-su-passwordfile", "", "postgres superuser password file. Requires --pg-su-username. Must be the same for all keepers)")
 	cmdKeeper.PersistentFlags().BoolVar(&cfg.debug, "debug", false, "enable debug logging")
+
+	cmdKeeper.PersistentFlags().MarkDeprecated("id", "please use --uid")
 }
 
 var mandatoryPGParameters = common.Parameters{
@@ -369,15 +372,15 @@ func NewPostgresKeeper(cfg *config, stop chan bool, end chan error) (*PostgresKe
 	if err != nil && !os.IsNotExist(err) {
 		return nil, fmt.Errorf("failed to load keeper local state file: %v", err)
 	}
-	if p.keeperLocalState.UID != "" && p.cfg.id != "" && p.keeperLocalState.UID != p.cfg.id {
-		fmt.Printf("saved id %q differs from configuration id: %q\n", p.keeperLocalState.UID, cfg.id)
+	if p.keeperLocalState.UID != "" && p.cfg.uid != "" && p.keeperLocalState.UID != p.cfg.uid {
+		fmt.Printf("saved uid %q differs from configuration uid: %q\n", p.keeperLocalState.UID, cfg.uid)
 		os.Exit(1)
 	}
 	if p.keeperLocalState.UID == "" {
-		p.keeperLocalState.UID = cfg.id
-		if cfg.id == "" {
+		p.keeperLocalState.UID = cfg.uid
+		if cfg.uid == "" {
 			p.keeperLocalState.UID = common.UID()
-			log.Info("uid generated", zap.String("id", p.keeperLocalState.UID))
+			log.Info("uid generated", zap.String("uid", p.keeperLocalState.UID))
 		}
 		if err = p.saveKeeperLocalState(); err != nil {
 			fmt.Printf("error: %v\n", err)
@@ -1408,9 +1411,9 @@ func keeper(cmd *cobra.Command, args []string) {
 	}
 	log.Info("exclusive lock on data dir taken")
 
-	if cfg.id != "" {
-		if !pg.IsValidReplSlotName(cfg.id) {
-			fmt.Printf("keeper id %q not valid. It can contain only lower-case letters, numbers and the underscore character\n", cfg.id)
+	if cfg.uid != "" {
+		if !pg.IsValidReplSlotName(cfg.uid) {
+			fmt.Printf("keeper uid %q not valid. It can contain only lower-case letters, numbers and the underscore character\n", cfg.uid)
 			os.Exit(1)
 		}
 	}

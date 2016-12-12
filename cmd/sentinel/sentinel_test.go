@@ -2018,7 +2018,7 @@ func TestUpdateCluster(t *testing.T) {
 	}
 
 	for i, tt := range tests {
-		s := &Sentinel{id: "id", UIDFn: testUIDFn, RandFn: testRandFn, dbConvergenceInfos: make(map[string]*DBConvergenceInfo)}
+		s := &Sentinel{uid: "sentinel01", UIDFn: testUIDFn, RandFn: testRandFn, dbConvergenceInfos: make(map[string]*DBConvergenceInfo)}
 
 		// reset curUID func value to latest db uid
 		curUID = 0
