@@ -67,15 +67,7 @@ There can be tons of different partitioning cases. The primary ones are covered 
 
 ## FAQ
 
-### Why clients should use the stolon proxy?
-
-Since stolon by default leverages consistency over availability, there's the need for the clients to be connected to the current cluster elected master and be disconnected to unelected ones. For example, if you are connected to the current elected master and subsequently the cluster (for any valid reason, like network partitioning) elects a new master, to achieve consistency, the client needs to be disconnected from the old master (or it'll write data to it that will be lost when it resyncs). This is the purpose of the stolon proxy.
-
-### Why didn't you use an already existing proxy like haproxy?
-
-For our need to forcibly close connections to unelected masters and handle keepers/sentinel that can come and go and change their addresses we implemented a dedicated proxy that's directly reading it's state from the store. Thanks to go goroutines it's very fast.
-
-We are open to alternative solutions (PRs are welcome) like using haproxy if they can met the above requirements. For example, an hypothetical haproxy based proxy needs a way to work with changing ip addresses, get the current cluster information and being able to forcibly close a connection when an haproxy backend is marked as failed (as a note, to achieve the latter, a possible solution that needs testing will be to use the [on-marked-down shutdown-sessions](https://cbonte.github.io/haproxy-dconv/configuration-1.6.html#5.2-on-marked-down) haproxy server option).
+See [here](doc/faq.md) for a list of faq. If you have additional questions please ask.
 
 ## Contributing to stolon
 
