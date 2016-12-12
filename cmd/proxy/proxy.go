@@ -71,7 +71,7 @@ func init() {
 }
 
 type ClusterChecker struct {
-	id            string
+	uid           string
 	listenAddress string
 	port          string
 
@@ -83,7 +83,7 @@ type ClusterChecker struct {
 	endPollonProxyCh chan error
 }
 
-func NewClusterChecker(id string, cfg config) (*ClusterChecker, error) {
+func NewClusterChecker(uid string, cfg config) (*ClusterChecker, error) {
 	storePath := filepath.Join(common.StoreBasePath, cfg.clusterName)
 
 	kvstore, err := store.NewStore(store.Config{
@@ -100,7 +100,7 @@ func NewClusterChecker(id string, cfg config) (*ClusterChecker, error) {
 	e := store.NewStoreManager(kvstore, storePath)
 
 	return &ClusterChecker{
-		id:               id,
+		uid:              uid,
 		listenAddress:    cfg.listenAddress,
 		port:             cfg.port,
 		stopListening:    cfg.stopListening,
@@ -157,7 +157,7 @@ func (c *ClusterChecker) sendPollonConfData(confData pollon.ConfData) {
 
 func (c *ClusterChecker) SetProxyInfo(e *store.StoreManager, uid string, generation int64, ttl time.Duration) error {
 	proxyInfo := &cluster.ProxyInfo{
-		UID:             c.id,
+		UID:             c.uid,
 		ProxyUID:        uid,
 		ProxyGeneration: generation,
 	}
@@ -287,10 +287,10 @@ func proxy(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	id := common.UID()
-	log.Info("proxy id", zap.String("id", id))
+	uid := common.UID()
+	log.Info("proxy uid", zap.String("uid", uid))
 
-	clusterChecker, err := NewClusterChecker(id, cfg)
+	clusterChecker, err := NewClusterChecker(uid, cfg)
 	if err != nil {
 		fmt.Printf("cannot create cluster checker: %v", err)
 		os.Exit(1)
