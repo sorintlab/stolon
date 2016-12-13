@@ -28,8 +28,6 @@ spec:
             chown stolon:stolon $PGDATA
             exec gosu stolon stolon-keeper --data-dir $PGDATA
         env:
-          - name: KEEPER
-            value: "true"
           - name: STKEEPER_UID
             value: "keeper0"
           - name: STKEEPER_CLUSTER_NAME
@@ -39,7 +37,6 @@ spec:
             value: "etcd" # Or consul
           - name: STKEEPER_STORE_ENDPOINTS
             value: "http://192.168.122.1:2379"
-            # Enable debugging
           - name: STKEEPER_PG_REPL_USERNAME
             value: "repluser"
             # Or use a password file like in the below supersuser password
@@ -49,8 +46,9 @@ spec:
             value: "stolon"
           - name: STKEEPER_PG_SU_PASSWORDFILE
             value: "/etc/secrets/stolon/password"
-          - name: STKEEPER_DEBUG
-            value: "true"
+          ## Uncomment this to enable debug logs
+          #- name: STKEEPER_DEBUG
+          #  value: "true"
         ports:
           - containerPort: 5432
         volumeMounts:

@@ -22,8 +22,6 @@ spec:
           - |
             exec gosu stolon stolon-proxy
         env:
-          - name: PROXY
-            value: "true"
           - name: STPROXY_CLUSTER_NAME
           # TODO(sgotti) Get cluster name from "stoloncluster" label using a downward volume api instead of duplicating the name here
             value: "kube-stolon"
@@ -33,9 +31,9 @@ spec:
             value: "http://192.168.122.1:2379"
           - name: STPROXY_LISTEN_ADDRESS
             value: "0.0.0.0"
-            # Enable debugging
-          - name: STPROXY_DEBUG
-            value: "true"
+          ## Uncomment this to enable debug logs
+          #- name: STPROXY_DEBUG
+          #  value: "true"
         ports:
           - containerPort: 5432
         readinessProbe:
