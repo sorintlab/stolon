@@ -504,7 +504,7 @@ func (p *Manager) SyncFromFollowedPGRewind(followedConnParams ConnParams, passwo
 	user := followedConnParams.Get("user")
 	pgpass.WriteString(fmt.Sprintf("%s:%s:*:%s:%s\n", host, port, user, password))
 
-	// Disable syncronous replication. pg_rewind needs to create a
+	// Disable synchronous commits. pg_rewind needs to create a
 	// temporary table on the master but if synchronous replication is
 	// enabled and there're no active standbys it will hang.
 	followedConnParams.Set("options", "-c synchronous_commit=off")
@@ -524,6 +524,8 @@ func (p *Manager) SyncFromFollowedPGRewind(followedConnParams ConnParams, passwo
 }
 
 func (p *Manager) SyncFromFollowed(followedConnParams ConnParams) error {
+	fcp := followedConnParams.Copy()
+
 	// ioutil.Tempfile already creates files with 0600 permissions
 	pgpass, err := ioutil.TempFile("", "pgpass")
 	if err != nil {
@@ -532,15 +534,24 @@ func (p *Manager) SyncFromFollowed(followedConnParams ConnParams) error {
 	defer os.Remove(pgpass.Name())
 	defer pgpass.Close()
 
-	host := followedConnParams.Get("host")
-	port := followedConnParams.Get("port")
-	user := followedConnParams.Get("user")
-	password := followedConnParams.Get("password")
+	host := fcp.Get("host")
+	port := fcp.Get("port")
+	user := fcp.Get("user")
+	password := fcp.Get("password")
 	pgpass.WriteString(fmt.Sprintf("%s:%s:*:%s:%s\n", host, port, user, password))
+
+	// Remove password from the params passed to pg_basebackup
+	fcp.Del("password")
+
+	// Disable synchronous commits. pg_basebackup calls
+	// pg_start_backup()/pg_stop_backup() on the master but if synchronous
+	// replication is enabled and there're no active standbys they will hang.
+	fcp.Set("options", "-c synchronous_commit=off")
+	followedConnString := fcp.ConnString()
 
 	log.Info("running pg_basebackup")
 	name := filepath.Join(p.pgBinPath, "pg_basebackup")
-	cmd := exec.Command(name, "-R", "-D", p.dataDir, "--host="+host, "--port="+port, "-U", user)
+	cmd := exec.Command(name, "-R", "-D", p.dataDir, "-d", followedConnString)
 	cmd.Env = append(cmd.Env, fmt.Sprintf("PGPASSFILE=%s", pgpass.Name()))
 	log.Debug("execing cmd", zap.Object("cmd", cmd))
 	if out, err := cmd.CombinedOutput(); err != nil {

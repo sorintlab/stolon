@@ -26,21 +26,33 @@ import (
 
 type ConnParams map[string]string
 
-func (p ConnParams) Set(k, v string) {
-	p[k] = v
+func (cp ConnParams) Set(k, v string) {
+	cp[k] = v
 }
 
-func (p ConnParams) Get(k string) (v string) {
-	return p[k]
+func (cp ConnParams) Get(k string) (v string) {
+	return cp[k]
 }
 
-func (p ConnParams) Isset(k string) bool {
-	_, ok := p[k]
+func (cp ConnParams) Del(k string) {
+	delete(cp, k)
+}
+
+func (cp ConnParams) Isset(k string) bool {
+	_, ok := cp[k]
 	return ok
 }
 
-func (p ConnParams) Equals(cp ConnParams) bool {
-	return reflect.DeepEqual(p, cp)
+func (cp ConnParams) Equals(cp2 ConnParams) bool {
+	return reflect.DeepEqual(cp, cp2)
+}
+
+func (cp ConnParams) Copy() ConnParams {
+	ncp := ConnParams{}
+	for k, v := range cp {
+		ncp[k] = v
+	}
+	return ncp
 }
 
 // scanner implements a tokenizer for libpq-style option strings.
