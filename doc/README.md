@@ -13,3 +13,4 @@
 * Misc topics
  * [Enabling pg_rewind](pg_rewind.md)
  * [Enabling synchronous replication](syncrepl.md)
+* [FAQ](faq.md)
