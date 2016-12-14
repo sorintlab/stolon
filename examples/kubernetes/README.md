@@ -11,9 +11,8 @@ There're two examples. The difference between them is how the keepers pods are d
 
 Prebuilt images are available on the dockerhub, the images' tags are the stolon release version plus the postgresql version (for example v0.5.0-pg9.6). Additional images are available:
 
-* `latest-pg9.6`: latest released image (after v0.4.0).
+* `latest-pg9.6`: latest released image (for stolon versions >= v0.5.0).
 * `master-pg9.6`: automatically built after every commit to the master branch.
-* `latest`: latest released image (until v0.4.0).
 
 
 In the [image](examples/kubernetes/image/docker) directory you'll find a Makefile to build the image used in this example (starting from the official postgreSQL images). The Makefile generates the Dockefile from a template Dockerfile where you have to define the wanted postgres version and image tag (`PGVERSION` adn `TAG` mandatory variables).

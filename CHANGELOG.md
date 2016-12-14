@@ -1,3 +1,21 @@
+### v0.5.0
+
+This version is a big step forward previous releases and provides many new features and a better cluster management.
+
+* Now the configuration is fully declarative (see [cluster specification](doc/cluster_spec.md) documentation) ([#178](https://github.com/sorintlab/stolon/pull/178)).
+* Ability to create a new cluster starting from a previous backup (point in time recovery) ([#183](https://github.com/sorintlab/stolon/pull/183))
+ * Wal-e backup/restore example ([#183](https://github.com/sorintlab/stolon/pull/183))
+* Better synchronous replication, the user can define a min and a max number of required synchronous standbys and the master will always block waiting for acknowledge by the required sync standbys. Only synchronous standbys will be elected as new master. ([#219](https://github.com/sorintlab/stolon/pull/219))
+* Production ready kubernetes examples (just change the persistent volume provider) ([#215](https://github.com/sorintlab/stolon/pull/215))
+* To keep an unique managed central configuration, the postgresql parameters can now only be managed only using the cluster specification ([#181](https://github.com/sorintlab/stolon/pull/181))
+* When (re)initializing a new cluster (with an empty db, from an existing instance or from a backup) the postgresql parameters are automatically merged in the cluster spec ([#181](https://github.com/sorintlab/stolon/pull/181))
+* Use only store based communication and discovery (removed all the kubernetes specific options) ([#195](https://github.com/sorintlab/stolon/pull/195))
+* Ability to use TLS communication with the store (for both etcd and consul) ([#208](https://github.com/sorintlab/stolon/pull/208))
+* Better standby monitoring and replacement ([#218](https://github.com/sorintlab/stolon/pull/218))
+* Improved logging ([#187](https://github.com/sorintlab/stolon/pull/187))
+
+Many other [improvements and bug fixes](https://github.com/sorintlab/stolon/milestone/4)
+
 ### v0.4.0
 
 Some cleanups and changes in preparation for release v0.5.0 that will receive a big refactor (with different breaking changes) needed to bring a lot of new features.

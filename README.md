@@ -7,8 +7,6 @@ stolon is a cloud native PostgreSQL manager for PostgreSQL high availability. It
 
 For an introduction to stolon you can also take a look at [this post](https://sgotti.me/post/stolon-introduction/)
 
-**Note: The current master branch that will lead to v0.5.0 is receiving a big refactor needed to implement a lot of new features (see the [v0.5.0 roadmap](https://github.com/sorintlab/stolon/issues?q=is%3Aopen+is%3Aissue+milestone%3Av0.5.0)). So some breakage is expected.**
-
 ## Features
 
 * Leverages PostgreSQL streaming replication.
