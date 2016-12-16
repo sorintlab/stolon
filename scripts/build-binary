@@ -45,6 +45,7 @@ function package {
 
 	cp -R stolon/doc ${target}/doc
 	cp -R stolon/examples ${target}/examples
+	rm -rf ${target}/examples/kubernetes/image/docker/bin
 }
 
 function main {
