@@ -33,7 +33,7 @@ Some options in a running cluster specification can be changed to update the des
 
 | Name      | Description                                            | Required | Type   | Default |
 |-----------|--------------------------------------------------------|----------|--------|---------|
-| keeperUID | the keeperUID to use as the initial master db cluster. | yes      | string | 5s      |
+| keeperUID | the keeperUID to use as the initial master db cluster. | yes      | string |         |
 
 
 #### PITRConfig
