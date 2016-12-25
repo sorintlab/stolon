@@ -1,16 +1,6 @@
 .PHONY: build secrets local-up local-clean
 
-ETCD_VERSION ?= v3.0.15
-
-STOLON_CLUSTER_NAME ?= stolon-cluster
-STOLON_STORE_BACKEND ?= etcd
-STOLON_PROXY_PORT ?= 25432
-
-IMAGE_TAG_PREFIX ?= sorintlab
-IMAGE_TAG_SUFFIX ?= 0.5.0
-IMAGE_TAG_SENTINEL = ${IMAGE_TAG_PREFIX}/stolon-sentinel:${IMAGE_TAG_SUFFIX}
-IMAGE_TAG_KEEPER = ${IMAGE_TAG_PREFIX}/stolon-keeper:${IMAGE_TAG_SUFFIX}
-IMAGE_TAG_PROXY = ${IMAGE_TAG_PREFIX}/stolon-proxy:${IMAGE_TAG_SUFFIX}
+include .env
 
 export ETCD_VERSION ETCD_TOKEN IMAGE_TAG_SENTINEL IMAGE_TAG_KEEPER IMAGE_TAG_PROXY STOLON_PROXY_PORT
 
@@ -40,3 +30,13 @@ local-clean:
 
 local-purge:
 	PURGE_VOLUMES=true ./local-clean.sh
+
+compose-up:
+	@test -n "${ETCD_TOKEN}" # Please provide a value for $${ETCD_TOKEN}
+	docker-compose up -d --remove-orphans
+
+compose-down:
+	docker-compose down --remove-orphans
+
+compose-purge:
+	docker-compose down -v --remove-orphans
