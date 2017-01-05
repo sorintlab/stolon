@@ -94,10 +94,13 @@ rm -f ${BINDIR}/stolon-keeper
 cp ${GOPATH}/bin/keeper ${BINDIR}/stolon-keeper
 
 # Copy binaries to Dockerfile image directories
-DOCKERIMAGE=${BASEDIR}/examples/kubernetes/image/docker
-
-mkdir -p ${DOCKERIMAGE}/bin/
-rm -f ${DOCKERIMAGE}/bin/*
-for cmd in stolon-keeper stolon-sentinel stolon-proxy stolonctl; do
-	cp ${BINDIR}/${cmd} ${DOCKERIMAGE}/bin/
+declare -a $DOCKERFILE_PATHS
+DOCKERFILE_PATHS=(${BASEDIR}/examples/kubernetes/image/docker ${BASEDIR}/examples/docker)
+for path in "${DOCKERFILE_PATHS[@]}"
+do
+  rm -rf $path/bin/
+  mkdir -p $path/bin/
+  for cmd in stolon-keeper stolon-sentinel stolon-proxy stolonctl; do
+          cp ${BINDIR}/${cmd} $path/bin/
+  done
 done
