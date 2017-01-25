@@ -1,18 +1,8 @@
 .PHONY: build secrets local-up local-clean
 
-ETCD_VERSION ?= v3.0.15
+include .env
 
-STOLON_CLUSTER_NAME ?= stolon-cluster
-STOLON_STORE_BACKEND ?= etcd
-STOLON_PROXY_PORT ?= 25432
-
-IMAGE_TAG_PREFIX ?= sorintlab
-IMAGE_TAG_SUFFIX ?= 0.5.0
-IMAGE_TAG_SENTINEL = ${IMAGE_TAG_PREFIX}/stolon-sentinel:${IMAGE_TAG_SUFFIX}
-IMAGE_TAG_KEEPER = ${IMAGE_TAG_PREFIX}/stolon-keeper:${IMAGE_TAG_SUFFIX}
-IMAGE_TAG_PROXY = ${IMAGE_TAG_PREFIX}/stolon-proxy:${IMAGE_TAG_SUFFIX}
-
-export ETCD_VERSION ETCD_TOKEN IMAGE_TAG_SENTINEL IMAGE_TAG_KEEPER IMAGE_TAG_PROXY STOLON_PROXY_PORT
+export ETCD_VERSION ETCD_TOKEN IMAGE_TAG_SENTINEL IMAGE_TAG_KEEPER IMAGE_TAG_PROXY STOLON_PROXY_PORT STOLON_KEEPER_PG_SU_PASSWORDFILE STOLON_KEEPER_PG_REPL_PASSWORDFILE SWARM_MANAGER SWARM_WORKER_00 SWARM_WORKER_01 SWARM_WORKER_02 DO_REGION DO_SIZE
 
 build: secrets sentinel keeper proxy
 
@@ -40,3 +30,37 @@ local-clean:
 
 local-purge:
 	PURGE_VOLUMES=true ./local-clean.sh
+
+compose-up:
+	@test -n "${ETCD_TOKEN}" # Please provide a value for $${ETCD_TOKEN}
+	docker-compose up -d --remove-orphans
+
+compose-down:
+	docker-compose down --remove-orphans
+
+compose-purge:
+	docker-compose down -v --remove-orphans
+
+swarm-local:
+	swarm/local.sh
+
+swarm-droplets:
+	@test -n "${DO_ACCESS_TOKEN}" # Please provide a value for $${DO_ACCESS_TOKEN}
+	@test -n "${DO_SSH_KEY_FINGERPRINT}" # Please provide a value for $${DO_SSH_KEY_FINGERPRINT}
+	swarm/droplet.sh
+
+swarm-init:
+	swarm/init.sh
+
+swarm-build: secrets
+	swarm/build.sh
+
+swarm-stolon:
+	@test -n "${ETCD_TOKEN}" # Please provide a value for $${ETCD_TOKEN}
+	swarm/stolon.sh
+
+swarm-clean:
+	swarm/clean.sh
+
+swarm-destroy:
+	DESTROY_MACHINES=true swarm/clean.sh
