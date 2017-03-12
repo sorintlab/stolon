@@ -451,6 +451,48 @@ func (p *PostgresKeeper) updatePGState(pctx context.Context) {
 	p.lastPGState = pgState
 }
 
+// parseSynchronousStandbyNames extracts the standby names from the
+// "synchronous_standby_names" postgres parameter.
+//
+// Since postgres 9.6
+//   https://www.postgresql.org/docs/9.6/static/runtime-config-replication.html
+// `synchronous_standby_names` can be in one of two formats:
+//   num_sync ( standby_name [, ...] )
+//   standby_name [, ...]
+// two examples for this:
+//   2 (node1,node2)
+//   node1,node2
+//
+// Only postgres >= 9.6 supports the second format.
+func parseSynchronousStandbyNames(s string) ([]string, error) {
+	var spacesSplit []string = strings.Split(s, " ")
+	var entries []string
+	if len(spacesSplit) < 2 {
+		// We're parsing format: standby_name [, ...]
+		entries = strings.Split(s, ",")
+	} else {
+		// We don't know yet which of the 2 formats we're parsing
+		_, err := strconv.Atoi(spacesSplit[0])
+		if err == nil {
+			// We're parsing format: num_sync ( standby_name [, ...] )
+			rest := strings.Join(spacesSplit[1:], " ")
+			inBrackets := strings.TrimSpace(rest)
+			if !strings.HasPrefix(inBrackets, "(") || !strings.HasSuffix(inBrackets, ")") {
+				return nil, fmt.Errorf("synchronous standby string has number but lacks brackets")
+			}
+			withoutBrackets := strings.TrimRight(strings.TrimLeft(inBrackets, "("), ")")
+			entries = strings.Split(withoutBrackets, ",")
+		} else {
+			// We're parsing format: standby_name [, ...]
+			entries = strings.Split(s, ",")
+		}
+	}
+	for i, e := range entries {
+		entries[i] = strings.TrimSpace(e)
+	}
+	return entries, nil
+}
+
 func (p *PostgresKeeper) GetPGState(pctx context.Context) (*cluster.PostgresState, error) {
 	p.getPGStateMutex.Lock()
 	defer p.getPGStateMutex.Unlock()
@@ -485,7 +527,11 @@ func (p *PostgresKeeper) GetPGState(pctx context.Context) (*cluster.PostgresStat
 		log.Debug("filtered out managed pg parameters", zap.Object("filteredPGParameters", filteredPGParameters))
 		pgState.PGParameters = filteredPGParameters
 
-		synchronousStandbyNames := strings.Split(pgParameters["synchronous_standby_names"], ",")
+		synchronousStandbyNames, err := parseSynchronousStandbyNames(pgParameters["synchronous_standby_names"])
+		if err != nil {
+			log.Error("error parsing synchronous_standby_names", zap.Error(err))
+			return pgState, nil
+		}
 		synchronousStandbys := []string{}
 		for _, n := range synchronousStandbyNames {
 			if !common.IsStolonName(n) {
