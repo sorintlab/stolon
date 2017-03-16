@@ -88,7 +88,13 @@ declare -a keepers
 keepers=(stolon-keeper-00 stolon-keeper-01 stolon-keeper-02)
 for keeper in "${keepers[@]}"
 do
-  docker run --name $keeper -d --net=$network -e STKEEPER_STORE_ENDPOINTS=$etcd_endpoints $IMAGE_TAG_KEEPER
+  docker run --name $keeper -d --net=$network \
+    -v $PWD/etc/secrets/pgsql:$STOLON_KEEPER_PG_SU_PASSWORDFILE \
+    -v $PWD/etc/secrets/pgsql:$STOLON_KEEPER_PG_REPL_PASSWORDFILE \
+    -e STKEEPER_STORE_ENDPOINTS=$etcd_endpoints \
+    -e STKEEPER_PG_SU_PASSWORDFILE=$STOLON_KEEPER_PG_SU_PASSWORDFILE \
+    -e STKEEPER_PG_REPL_PASSWORDFILE=$STOLON_KEEPER_PG_REPL_PASSWORDFILE \
+    $IMAGE_TAG_KEEPER
 done
 
 docker run --name stolon-proxy -d --net=$network -p $STOLON_PROXY_PORT -e STPROXY_STORE_ENDPOINTS=$etcd_endpoints $IMAGE_TAG_PROXY
