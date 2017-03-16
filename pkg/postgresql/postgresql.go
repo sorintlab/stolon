@@ -193,12 +193,9 @@ func (p *Manager) start(args ...string) error {
 	args = append([]string{"start", "-w", "-D", p.dataDir, "-o", "-c unix_socket_directories=/tmp"}, args...)
 	cmd := exec.Command(name, args...)
 	log.Debug("execing cmd", zap.Object("cmd", cmd))
-	// TODO(sgotti) attaching a pipe to sdtout/stderr makes the postgres
-	// process executed by pg_ctl inheriting it's file descriptors. So
-	// cmd.Wait() will block and waiting on them to be closed (will happend
-	// only when postgres is stopped). So this functions will never return.
-	// To avoid this no output is captured. If needed there's the need to
-	// find a way to get the output whitout blocking.
+	//Pipe command's std[err|out] to parent.
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("error: %v", err)
 	}
