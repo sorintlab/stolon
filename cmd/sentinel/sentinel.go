@@ -25,6 +25,7 @@ import (
 	"reflect"
 	"sort"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/sorintlab/stolon/common"
@@ -1410,7 +1411,7 @@ func sentinel(cmd *cobra.Command, args []string) {
 	stop := make(chan bool, 0)
 	end := make(chan bool, 0)
 	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, os.Interrupt, os.Kill)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	go sigHandler(sigs, stop)
 
 	s, err := NewSentinel(uid, &cfg, stop, end)

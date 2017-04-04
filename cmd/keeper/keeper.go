@@ -24,6 +24,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/sorintlab/stolon/common"
@@ -1421,7 +1422,7 @@ func keeper(cmd *cobra.Command, args []string) {
 	stop := make(chan bool, 0)
 	end := make(chan error, 0)
 	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, os.Interrupt, os.Kill)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	go sigHandler(sigs, stop)
 
 	p, err := NewPostgresKeeper(&cfg, stop, end)
