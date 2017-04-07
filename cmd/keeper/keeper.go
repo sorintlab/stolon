@@ -1301,7 +1301,7 @@ func (p *PostgresKeeper) saveKeeperLocalState() error {
 	if err != nil {
 		return err
 	}
-	return ioutil.WriteFile(p.keeperLocalStateFilePath(), sj, 0600)
+	return common.WriteFileAtomic(p.keeperLocalStateFilePath(), sj, 0600)
 }
 
 func (p *PostgresKeeper) dbLocalStateFilePath() string {
@@ -1326,7 +1326,7 @@ func (p *PostgresKeeper) saveDBLocalState() error {
 	if err != nil {
 		return err
 	}
-	return ioutil.WriteFile(p.dbLocalStateFilePath(), sj, 0600)
+	return common.WriteFileAtomic(p.dbLocalStateFilePath(), sj, 0600)
 }
 
 func sigHandler(sigs chan os.Signal, stop chan bool) {
