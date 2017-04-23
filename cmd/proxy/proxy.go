@@ -19,6 +19,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/sorintlab/stolon/common"
@@ -68,6 +69,21 @@ func init() {
 	cmdProxy.PersistentFlags().StringVar(&cfg.port, "port", "5432", "proxy listening port")
 	cmdProxy.PersistentFlags().BoolVar(&cfg.stopListening, "stop-listening", true, "stop listening on store error")
 	cmdProxy.PersistentFlags().BoolVar(&cfg.debug, "debug", false, "enable debug logging")
+}
+
+func stderr(format string, a ...interface{}) {
+	out := fmt.Sprintf(format, a...)
+	fmt.Fprintln(os.Stderr, strings.TrimSuffix(out, "\n"))
+}
+
+func stdout(format string, a ...interface{}) {
+	out := fmt.Sprintf(format, a...)
+	fmt.Fprintln(os.Stdout, strings.TrimSuffix(out, "\n"))
+}
+
+func die(format string, a ...interface{}) {
+	stderr(format, a...)
+	os.Exit(1)
 }
 
 type ClusterChecker struct {
@@ -279,12 +295,10 @@ func proxy(cmd *cobra.Command, args []string) {
 	pollon.SetLogger(stdlog)
 
 	if cfg.clusterName == "" {
-		fmt.Printf("cluster name required")
-		os.Exit(1)
+		die("cluster name required")
 	}
 	if cfg.storeBackend == "" {
-		fmt.Printf("store backend type required")
-		os.Exit(1)
+		die("store backend type required")
 	}
 
 	uid := common.UID()
@@ -292,8 +306,7 @@ func proxy(cmd *cobra.Command, args []string) {
 
 	clusterChecker, err := NewClusterChecker(uid, cfg)
 	if err != nil {
-		fmt.Printf("cannot create cluster checker: %v", err)
-		os.Exit(1)
+		die("cannot create cluster checker: %v", err)
 	}
 	clusterChecker.Start()
 }

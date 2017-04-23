@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -79,6 +80,21 @@ func init() {
 }
 
 var log = zap.New(zap.NewTextEncoder(), zap.AddCaller())
+
+func stderr(format string, a ...interface{}) {
+	out := fmt.Sprintf(format, a...)
+	fmt.Fprintln(os.Stderr, strings.TrimSuffix(out, "\n"))
+}
+
+func stdout(format string, a ...interface{}) {
+	out := fmt.Sprintf(format, a...)
+	fmt.Fprintln(os.Stdout, strings.TrimSuffix(out, "\n"))
+}
+
+func die(format string, a ...interface{}) {
+	stderr(format, a...)
+	os.Exit(1)
+}
 
 func (s *Sentinel) electionLoop() {
 	for {
@@ -1396,13 +1412,10 @@ func sentinel(cmd *cobra.Command, args []string) {
 		log.SetLevel(zap.DebugLevel)
 	}
 	if cfg.clusterName == "" {
-		fmt.Println("cluster name required")
-		os.Exit(1)
+		die("cluster name required")
 	}
 	if cfg.storeBackend == "" {
-		fmt.Println("store backend type required")
-		os.Exit(1)
-
+		die("store backend type required")
 	}
 
 	uid := common.UID()
@@ -1416,8 +1429,7 @@ func sentinel(cmd *cobra.Command, args []string) {
 
 	s, err := NewSentinel(uid, &cfg, stop, end)
 	if err != nil {
-		fmt.Printf("cannot create sentinel: %v\n", err)
-		os.Exit(1)
+		die("cannot create sentinel: %v", err)
 	}
 	go s.Start()
 
