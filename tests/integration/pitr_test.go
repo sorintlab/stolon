@@ -117,7 +117,7 @@ func TestPITR(t *testing.T) {
 	// Don't save the wal during the basebackup (-x). This to test that archive_command and restore command correctly work.
 	cmd := exec.Command("pg_basebackup", "-F", "tar", "-D", baseBackupDir, "-h", tk.pgListenAddress, "-p", tk.pgPort, "-U", tk.pgReplUsername)
 	cmd.Env = append(cmd.Env, fmt.Sprintf("PGPASSFILE=%s", pgpass.Name()))
-	t.Logf("execing cmd: %s", cmd)
+	t.Logf("execing cmd: %v", cmd)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("error: %v, output: %s", err, string(out))
 	}
@@ -149,6 +149,9 @@ func TestPITR(t *testing.T) {
 			ArchiveRecoverySettings: &cluster.ArchiveRecoverySettings{
 				RestoreCommand: fmt.Sprintf("cp %s/%%f %%p", archiveBackupDir),
 			},
+		},
+		PGParameters: cluster.PGParameters{
+			"max_prepared_transactions": "100",
 		},
 	}
 	initialClusterSpecFile, err = writeClusterSpec(dir, initialClusterSpec)
@@ -190,4 +193,11 @@ func TestPITR(t *testing.T) {
 		t.Fatalf("wrong number of lines, want: %d, got: %d", 2, c)
 	}
 
+	pgParameters, err := tk.GetPGParameters()
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if v := pgParameters["max_prepared_transactions"]; v != "100" {
+		t.Fatalf("expected max_prepared_transactions == 100 got %q", v)
+	}
 }
