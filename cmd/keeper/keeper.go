@@ -94,8 +94,7 @@ var cfg config
 func init() {
 	user, err := util.GetUser()
 	if err != nil {
-		fmt.Printf("cannot get current user: %v\n", err)
-		os.Exit(1)
+		die("cannot get current user: %v", err)
 	}
 
 	cmdKeeper.PersistentFlags().StringVar(&cfg.uid, "id", "", "keeper uid (must be unique in the cluster and can contain only lower-case letters, numbers and the underscore character). If not provided a random uid will be generated.")
@@ -140,6 +139,21 @@ var managedPGParameters = []string{
 	"max_wal_senders",
 	"wal_log_hints",
 	"synchronous_standby_names",
+}
+
+func stderr(format string, a ...interface{}) {
+	out := fmt.Sprintf(format, a...)
+	fmt.Fprintln(os.Stderr, strings.TrimSuffix(out, "\n"))
+}
+
+func stdout(format string, a ...interface{}) {
+	out := fmt.Sprintf(format, a...)
+	fmt.Fprintln(os.Stdout, strings.TrimSuffix(out, "\n"))
+}
+
+func die(format string, a ...interface{}) {
+	stderr(format, a...)
+	os.Exit(1)
 }
 
 func readPasswordFromFile(filepath string) (string, error) {
@@ -374,8 +388,7 @@ func NewPostgresKeeper(cfg *config, stop chan bool, end chan error) (*PostgresKe
 		return nil, fmt.Errorf("failed to load keeper local state file: %v", err)
 	}
 	if p.keeperLocalState.UID != "" && p.cfg.uid != "" && p.keeperLocalState.UID != p.cfg.uid {
-		fmt.Printf("saved uid %q differs from configuration uid: %q\n", p.keeperLocalState.UID, cfg.uid)
-		os.Exit(1)
+		die("saved uid %q differs from configuration uid: %q", p.keeperLocalState.UID, cfg.uid)
 	}
 	if p.keeperLocalState.UID == "" {
 		p.keeperLocalState.UID = cfg.uid
@@ -384,8 +397,7 @@ func NewPostgresKeeper(cfg *config, stop chan bool, end chan error) (*PostgresKe
 			log.Info("uid generated", zap.String("uid", p.keeperLocalState.UID))
 		}
 		if err = p.saveKeeperLocalState(); err != nil {
-			fmt.Printf("error: %v\n", err)
-			os.Exit(1)
+			die("error: %v", err)
 		}
 	}
 
@@ -1349,73 +1361,67 @@ func keeper(cmd *cobra.Command, args []string) {
 	pg.SetLogger(log)
 
 	if cfg.dataDir == "" {
-		fmt.Println("data dir required")
+		die("data dir required")
 	}
 
 	if cfg.clusterName == "" {
-		fmt.Println("cluster name required")
+		die("cluster name required")
 	}
 	if cfg.storeBackend == "" {
-		fmt.Println("store backend type required")
+		die("store backend type required")
 	}
 
 	if err = os.MkdirAll(cfg.dataDir, 0700); err != nil {
-		fmt.Printf("cannot create data dir: %v\n", err)
-		os.Exit(1)
+		die("cannot create data dir: %v", err)
 	}
 
 	if cfg.pgReplUsername == "" {
-		fmt.Println("--pg-repl-username is required")
+		die("--pg-repl-username is required")
 	}
 
 	if cfg.pgReplPassword == "" && cfg.pgReplPasswordFile == "" {
-		fmt.Println("one of --pg-repl-password or --pg-repl-passwordfile is required")
+		die("one of --pg-repl-password or --pg-repl-passwordfile is required")
 	}
 	if cfg.pgReplPassword != "" && cfg.pgReplPasswordFile != "" {
-		fmt.Println("only one of --pg-repl-password or --pg-repl-passwordfile must be provided")
+		die("only one of --pg-repl-password or --pg-repl-passwordfile must be provided")
 	}
 	if cfg.pgSUPassword == "" && cfg.pgSUPasswordFile == "" {
-		fmt.Println("one of --pg-su-password or --pg-su-passwordfile is required")
+		die("one of --pg-su-password or --pg-su-passwordfile is required")
 	}
 	if cfg.pgSUPassword != "" && cfg.pgSUPasswordFile != "" {
-		fmt.Println("only one of --pg-su-password or --pg-su-passwordfile must be provided")
+		die("only one of --pg-su-password or --pg-su-passwordfile must be provided")
 	}
 
 	if cfg.pgSUUsername == cfg.pgReplUsername {
-		fmt.Println("warning: superuser name and replication user name are the same. Different users are suggested.")
+		stdout("warning: superuser name and replication user name are the same. Different users are suggested.")
 		if cfg.pgSUPassword != cfg.pgReplPassword {
-			fmt.Println("provided superuser name and replication user name are the same but provided passwords are different")
-			os.Exit(1)
+			die("provided superuser name and replication user name are the same but provided passwords are different")
 		}
 	}
 
 	if cfg.pgReplPasswordFile != "" {
 		cfg.pgReplPassword, err = readPasswordFromFile(cfg.pgReplPasswordFile)
 		if err != nil {
-			fmt.Printf("cannot read pg replication user password: %v\n", err)
-			os.Exit(1)
+			die("cannot read pg replication user password: %v", err)
 		}
 	}
 	if cfg.pgSUPasswordFile != "" {
 		cfg.pgSUPassword, err = readPasswordFromFile(cfg.pgSUPasswordFile)
 		if err != nil {
-			fmt.Printf("cannot read pg superuser password: %v\n", err)
-			os.Exit(1)
+			die("cannot read pg superuser password: %v", err)
 		}
 	}
 
 	// Take an exclusive lock on dataDir
 	_, err = lock.TryExclusiveLock(cfg.dataDir, lock.Dir)
 	if err != nil {
-		fmt.Printf("cannot take exclusive lock on data dir %q: %v\n", cfg.dataDir, err)
-		os.Exit(1)
+		die("cannot take exclusive lock on data dir %q: %v", cfg.dataDir, err)
 	}
 	log.Info("exclusive lock on data dir taken")
 
 	if cfg.uid != "" {
 		if !pg.IsValidReplSlotName(cfg.uid) {
-			fmt.Printf("keeper uid %q not valid. It can contain only lower-case letters, numbers and the underscore character\n", cfg.uid)
-			os.Exit(1)
+			die("keeper uid %q not valid. It can contain only lower-case letters, numbers and the underscore character", cfg.uid)
 		}
 	}
 
@@ -1427,8 +1433,7 @@ func keeper(cmd *cobra.Command, args []string) {
 
 	p, err := NewPostgresKeeper(&cfg, stop, end)
 	if err != nil {
-		fmt.Printf("cannot create keeper: %v\n", err)
-		os.Exit(1)
+		die("cannot create keeper: %v", err)
 	}
 	go p.Start()
 
