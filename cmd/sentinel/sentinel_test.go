@@ -183,8 +183,8 @@ func TestUpdateCluster(t *testing.T) {
 				Proxy: &cluster.Proxy{},
 			},
 		},
+		// #2 cluster initialization, more than one keeper, the first will be choosen to be the new master.
 		{
-			// #2 cluster initialization, more than one keeper, the first will be choosen to be the new master.
 			cd: &cluster.ClusterData{
 				Cluster: &cluster.Cluster{
 					UID:        "cluster1",

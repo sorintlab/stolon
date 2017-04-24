@@ -31,6 +31,9 @@ import (
 func Uint16P(u uint16) *uint16 {
 	return &u
 }
+func Uint32P(u uint32) *uint32 {
+	return &u
+}
 
 func BoolP(b bool) *bool {
 	return &b
@@ -51,6 +54,7 @@ const (
 	DefaultFailInterval                       = 20 * time.Second
 	DefaultMaxStandbys            uint16      = 20
 	DefaultMaxStandbysPerSender   uint16      = 3
+	DefaultMaxStandbyLag                      = 1024 * 1204
 	DefaultSynchronousReplication             = false
 	DefaultMaxSynchronousStandbys uint16      = 1
 	DefaultMinSynchronousStandbys uint16      = 1
@@ -184,6 +188,9 @@ type ClusterSpec struct {
 	// Max number of standbys for every sender. A sender can be a master or
 	// another standby (if/when implementing cascading replication).
 	MaxStandbysPerSender *uint16 `json:"maxStandbysPerSender,omitempty"`
+	// Max lag in bytes that an asynchronous standy can have to be elected in
+	// place of a failed master
+	MaxStandbyLag *uint32 `json:"maxStandbyLage,omitempty"`
 	// Use Synchronous replication between master and its standbys
 	SynchronousReplication *bool `json:"synchronousReplication,omitempty"`
 	// MinSynchronousStandbys is the mininum number if synchronous standbys
@@ -286,6 +293,9 @@ func (os *ClusterSpec) WithDefaults() *ClusterSpec {
 	}
 	if s.MaxStandbysPerSender == nil {
 		s.MaxStandbysPerSender = Uint16P(DefaultMaxStandbysPerSender)
+	}
+	if s.MaxStandbyLag == nil {
+		s.MaxStandbyLag = Uint32P(DefaultMaxStandbyLag)
 	}
 	if s.SynchronousReplication == nil {
 		s.SynchronousReplication = BoolP(DefaultSynchronousReplication)

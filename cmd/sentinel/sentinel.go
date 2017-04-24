@@ -350,6 +350,19 @@ func (s *Sentinel) isDifferentTimelineBranch(followedDB *cluster.DB, db *cluster
 	return false
 }
 
+// isLagBelowMax checks if the db reported lag is below MaxStandbyLag from the
+// master reported lag
+func (s *Sentinel) isLagBelowMax(cd *cluster.ClusterData, curMasterDB, db *cluster.DB) bool {
+	if !*cd.Cluster.DefSpec().SynchronousReplication {
+		log.Debug(fmt.Sprintf("curMasterDB.Status.XLogPos: %d, db.Status.XLogPos: %d, lag: %d", curMasterDB.Status.XLogPos, db.Status.XLogPos, int64(curMasterDB.Status.XLogPos-db.Status.XLogPos)))
+		if int64(curMasterDB.Status.XLogPos-db.Status.XLogPos) > int64(*cd.Cluster.DefSpec().MaxStandbyLag) {
+			log.Debug("ignoring keeper since its behind that maximum xlog position", zap.String("db", db.UID), zap.Uint64("dbXLogPos", db.Status.XLogPos), zap.Uint64("masterXLogPos", curMasterDB.Status.XLogPos))
+			return false
+		}
+	}
+	return true
+}
+
 func (s *Sentinel) freeKeepers(cd *cluster.ClusterData) []*cluster.Keeper {
 	freeKeepers := []*cluster.Keeper{}
 K:
@@ -548,6 +561,15 @@ func (s *Sentinel) findBestStandbys(cd *cluster.ClusterData, masterDB *cluster.D
 			log.Debug("ignoring keeper since its pg timeline is different than master timeline", zap.String("db", db.UID), zap.Uint64("dbTimeline", db.Status.TimelineID), zap.Uint64("masterTimeline", masterDB.Status.TimelineID))
 			continue
 		}
+		// do this only when not using synchronous replication since in sync repl we
+		// have to ignore the last reported xlogpos or valid sync standby will be
+		// skipped
+		if !*cd.Cluster.DefSpec().SynchronousReplication {
+			if !s.isLagBelowMax(cd, masterDB, db) {
+				log.Debug("ignoring keeper since its lag is above the max configured lag", zap.String("db", db.UID), zap.Uint64("dbXLogPos", db.Status.XLogPos), zap.Uint64("masterXLogPos", masterDB.Status.XLogPos))
+				continue
+			}
+		}
 		bestDBs = append(bestDBs, db)
 	}
 	// Sort by XLogPos
@@ -568,6 +590,15 @@ func (s *Sentinel) findBestNewMasters(cd *cluster.ClusterData, masterDB *cluster
 		if db.Status.TimelineID != masterDB.Status.TimelineID {
 			log.Debug("ignoring keeper since its pg timeline is different than master timeline", zap.String("db", db.UID), zap.Uint64("dbTimeline", db.Status.TimelineID), zap.Uint64("masterTimeline", masterDB.Status.TimelineID))
 			continue
+		}
+		// do this only when not using synchronous replication since in sync repl we
+		// have to ignore the last reported xlogpos or valid sync standby will be
+		// skipped
+		if !*cd.Cluster.DefSpec().SynchronousReplication {
+			if !s.isLagBelowMax(cd, masterDB, db) {
+				log.Debug("ignoring keeper since its lag is above the max configured lag", zap.String("db", db.UID), zap.Uint64("dbXLogPos", db.Status.XLogPos), zap.Uint64("masterXLogPos", masterDB.Status.XLogPos))
+				continue
+			}
 		}
 		bestNewMasters = append(bestNewMasters, db)
 	}
