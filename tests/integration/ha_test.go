@@ -125,6 +125,7 @@ func setupServers(t *testing.T, clusterName, dir string, numKeepers, numSentinel
 		SleepInterval:          &cluster.Duration{Duration: 2 * time.Second},
 		FailInterval:           &cluster.Duration{Duration: 5 * time.Second},
 		ConvergenceTimeout:     &cluster.Duration{Duration: 30 * time.Second},
+		MaxStandbyLag:          cluster.Uint32P(50 * 1024), // limit lag to 50kiB
 		SynchronousReplication: cluster.BoolP(syncRepl),
 		UsePgrewind:            cluster.BoolP(usePgrewind),
 		PGParameters:           make(cluster.PGParameters),
@@ -339,6 +340,9 @@ func testFailover(t *testing.T, syncRepl bool) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
+	// wait for the keepers to have reported their state (needed to know the instance XLogPos)
+	time.Sleep(5 * time.Second)
+
 	// Stop the keeper process on master, should also stop the database
 	t.Logf("Stopping current master keeper: %s", master.uid)
 	master.Stop()
@@ -399,6 +403,9 @@ func testFailoverFailed(t *testing.T, syncRepl bool) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
+	// wait for the keepers to have reported their state (needed to know the instance XLogPos)
+	time.Sleep(5 * time.Second)
+
 	// Stop the keeper process on master, should also stop the database
 	t.Logf("Stopping current master keeper: %s", master.uid)
 	master.Stop()
@@ -437,6 +444,58 @@ func TestFailoverFailedSyncRepl(t *testing.T) {
 	testFailoverFailed(t, true)
 }
 
+// test that a standby with a lag (reported) greater than MaxStandbyLag from the
+// master (reported) xlogpos won't be elected as the new master. This test is
+// valid only for asynchronous replication
+func TestFailoverTooMuchLag(t *testing.T) {
+	t.Parallel()
+
+	dir, err := ioutil.TempDir("", "stolon")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer os.RemoveAll(dir)
+
+	clusterName := uuid.NewV4().String()
+
+	tks, tss, tstore := setupServers(t, clusterName, dir, 2, 1, false, false)
+	defer shutdown(tks, tss, tstore)
+
+	storePath := filepath.Join(common.StoreBasePath, clusterName)
+	sm := store.NewStoreManager(tstore.store, storePath)
+
+	master, standbys := waitMasterStandbysReady(t, sm, tks)
+	standby := standbys[0]
+
+	if err := populate(t, master); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// stop the standby and write more than MaxStandbyLag data to the master
+	t.Logf("Stopping current standby keeper: %s", standby.uid)
+	standby.Stop()
+	for i := 1; i < 1000; i++ {
+		if err := write(t, master, i, i); err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+	}
+
+	// wait for the master to have reported its state
+	time.Sleep(5 * time.Second)
+
+	// Stop the keeper process on master, should also stop the database
+	t.Logf("Stopping current master keeper: %s", master.uid)
+	master.Stop()
+	// start the standby
+	t.Logf("Starting current standby keeper: %s", standby.uid)
+	standby.Start()
+
+	// standby shouldn't be elected as master since its lag is greater than MaxStandbyLag
+	if err := standby.WaitRole(common.RoleMaster, 30*time.Second); err == nil {
+		t.Fatalf("standby shouldn't be elected as master")
+	}
+}
+
 func testOldMasterRestart(t *testing.T, syncRepl, usePgrewind bool) {
 	dir, err := ioutil.TempDir("", "stolon")
 	if err != nil {
@@ -467,6 +526,9 @@ func testOldMasterRestart(t *testing.T, syncRepl, usePgrewind bool) {
 	if err := write(t, master, 1, 1); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
+
+	// wait for the keepers to have reported their state (needed to know the instance XLogPos)
+	time.Sleep(5 * time.Second)
 
 	// Stop the keeper process on master, should also stop the database
 	t.Logf("Stopping current master keeper: %s", master.uid)
@@ -572,6 +634,9 @@ func testPartition1(t *testing.T, syncRepl, usePgrewind bool) {
 	if err := write(t, master, 1, 1); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
+
+	// wait for the keepers to have reported their state (needed to know the instance XLogPos)
+	time.Sleep(5 * time.Second)
 
 	// Freeze the keeper and postgres processes on the master
 	t.Logf("SIGSTOPping current master keeper: %s", master.uid)
@@ -686,6 +751,9 @@ func testTimelineFork(t *testing.T, syncRepl, usePgrewind bool) {
 	if err := write(t, master, 1, 1); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
+
+	// wait for the keepers to have reported their state (needed to know the instance XLogPos)
+	time.Sleep(5 * time.Second)
 
 	// Wait replicated data to standby
 	if err := waitLines(t, standbys[0], 1, 10*time.Second); err != nil {
@@ -826,6 +894,9 @@ func TestMasterChangedAddress(t *testing.T) {
 	if err := write(t, master, 1, 1); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
+
+	// wait for the keepers to have reported their state (needed to know the instance XLogPos)
+	time.Sleep(5 * time.Second)
 
 	// Wait standby synced with master
 	if err := waitLines(t, master, 1, 60*time.Second); err != nil {

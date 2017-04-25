@@ -749,8 +749,8 @@ func WaitClusterDataKeeperInitialized(keeperUID string, e *store.StoreManager, t
 }
 
 // WaitClusterDataSynchronousStandbys waits for:
-// * synchrnous standby defined in masterdb spec
-// * synchrnous standby reported from masterdb status
+// * synchronous standby defined in masterdb spec
+// * synchronous standby reported from masterdb status
 func WaitClusterDataSynchronousStandbys(synchronousStandbys []string, e *store.StoreManager, timeout time.Duration) error {
 	sort.Sort(sort.StringSlice(synchronousStandbys))
 	start := time.Now()
