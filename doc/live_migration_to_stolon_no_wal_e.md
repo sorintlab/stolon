@@ -104,7 +104,7 @@ Ideally these two commands should run right after each other, so Stolon is aware
 
 Since the new configuration using 'stolon' user and the Stolon proxy has been configured, you may now restart the application (kubectl delete pods, kubectl patch method for rolling restart, or delete/create your Kubernetes Deployment)
 
-#### Handling 
+#### Error Handling
 
 If something goes wrong you can see the errors in the keeper's logs or in postgresql log (if these are related to the archive restore step) and you can retrigger a new pitr reinitializing the cluster.
 
