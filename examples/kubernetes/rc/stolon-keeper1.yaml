@@ -25,8 +25,9 @@ spec:
           - |
             export POD_IP=$(hostname -i)
             export STKEEPER_PG_LISTEN_ADDRESS=$POD_IP
-            chown stolon:stolon $PGDATA
-            exec gosu stolon stolon-keeper --data-dir $PGDATA
+            export STOLON_DATA=/stolon-data
+            chown stolon:stolon $STOLON_DATA
+            exec gosu stolon stolon-keeper --data-dir $STOLON_DATA
         env:
           - name: STKEEPER_UID
             value: "keeper1"
