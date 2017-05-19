@@ -35,6 +35,7 @@ import (
 	"github.com/sorintlab/stolon/pkg/cluster"
 	pg "github.com/sorintlab/stolon/pkg/postgresql"
 	"github.com/sorintlab/stolon/pkg/store"
+	"github.com/sorintlab/stolon/pkg/util"
 
 	kvstore "github.com/docker/libkv/store"
 	_ "github.com/lib/pq"
@@ -858,6 +859,29 @@ func WaitStandbyKeeper(e *store.StoreManager, keeperUID string, timeout time.Dur
 				return nil
 			}
 		}
+	end:
+		time.Sleep(sleepInterval)
+	}
+	return fmt.Errorf("timeout")
+}
+
+func WaitClusterDataKeepers(keepersUIDs []string, e *store.StoreManager, timeout time.Duration) error {
+	start := time.Now()
+	for time.Now().Add(-timeout).Before(start) {
+		cd, _, err := e.GetClusterData()
+		if err != nil || cd == nil {
+			goto end
+		}
+		if len(keepersUIDs) != len(cd.Keepers) {
+			goto end
+		}
+		// Check for db on keeper to be initialized
+		for _, keeper := range cd.Keepers {
+			if !util.StringInSlice(keepersUIDs, keeper.UID) {
+				goto end
+			}
+		}
+		return nil
 	end:
 		time.Sleep(sleepInterval)
 	}

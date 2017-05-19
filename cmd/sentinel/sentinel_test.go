@@ -30,6 +30,8 @@ import (
 
 var curUID int
 
+var now = time.Now()
+
 func TestUpdateCluster(t *testing.T) {
 	tests := []struct {
 		cd    *cluster.ClusterData
@@ -122,7 +124,8 @@ func TestUpdateCluster(t *testing.T) {
 						UID:  "keeper1",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 				},
@@ -157,7 +160,8 @@ func TestUpdateCluster(t *testing.T) {
 						UID:  "keeper1",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 				},
@@ -212,14 +216,16 @@ func TestUpdateCluster(t *testing.T) {
 						UID:  "keeper1",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 					"keeper2": &cluster.Keeper{
 						UID:  "keeper2",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 				},
@@ -254,14 +260,16 @@ func TestUpdateCluster(t *testing.T) {
 						UID:  "keeper1",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 					"keeper2": &cluster.Keeper{
 						UID:  "keeper2",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 				},
@@ -312,14 +320,16 @@ func TestUpdateCluster(t *testing.T) {
 						UID:  "keeper1",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 					"keeper2": &cluster.Keeper{
 						UID:  "keeper2",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 				},
@@ -363,14 +373,16 @@ func TestUpdateCluster(t *testing.T) {
 						UID:  "keeper1",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 					"keeper2": &cluster.Keeper{
 						UID:  "keeper2",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 				},
@@ -403,14 +415,16 @@ func TestUpdateCluster(t *testing.T) {
 						UID:  "keeper1",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 					"keeper2": &cluster.Keeper{
 						UID:  "keeper2",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 				},
@@ -481,14 +495,16 @@ func TestUpdateCluster(t *testing.T) {
 						UID:  "keeper1",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 					"keeper2": &cluster.Keeper{
 						UID:  "keeper2",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 				},
@@ -562,14 +578,16 @@ func TestUpdateCluster(t *testing.T) {
 						UID:  "keeper1",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 					"keeper2": &cluster.Keeper{
 						UID:  "keeper2",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 				},
@@ -638,14 +656,16 @@ func TestUpdateCluster(t *testing.T) {
 						UID:  "keeper1",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 					"keeper2": &cluster.Keeper{
 						UID:  "keeper2",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 				},
@@ -709,14 +729,16 @@ func TestUpdateCluster(t *testing.T) {
 						UID:  "keeper1",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 					"keeper2": &cluster.Keeper{
 						UID:  "keeper2",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 				},
@@ -777,14 +799,16 @@ func TestUpdateCluster(t *testing.T) {
 						UID:  "keeper1",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 					"keeper2": &cluster.Keeper{
 						UID:  "keeper2",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 				},
@@ -857,14 +881,16 @@ func TestUpdateCluster(t *testing.T) {
 						UID:  "keeper1",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 					"keeper2": &cluster.Keeper{
 						UID:  "keeper2",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 				},
@@ -933,14 +959,16 @@ func TestUpdateCluster(t *testing.T) {
 						UID:  "keeper1",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 					"keeper2": &cluster.Keeper{
 						UID:  "keeper2",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 				},
@@ -1012,14 +1040,16 @@ func TestUpdateCluster(t *testing.T) {
 						UID:  "keeper1",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 					"keeper2": &cluster.Keeper{
 						UID:  "keeper2",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 				},
@@ -1088,14 +1118,16 @@ func TestUpdateCluster(t *testing.T) {
 						UID:  "keeper1",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 					"keeper2": &cluster.Keeper{
 						UID:  "keeper2",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 				},
@@ -1159,21 +1191,24 @@ func TestUpdateCluster(t *testing.T) {
 						UID:  "keeper1",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 					"keeper2": &cluster.Keeper{
 						UID:  "keeper2",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 					"keeper3": &cluster.Keeper{
 						UID:  "keeper3",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 				},
@@ -1244,21 +1279,24 @@ func TestUpdateCluster(t *testing.T) {
 						UID:  "keeper1",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 					"keeper2": &cluster.Keeper{
 						UID:  "keeper2",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 					"keeper3": &cluster.Keeper{
 						UID:  "keeper3",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 				},
@@ -1332,21 +1370,24 @@ func TestUpdateCluster(t *testing.T) {
 						UID:  "keeper1",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 					"keeper2": &cluster.Keeper{
 						UID:  "keeper2",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 					"keeper3": &cluster.Keeper{
 						UID:  "keeper3",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 				},
@@ -1415,21 +1456,24 @@ func TestUpdateCluster(t *testing.T) {
 						UID:  "keeper1",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 					"keeper2": &cluster.Keeper{
 						UID:  "keeper2",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 					"keeper3": &cluster.Keeper{
 						UID:  "keeper3",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 				},
@@ -1522,21 +1566,24 @@ func TestUpdateCluster(t *testing.T) {
 						UID:  "keeper1",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 					"keeper2": &cluster.Keeper{
 						UID:  "keeper2",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 					"keeper3": &cluster.Keeper{
 						UID:  "keeper3",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 				},
@@ -1626,21 +1673,24 @@ func TestUpdateCluster(t *testing.T) {
 						UID:  "keeper1",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 					"keeper2": &cluster.Keeper{
 						UID:  "keeper2",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 					"keeper3": &cluster.Keeper{
 						UID:  "keeper3",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 				},
@@ -1713,14 +1763,16 @@ func TestUpdateCluster(t *testing.T) {
 						UID:  "keeper1",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 					"keeper2": &cluster.Keeper{
 						UID:  "keeper2",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 				},
@@ -1791,14 +1843,16 @@ func TestUpdateCluster(t *testing.T) {
 						UID:  "keeper1",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 					"keeper2": &cluster.Keeper{
 						UID:  "keeper2",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 				},
@@ -1849,7 +1903,120 @@ func TestUpdateCluster(t *testing.T) {
 				},
 			},
 		},
-		// #13 Changed clusterSpec parameters. RequestTimeout, MaxStandbys, SynchronousReplication, UsePgrewind, PGParameters should bet updated in the DBSpecs.
+		// #13 One master and one keeper without db assigned. keeper2 dead for more then DeadKeeperRemovalInterval: keeper2 removed.
+		{
+			cd: &cluster.ClusterData{
+				Cluster: &cluster.Cluster{
+					UID:        "cluster1",
+					Generation: 1,
+					Spec: &cluster.ClusterSpec{
+						ConvergenceTimeout:   &cluster.Duration{Duration: cluster.DefaultConvergenceTimeout},
+						InitTimeout:          &cluster.Duration{Duration: cluster.DefaultInitTimeout},
+						SyncTimeout:          &cluster.Duration{Duration: cluster.DefaultSyncTimeout},
+						MaxStandbysPerSender: cluster.Uint16P(cluster.DefaultMaxStandbysPerSender),
+					},
+					Status: cluster.ClusterStatus{
+						CurrentGeneration: 1,
+						Phase:             cluster.ClusterPhaseNormal,
+						Master:            "db1",
+					},
+				},
+				Keepers: cluster.Keepers{
+					"keeper1": &cluster.Keeper{
+						UID:  "keeper1",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy:         true,
+							LastHealthyTime: now,
+						},
+					},
+					"keeper2": &cluster.Keeper{
+						UID:  "keeper2",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy:         true,
+							LastHealthyTime: now.Add(-100 * time.Hour),
+						},
+					},
+				},
+				DBs: cluster.DBs{
+					"db1": &cluster.DB{
+						UID:        "db1",
+						Generation: 1,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID:      "keeper1",
+							RequestTimeout: cluster.Duration{Duration: cluster.DefaultRequestTimeout},
+							MaxStandbys:    cluster.DefaultMaxStandbys,
+							InitMode:       cluster.DBInitModeNone,
+							Role:           common.RoleMaster,
+							Followers:      []string{"db2"},
+						},
+						Status: cluster.DBStatus{
+							Healthy:           true,
+							CurrentGeneration: 1,
+						},
+					},
+				},
+				Proxy: &cluster.Proxy{
+					Spec: cluster.ProxySpec{
+						MasterDBUID: "db1",
+					},
+				},
+			},
+			outcd: &cluster.ClusterData{
+				Cluster: &cluster.Cluster{
+					UID:        "cluster1",
+					Generation: 1,
+					Spec: &cluster.ClusterSpec{
+						ConvergenceTimeout:   &cluster.Duration{Duration: cluster.DefaultConvergenceTimeout},
+						InitTimeout:          &cluster.Duration{Duration: cluster.DefaultInitTimeout},
+						SyncTimeout:          &cluster.Duration{Duration: cluster.DefaultSyncTimeout},
+						MaxStandbysPerSender: cluster.Uint16P(cluster.DefaultMaxStandbysPerSender),
+					},
+					Status: cluster.ClusterStatus{
+						CurrentGeneration: 1,
+						Phase:             cluster.ClusterPhaseNormal,
+						Master:            "db1",
+					},
+				},
+				Keepers: cluster.Keepers{
+					"keeper1": &cluster.Keeper{
+						UID:  "keeper1",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy:         true,
+							LastHealthyTime: now,
+						},
+					},
+				},
+				DBs: cluster.DBs{
+					"db1": &cluster.DB{
+						UID:        "db1",
+						Generation: 2,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID:      "keeper1",
+							RequestTimeout: cluster.Duration{Duration: cluster.DefaultRequestTimeout},
+							MaxStandbys:    cluster.DefaultMaxStandbys,
+							InitMode:       cluster.DBInitModeNone,
+							Role:           common.RoleMaster,
+							Followers:      []string{},
+						},
+						Status: cluster.DBStatus{
+							Healthy:           true,
+							CurrentGeneration: 1,
+						},
+					},
+				},
+				Proxy: &cluster.Proxy{
+					Spec: cluster.ProxySpec{
+						MasterDBUID: "db1",
+					},
+				},
+			},
+		},
+		// #14 Changed clusterSpec parameters. RequestTimeout, MaxStandbys, SynchronousReplication, UsePgrewind, PGParameters should bet updated in the DBSpecs.
 		{
 			cd: &cluster.ClusterData{
 				Cluster: &cluster.Cluster{
@@ -1877,14 +2044,16 @@ func TestUpdateCluster(t *testing.T) {
 						UID:  "keeper1",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 					"keeper2": &cluster.Keeper{
 						UID:  "keeper2",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 				},
@@ -1966,14 +2135,16 @@ func TestUpdateCluster(t *testing.T) {
 						UID:  "keeper1",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 					"keeper2": &cluster.Keeper{
 						UID:  "keeper2",
 						Spec: &cluster.KeeperSpec{},
 						Status: cluster.KeeperStatus{
-							Healthy: true,
+							Healthy:         true,
+							LastHealthyTime: now,
 						},
 					},
 				},

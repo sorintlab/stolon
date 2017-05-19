@@ -46,21 +46,22 @@ const (
 const (
 	DefaultProxyCheckInterval = 5 * time.Second
 
-	DefaultSleepInterval                      = 5 * time.Second
-	DefaultRequestTimeout                     = 10 * time.Second
-	DefaultConvergenceTimeout                 = 30 * time.Second
-	DefaultInitTimeout                        = 5 * time.Minute
-	DefaultSyncTimeout                        = 30 * time.Minute
-	DefaultFailInterval                       = 20 * time.Second
-	DefaultMaxStandbys            uint16      = 20
-	DefaultMaxStandbysPerSender   uint16      = 3
-	DefaultMaxStandbyLag                      = 1024 * 1204
-	DefaultSynchronousReplication             = false
-	DefaultMaxSynchronousStandbys uint16      = 1
-	DefaultMinSynchronousStandbys uint16      = 1
-	DefaultUsePgrewind                        = false
-	DefaultMergePGParameter                   = true
-	DefaultRole                   ClusterRole = ClusterRoleMaster
+	DefaultSleepInterval                         = 5 * time.Second
+	DefaultRequestTimeout                        = 10 * time.Second
+	DefaultConvergenceTimeout                    = 30 * time.Second
+	DefaultInitTimeout                           = 5 * time.Minute
+	DefaultSyncTimeout                           = 30 * time.Minute
+	DefaultFailInterval                          = 20 * time.Second
+	DefaultDeadKeeperRemovalInterval             = 48 * time.Hour
+	DefaultMaxStandbys               uint16      = 20
+	DefaultMaxStandbysPerSender      uint16      = 3
+	DefaultMaxStandbyLag                         = 1024 * 1204
+	DefaultSynchronousReplication                = false
+	DefaultMaxSynchronousStandbys    uint16      = 1
+	DefaultMinSynchronousStandbys    uint16      = 1
+	DefaultUsePgrewind                           = false
+	DefaultMergePGParameter                      = true
+	DefaultRole                      ClusterRole = ClusterRoleMaster
 )
 
 const (
@@ -176,6 +177,8 @@ type ClusterSpec struct {
 	SyncTimeout *Duration `json:"syncTimeout,omitempty"`
 	// Interval after the first fail to declare a keeper or a db as not healthy.
 	FailInterval *Duration `json:"failInterval,omitempty"`
+	// Interval after which a dead keeper will be removed from the cluster data
+	DeadKeeperRemovalInterval *Duration `json:"deadKeeperRemovalInterval,omitempty"`
 	// Max number of standbys. This needs to be greater enough to cover both
 	// standby managed by stolon and additional standbys configured by the
 	// user. Its value affect different postgres parameters like
@@ -288,6 +291,9 @@ func (os *ClusterSpec) WithDefaults() *ClusterSpec {
 	if s.FailInterval == nil {
 		s.FailInterval = &Duration{Duration: DefaultFailInterval}
 	}
+	if s.DeadKeeperRemovalInterval == nil {
+		s.DeadKeeperRemovalInterval = &Duration{Duration: DefaultDeadKeeperRemovalInterval}
+	}
 	if s.MaxStandbys == nil {
 		s.MaxStandbys = Uint16P(DefaultMaxStandbys)
 	}
@@ -336,6 +342,9 @@ func (os *ClusterSpec) Validate() error {
 	}
 	if s.SyncTimeout.Duration < 0 {
 		return fmt.Errorf("syncTimeout must be positive")
+	}
+	if s.DeadKeeperRemovalInterval.Duration < 0 {
+		return fmt.Errorf("deadKeeperRemovalInterval must be positive")
 	}
 	if s.FailInterval.Duration < 0 {
 		return fmt.Errorf("failInterval must be positive")
@@ -421,7 +430,8 @@ func NewCluster(uid string, cs *ClusterSpec) *Cluster {
 type KeeperSpec struct{}
 
 type KeeperStatus struct {
-	Healthy bool `json:"healthy,omitempty"`
+	Healthy         bool      `json:"healthy,omitempty"`
+	LastHealthyTime time.Time `json:"lastHealthyTime,omitempty"`
 
 	BootUUID string `json:"bootUUID,omitempty"`
 }
@@ -444,8 +454,9 @@ func NewKeeperFromKeeperInfo(ki *KeeperInfo) *Keeper {
 		ChangeTime: time.Time{},
 		Spec:       &KeeperSpec{},
 		Status: KeeperStatus{
-			Healthy:  true,
-			BootUUID: ki.BootUUID,
+			Healthy:         true,
+			LastHealthyTime: time.Now(),
+			BootUUID:        ki.BootUUID,
 		},
 	}
 }

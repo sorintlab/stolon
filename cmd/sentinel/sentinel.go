@@ -135,7 +135,7 @@ func (s *Sentinel) setSentinelInfo(ttl time.Duration) error {
 	sentinelInfo := &cluster.SentinelInfo{
 		UID: s.uid,
 	}
-	log.Debug("sentinelInfod dump", zap.String("sentinelInfo", spew.Sdump(sentinelInfo)))
+	log.Debug("sentinelInfo dump", zap.String("sentinelInfo", spew.Sdump(sentinelInfo)))
 
 	if err := s.e.SetSentinelInfo(sentinelInfo, ttl); err != nil {
 		return err
@@ -240,7 +240,16 @@ func (s *Sentinel) updateKeepersStatus(cd *cluster.ClusterData, keepersInfo clus
 
 	// Update keepers' healthy states
 	for _, k := range cd.Keepers {
-		k.Status.Healthy = s.isKeeperHealthy(cd, k)
+		healthy := s.isKeeperHealthy(cd, k)
+		// set zero LastHealthyTime to time.Now() to avoid the keeper being
+		// removed since previous versions don't have it set
+		if k.Status.LastHealthyTime.IsZero() {
+			k.Status.LastHealthyTime = time.Now()
+		}
+		if healthy {
+			k.Status.LastHealthyTime = time.Now()
+		}
+		k.Status.Healthy = healthy
 	}
 
 	// Update dbs' states
@@ -288,6 +297,15 @@ func (s *Sentinel) updateKeepersStatus(cd *cluster.ClusterData, keepersInfo clus
 	}
 
 	return cd, kihs
+}
+
+func (s *Sentinel) getDBForKeeper(cd *cluster.ClusterData, keeperUID string) *cluster.DB {
+	for _, db := range cd.DBs {
+		if db.Spec.KeeperUID == keeperUID {
+			return db
+		}
+	}
+	return nil
 }
 
 func (s *Sentinel) findInitialKeeper(cd *cluster.ClusterData) (*cluster.Keeper, error) {
@@ -782,7 +800,31 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 			return nil, fmt.Errorf("unknown init mode %q", clusterSpec.InitMode)
 		}
 	case cluster.ClusterPhaseNormal:
-		// TODO(sgotti) When keeper removal is implemented, remove DBs for unexistent keepers
+		// Remove old keepers
+		keepersToRemove := []*cluster.Keeper{}
+		dbsToRemove := []*cluster.DB{}
+		for _, k := range newcd.Keepers {
+			// get db associated to the keeper
+			db := s.getDBForKeeper(cd, k.UID)
+			if db != nil {
+				// skip keepers with an assigned db
+				continue
+			}
+			if time.Now().After(k.Status.LastHealthyTime.Add(cd.Cluster.DefSpec().DeadKeeperRemovalInterval.Duration)) {
+				log.Info("removing old dead keeper", zap.String("keeper", k.UID))
+				keepersToRemove = append(keepersToRemove, k)
+				//remove db associated to keeper
+				if db != nil {
+					dbsToRemove = append(dbsToRemove, db)
+				}
+			}
+		}
+		for _, k := range keepersToRemove {
+			delete(newcd.Keepers, k.UID)
+		}
+		for _, db := range dbsToRemove {
+			delete(newcd.DBs, db.UID)
+		}
 
 		// Calculate current master status
 		curMasterDBUID := cd.Cluster.Status.Master
@@ -808,7 +850,7 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 
 		if !masterOK {
 			log.Info("trying to find a new master to replace failed master")
-			bestNewMasters := s.findBestNewMasters(cd, curMasterDB)
+			bestNewMasters := s.findBestNewMasters(newcd, curMasterDB)
 			if len(bestNewMasters) == 0 {
 				log.Error("no eligible masters")
 			} else {
@@ -1082,24 +1124,28 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 					db.Spec.Followers = []string{}
 					db.Spec.FollowConfig = &cluster.FollowConfig{Type: cluster.FollowTypeInternal, DBUID: wantedMasterDBUID}
 				}
-
-				// Set followers for master DB
-				masterDB.Spec.Followers = []string{}
-				for _, db := range newcd.DBs {
-					if masterDB.UID == db.UID {
-						continue
-					}
-					fc := db.Spec.FollowConfig
-					if fc != nil {
-						if fc.Type == cluster.FollowTypeInternal && fc.DBUID == wantedMasterDBUID {
-							masterDB.Spec.Followers = append(masterDB.Spec.Followers, db.UID)
-						}
-					}
-				}
-				// Sort followers so the slice won't be considered changed due to different order of the same entries.
-				sort.Strings(masterDB.Spec.Followers)
 			}
 		}
+
+		// Update followers for master DB
+		// Always do this since, in future, keepers and related db could be
+		// removed (currently only dead keepers without an assigned db are
+		// removed)
+		masterDB := newcd.DBs[curMasterDBUID]
+		masterDB.Spec.Followers = []string{}
+		for _, db := range newcd.DBs {
+			if masterDB.UID == db.UID {
+				continue
+			}
+			fc := db.Spec.FollowConfig
+			if fc != nil {
+				if fc.Type == cluster.FollowTypeInternal && fc.DBUID == wantedMasterDBUID {
+					masterDB.Spec.Followers = append(masterDB.Spec.Followers, db.UID)
+				}
+			}
+		}
+		// Sort followers so the slice won't be considered changed due to different order of the same entries.
+		sort.Strings(masterDB.Spec.Followers)
 
 	default:
 		return nil, fmt.Errorf("unknown cluster phase %s", cd.Cluster.Status.Phase)
@@ -1420,6 +1466,7 @@ func (s *Sentinel) clusterSentinelCheck(pctx context.Context) {
 	}
 
 	newcd, newKeeperInfoHistories := s.updateKeepersStatus(cd, keepersInfo, firstRun)
+	log.Debug("newcd dump after updateKeepersStatus", zap.String("newcd", spew.Sdump(newcd)))
 
 	newcd, err = s.updateCluster(newcd)
 	if err != nil {
