@@ -127,3 +127,81 @@ func TestExpand(t *testing.T) {
 		}
 	}
 }
+
+func TestParseBinaryVersion(t *testing.T) {
+	tests := []struct {
+		in  string
+		maj int
+		min int
+		err error
+	}{
+		{
+			in:  "postgres (PostgreSQL) 9.5.7",
+			maj: 9,
+			min: 5,
+		},
+		{
+			in:  "postgres (PostgreSQL) 10beta1",
+			maj: 10,
+			min: 0,
+		},
+		{
+			in:  "postgres (PostgreSQL) 10.1.2",
+			maj: 10,
+			min: 1,
+		},
+	}
+
+	for i, tt := range tests {
+		maj, min, err := ParseBinaryVersion(tt.in)
+		t.Logf("test #%d", i)
+		if tt.err != nil {
+			if err == nil {
+				t.Fatalf("got no error, wanted error: %v", tt.err)
+			} else if tt.err.Error() != err.Error() {
+				t.Fatalf("got error: %v, wanted error: %v", err, tt.err)
+			}
+		} else {
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if maj != tt.maj || min != tt.min {
+				t.Fatalf("#%d: wrong maj.min version: got: %d.%d, want: %d.%d", i, maj, min, tt.maj, tt.min)
+			}
+		}
+	}
+}
+
+func TestParseVersion(t *testing.T) {
+	tests := []struct {
+		in  string
+		maj int
+		min int
+		err error
+	}{
+		{
+			in:  "9.5.7",
+			maj: 9,
+			min: 5,
+		},
+	}
+
+	for i, tt := range tests {
+		maj, min, err := ParseVersion(tt.in)
+		t.Logf("test #%d", i)
+		if tt.err != nil {
+			if err == nil {
+				t.Fatalf("got no error, wanted error: %v", tt.err)
+			} else if tt.err.Error() != err.Error() {
+				t.Fatalf("got error: %v, wanted error: %v", err, tt.err)
+			}
+		} else {
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if maj != tt.maj || min != tt.min {
+				t.Fatalf("#%d: wrong maj.min versio : got: %d.%d, want: %d.%d", i, maj, min, tt.maj, tt.min)
+			}
+		}
+	}
+}

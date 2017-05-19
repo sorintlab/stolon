@@ -316,17 +316,55 @@ func (p *Manager) DropReplicationSlot(name string) error {
 	return dropReplicationSlot(ctx, p.localConnParams, name)
 }
 
+func (p *Manager) BinaryVersion() (int, int, error) {
+	name := filepath.Join(p.pgBinPath, "postgres")
+	cmd := exec.Command(name, "-V")
+	log.Debug("execing cmd", zap.Object("cmd", cmd))
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return 0, 0, fmt.Errorf("error: %v, output: %s", err, string(out))
+	}
+
+	return ParseBinaryVersion(string(out))
+}
+
+func (p *Manager) PGDataVersion() (int, int, error) {
+	fh, err := os.Open(filepath.Join(p.dataDir, "PG_VERSION"))
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to read PG_VERSION: %v", err)
+	}
+	defer fh.Close()
+
+	scanner := bufio.NewScanner(fh)
+	scanner.Split(bufio.ScanLines)
+
+	scanner.Scan()
+
+	version := scanner.Text()
+	return ParseVersion(version)
+}
+
 func (p *Manager) IsInitialized() (bool, error) {
 	// List of required files or directories relative to postgres data dir
 	// From https://www.postgresql.org/docs/9.4/static/storage-file-layout.html
 	// with some additions.
 	// TODO(sgotti) when the code to get the current db version is in place
 	// also add additinal files introduced by releases after 9.4.
+	exists, err := fileExists(filepath.Join(p.dataDir, "PG_VERSION"))
+	if err != nil {
+		return false, err
+	}
+	if !exists {
+		return false, nil
+	}
+	maj, _, err := p.PGDataVersion()
+	if err != nil {
+		return false, err
+	}
 	requiredFiles := []string{
 		"PG_VERSION",
 		"base",
 		"global",
-		"pg_clog",
 		"pg_dynshmem",
 		"pg_logical",
 		"pg_multixact",
@@ -339,8 +377,21 @@ func (p *Manager) IsInitialized() (bool, error) {
 		"pg_subtrans",
 		"pg_tblspc",
 		"pg_twophase",
-		"pg_xlog",
 		"global/pg_control",
+	}
+	// in postgres 10 pc_clog has been renamed to pg_xact and pc_xlog has been
+	// renamed to pg_wal
+	if maj < 10 {
+		requiredFiles = append(requiredFiles, []string{
+			"pg_clog",
+			"pg_xlog",
+		}...)
+	} else {
+		requiredFiles = append(requiredFiles, []string{
+			"pg_xact",
+			"pg_wal",
+		}...)
+
 	}
 	for _, f := range requiredFiles {
 		exists, err := fileExists(filepath.Join(p.dataDir, f))
