@@ -228,6 +228,22 @@ func NewTestKeeper(t *testing.T, dir, clusterName, pgSUUsername, pgSUPassword, p
 	return NewTestKeeperWithID(t, dir, uid, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, storeBackend, storeEndpoints, a...)
 }
 
+func (tk *TestKeeper) PGDataVersion() (int, int, error) {
+	fh, err := os.Open(filepath.Join(tk.dataDir, "postgres", "PG_VERSION"))
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to read PG_VERSION: %v", err)
+	}
+	defer fh.Close()
+
+	scanner := bufio.NewScanner(fh)
+	scanner.Split(bufio.ScanLines)
+
+	scanner.Scan()
+
+	version := scanner.Text()
+	return pg.ParseVersion(version)
+}
+
 func (tk *TestKeeper) Exec(query string, args ...interface{}) (sql.Result, error) {
 	res, err := tk.db.Exec(query, args...)
 	if err != nil {

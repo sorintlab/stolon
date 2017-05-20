@@ -123,8 +123,18 @@ func TestPITR(t *testing.T) {
 	}
 
 	// Switch wal so they will be archived
-	if _, err := tk.db.Exec("select pg_switch_xlog()"); err != nil {
+	maj, _, err := tk.PGDataVersion()
+	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
+	}
+	if maj < 10 {
+		if _, err := tk.db.Exec("select pg_switch_xlog()"); err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+	} else {
+		if _, err := tk.db.Exec("select pg_switch_wal()"); err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
 	}
 
 	ts.Stop()
