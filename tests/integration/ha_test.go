@@ -1083,3 +1083,108 @@ func TestLoweredMaxStandbysPerSender(t *testing.T) {
 		t.Fatalf("expected 2 DBs in cluster data: %v", err)
 	}
 }
+
+func TestKeeperRemoval(t *testing.T) {
+	t.Parallel()
+	dir, err := ioutil.TempDir("", "stolon")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer os.RemoveAll(dir)
+
+	clusterName := uuid.NewV4().String()
+
+	initialClusterSpec := &cluster.ClusterSpec{
+		InitMode:           cluster.ClusterInitModeP(cluster.ClusterInitModeNew),
+		SleepInterval:      &cluster.Duration{Duration: 2 * time.Second},
+		FailInterval:       &cluster.Duration{Duration: 5 * time.Second},
+		ConvergenceTimeout: &cluster.Duration{Duration: 30 * time.Second},
+		// very low DeadKeeperRemovalInterval to test this behavior
+		DeadKeeperRemovalInterval: &cluster.Duration{Duration: 10 * time.Second},
+		MaxStandbysPerSender:      cluster.Uint16P(1),
+		PGParameters:              make(cluster.PGParameters),
+	}
+
+	// Create 2 keepers
+	tks, tss, tstore := setupServersCustom(t, clusterName, dir, 2, 1, initialClusterSpec)
+	defer shutdown(tks, tss, tstore)
+
+	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
+	storePath := filepath.Join(common.StoreBasePath, clusterName)
+	sm := store.NewStoreManager(tstore.store, storePath)
+
+	master, standbys := waitMasterStandbysReady(t, sm, tks)
+	standby1 := standbys[0]
+
+	if err := populate(t, master); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := write(t, master, 1, 1); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// Add another keeper that won't have a db assigned (since MaxStandbysPerSender == 1)
+	standby2, err := NewTestKeeper(t, dir, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, tstore.storeBackend, storeEndpoints)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	tks[standby2.uid] = standby2
+
+	if err := standby2.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	standbys = append(standbys, standby2)
+
+	// wait for keeper to be added to the cluster data
+	if err := WaitClusterDataKeepers([]string{master.uid, standby1.uid, standby2.uid}, sm, 30*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// Stop the keeper process on standby2
+	t.Logf("Stopping standby keeper: %s", standby2.uid)
+	standby2.Stop()
+
+	// wait for standby2 keeper to be removed from the cluster data since it's dead a without an assigned db
+	if err := WaitClusterDataKeepers([]string{master.uid, standby1.uid}, sm, 30*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// Stop the keeper process on master and standby1
+	t.Logf("Stopping master keeper: %s", master.uid)
+	master.Stop()
+	standby1.Stop()
+
+	// wait for a time greater than DeadKeeperRemovalInterval
+	time.Sleep(20 * time.Second)
+	// the master keeper shouldn't be removed from the cluster data
+	if err := WaitClusterDataKeepers([]string{master.uid, standby1.uid}, sm, 30*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// restart the standby2 and master and stop standby1
+	t.Logf("Starting master keeper: %s", master.uid)
+	master.Start()
+	t.Logf("Starting standby keeper: %s", standby2.uid)
+	standby2.Start()
+
+	waitKeeperReady(t, sm, master)
+	// add a new line to be sure
+	if err := write(t, master, 2, 2); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// the standby2 should be readded to the cluster and a new db assigned
+	// (since standby1 is dead) and then synced to the master db
+	waitKeeperReady(t, sm, standby2)
+	if err := waitLines(t, standby2, 2, 60*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := standby2.WaitRole(common.RoleStandby, 30*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// wait for standby1 keeper to be removed from the cluster data since it's dead a without an assigned db
+	if err := WaitClusterDataKeepers([]string{master.uid, standby2.uid}, sm, 30*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+}
