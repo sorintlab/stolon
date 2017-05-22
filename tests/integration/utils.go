@@ -25,6 +25,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"sort"
 	"strconv"
 	"sync"
@@ -245,6 +246,27 @@ func (tk *TestKeeper) PGDataVersion() (int, int, error) {
 	return pg.ParseVersion(version)
 }
 
+func (tk *TestKeeper) GetPrimaryConninfo() (pg.ConnParams, error) {
+	regex := regexp.MustCompile(`\s*primary_conninfo\s*=\s*'(.*)'$`)
+
+	fh, err := os.Open(filepath.Join(tk.dataDir, "postgres", "recovery.conf"))
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	defer fh.Close()
+
+	scanner := bufio.NewScanner(fh)
+	scanner.Split(bufio.ScanLines)
+
+	for scanner.Scan() {
+		m := regex.FindStringSubmatch(scanner.Text())
+		if len(m) == 2 {
+			return pg.ParseConnString(m[1])
+		}
+	}
+	return nil, nil
+}
+
 func (tk *TestKeeper) Exec(query string, args ...interface{}) (sql.Result, error) {
 	res, err := tk.db.Exec(query, args...)
 	if err != nil {
@@ -316,7 +338,7 @@ func (tk *TestKeeper) SignalPG(sig os.Signal) error {
 	return p.Signal(sig)
 }
 
-func (tk *TestKeeper) IsMaster() (bool, error) {
+func (tk *TestKeeper) isInRecovery() (bool, error) {
 	rows, err := tk.Query("SELECT pg_is_in_recovery from pg_is_in_recovery()")
 	if err != nil {
 		return false, err
@@ -327,7 +349,7 @@ func (tk *TestKeeper) IsMaster() (bool, error) {
 		if err := rows.Scan(&isInRecovery); err != nil {
 			return false, err
 		}
-		if !isInRecovery {
+		if isInRecovery {
 			return true, nil
 		}
 		return false, nil
@@ -335,19 +357,48 @@ func (tk *TestKeeper) IsMaster() (bool, error) {
 	return false, fmt.Errorf("no rows returned")
 }
 
-func (tk *TestKeeper) WaitRole(r common.Role, timeout time.Duration) error {
+func (tk *TestKeeper) WaitDBRole(r common.Role, ptk *TestKeeper, timeout time.Duration) error {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
 		time.Sleep(sleepInterval)
-		ok, err := tk.IsMaster()
-		if err != nil {
-			continue
-		}
-		if ok && r == common.RoleMaster {
-			return nil
-		}
-		if !ok && r == common.RoleStandby {
-			return nil
+		// when the cluster is in standby mode also the master db is a standby
+		// so we cannot just check if the keeper is in recovery but have to
+		// check if the primary_conninfo points to the primary db or to the
+		// cluster master
+		if ptk == nil {
+			ok, err := tk.isInRecovery()
+			if err != nil {
+				continue
+			}
+			if !ok && r == common.RoleMaster {
+				return nil
+			}
+			if ok && r == common.RoleStandby {
+				return nil
+			}
+		} else {
+			ok, err := tk.isInRecovery()
+			if err != nil {
+				continue
+			}
+			if !ok {
+				continue
+			}
+			// TODO(sgotti) get this information from the running instance instead than from
+			// recovery.conf to be really sure it's applied
+			conninfo, err := tk.GetPrimaryConninfo()
+			if err != nil {
+				continue
+			}
+			if conninfo["host"] == ptk.pgListenAddress && conninfo["port"] == ptk.pgPort {
+				if r == common.RoleMaster {
+					return nil
+				}
+			} else {
+				if r == common.RoleStandby {
+					return nil
+				}
+			}
 		}
 	}
 
@@ -541,7 +592,7 @@ func NewTestEtcd(t *testing.T, dir string, a ...string) (*TestStore, error) {
 	u := uuid.NewV4()
 	uid := fmt.Sprintf("%x", u[:4])
 
-	dataDir := filepath.Join(dir, "etcd")
+	dataDir := filepath.Join(dir, fmt.Sprintf("etcd%s", uid))
 
 	listenAddress, port, err := getFreePort(true, false)
 	if err != nil {
@@ -598,7 +649,7 @@ func NewTestConsul(t *testing.T, dir string, a ...string) (*TestStore, error) {
 	u := uuid.NewV4()
 	uid := fmt.Sprintf("%x", u[:4])
 
-	dataDir := filepath.Join(dir, "consul")
+	dataDir := filepath.Join(dir, fmt.Sprintf("consul%s", uid))
 
 	listenAddress, portHTTP, err := getFreePort(true, false)
 	if err != nil {

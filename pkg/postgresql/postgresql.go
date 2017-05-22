@@ -446,10 +446,8 @@ func (p *Manager) GetRole() (common.Role, error) {
 }
 
 func (p *Manager) GetPrimaryConninfo() (ConnParams, error) {
-	regex, err := regexp.Compile(`\s*primary_conninfo\s*=\s*'(.*)'$`)
-	if err != nil {
-		return nil, err
-	}
+	regex := regexp.MustCompile(`\s*primary_conninfo\s*=\s*'(.*)'$`)
+
 	fh, err := os.Open(filepath.Join(p.dataDir, "recovery.conf"))
 	if os.IsNotExist(err) {
 		return nil, nil
@@ -468,11 +466,30 @@ func (p *Manager) GetPrimaryConninfo() (ConnParams, error) {
 	return nil, nil
 }
 
-func (p *Manager) HasConnParams() (bool, error) {
-	regex, err := regexp.Compile(`primary_conninfo`)
-	if err != nil {
-		return false, err
+func (p *Manager) GetPrimarySlotName() (string, error) {
+	regex := regexp.MustCompile(`\s*primary_slot_name\s*=\s*'(.*)'$`)
+
+	fh, err := os.Open(filepath.Join(p.dataDir, "recovery.conf"))
+	if os.IsNotExist(err) {
+		return "", nil
 	}
+	defer fh.Close()
+
+	scanner := bufio.NewScanner(fh)
+	scanner.Split(bufio.ScanLines)
+
+	for scanner.Scan() {
+		m := regex.FindStringSubmatch(scanner.Text())
+		if len(m) == 2 {
+			return m[1], nil
+		}
+	}
+	return "", nil
+}
+
+func (p *Manager) HasConnParams() (bool, error) {
+	regex := regexp.MustCompile(`primary_conninfo`)
+
 	fh, err := os.Open(filepath.Join(p.dataDir, "recovery.conf"))
 	if os.IsNotExist(err) {
 		return false, nil

@@ -131,6 +131,14 @@ func (s *Sentinel) electionLoop() {
 	}
 }
 
+// syncRepl return whether to use synchronous replication based on the current
+// cluster spec.
+func (s *Sentinel) syncRepl(spec *cluster.ClusterSpec) bool {
+	// a cluster standby role means our "master" will act as a cascading standby to
+	// the other keepers, in this case we can't use synchronous replication
+	return *spec.SynchronousReplication && *spec.Role == cluster.ClusterRoleMaster
+}
+
 func (s *Sentinel) setSentinelInfo(ttl time.Duration) error {
 	sentinelInfo := &cluster.SentinelInfo{
 		UID: s.uid,
@@ -321,14 +329,18 @@ func (s *Sentinel) findInitialKeeper(cd *cluster.ClusterData) (*cluster.Keeper, 
 	return cd.Keepers[keys[r]], nil
 }
 
+// setDBSpecFromClusterSpec updates dbSpec values with the related clusterSpec ones
 func (s *Sentinel) setDBSpecFromClusterSpec(cd *cluster.ClusterData) {
-	// Update dbSpec values with the related clusterSpec ones
+	clusterSpec := cd.Cluster.DefSpec()
 	for _, db := range cd.DBs {
-		db.Spec.RequestTimeout = *cd.Cluster.DefSpec().RequestTimeout
-		db.Spec.MaxStandbys = *cd.Cluster.DefSpec().MaxStandbys
-		db.Spec.SynchronousReplication = *cd.Cluster.DefSpec().SynchronousReplication
-		db.Spec.UsePgrewind = *cd.Cluster.DefSpec().UsePgrewind
-		db.Spec.PGParameters = cd.Cluster.DefSpec().PGParameters
+		db.Spec.RequestTimeout = *clusterSpec.RequestTimeout
+		db.Spec.MaxStandbys = *clusterSpec.MaxStandbys
+		db.Spec.SynchronousReplication = s.syncRepl(clusterSpec)
+		db.Spec.UsePgrewind = *clusterSpec.UsePgrewind
+		db.Spec.PGParameters = clusterSpec.PGParameters
+		if db.Spec.FollowConfig != nil && db.Spec.FollowConfig.Type == cluster.FollowTypeExternal {
+			db.Spec.FollowConfig.StandbySettings = clusterSpec.StandbySettings
+		}
 	}
 }
 
@@ -371,12 +383,10 @@ func (s *Sentinel) isDifferentTimelineBranch(followedDB *cluster.DB, db *cluster
 // isLagBelowMax checks if the db reported lag is below MaxStandbyLag from the
 // master reported lag
 func (s *Sentinel) isLagBelowMax(cd *cluster.ClusterData, curMasterDB, db *cluster.DB) bool {
-	if !*cd.Cluster.DefSpec().SynchronousReplication {
-		log.Debug(fmt.Sprintf("curMasterDB.Status.XLogPos: %d, db.Status.XLogPos: %d, lag: %d", curMasterDB.Status.XLogPos, db.Status.XLogPos, int64(curMasterDB.Status.XLogPos-db.Status.XLogPos)))
-		if int64(curMasterDB.Status.XLogPos-db.Status.XLogPos) > int64(*cd.Cluster.DefSpec().MaxStandbyLag) {
-			log.Info("ignoring keeper since its behind that maximum xlog position", zap.String("db", db.UID), zap.Uint64("dbXLogPos", db.Status.XLogPos), zap.Uint64("masterXLogPos", curMasterDB.Status.XLogPos))
-			return false
-		}
+	log.Debug(fmt.Sprintf("curMasterDB.Status.XLogPos: %d, db.Status.XLogPos: %d, lag: %d", curMasterDB.Status.XLogPos, db.Status.XLogPos, int64(curMasterDB.Status.XLogPos-db.Status.XLogPos)))
+	if int64(curMasterDB.Status.XLogPos-db.Status.XLogPos) > int64(*cd.Cluster.DefSpec().MaxStandbyLag) {
+		log.Info("ignoring keeper since its behind that maximum xlog position", zap.String("db", db.UID), zap.Uint64("dbXLogPos", db.Status.XLogPos), zap.Uint64("masterXLogPos", curMasterDB.Status.XLogPos))
+		return false
 	}
 	return true
 }
@@ -582,7 +592,7 @@ func (s *Sentinel) findBestStandbys(cd *cluster.ClusterData, masterDB *cluster.D
 		// do this only when not using synchronous replication since in sync repl we
 		// have to ignore the last reported xlogpos or valid sync standby will be
 		// skipped
-		if !*cd.Cluster.DefSpec().SynchronousReplication {
+		if !s.syncRepl(cd.Cluster.DefSpec()) {
 			if !s.isLagBelowMax(cd, masterDB, db) {
 				log.Debug("ignoring keeper since its lag is above the max configured lag", zap.String("db", db.UID), zap.Uint64("dbXLogPos", db.Status.XLogPos), zap.Uint64("masterXLogPos", masterDB.Status.XLogPos))
 				continue
@@ -612,7 +622,7 @@ func (s *Sentinel) findBestNewMasters(cd *cluster.ClusterData, masterDB *cluster
 		// do this only when not using synchronous replication since in sync repl we
 		// have to ignore the last reported xlogpos or valid sync standby will be
 		// skipped
-		if !*cd.Cluster.DefSpec().SynchronousReplication {
+		if !s.syncRepl(cd.Cluster.DefSpec()) {
 			if !s.isLagBelowMax(cd, masterDB, db) {
 				log.Debug("ignoring keeper since its lag is above the max configured lag", zap.String("db", db.UID), zap.Uint64("dbXLogPos", db.Status.XLogPos), zap.Uint64("masterXLogPos", masterDB.Status.XLogPos))
 				continue
@@ -747,6 +757,15 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 					return nil, fmt.Errorf("cannot choose initial master: %v", err)
 				}
 				log.Info("initializing cluster using selected keeper as master db owner", zap.String("keeper", k.UID))
+				role := common.RoleMaster
+				var followConfig *cluster.FollowConfig
+				if *clusterSpec.Role == cluster.ClusterRoleStandby {
+					role = common.RoleStandby
+					followConfig = &cluster.FollowConfig{
+						Type:            cluster.FollowTypeExternal,
+						StandbySettings: clusterSpec.StandbySettings,
+					}
+				}
 				db := &cluster.DB{
 					UID:        s.UIDFn(),
 					Generation: cluster.InitialGeneration,
@@ -755,7 +774,8 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 						KeeperUID:     k.UID,
 						InitMode:      cluster.DBInitModePITR,
 						PITRConfig:    clusterSpec.PITRConfig,
-						Role:          common.RoleMaster,
+						Role:          role,
+						FollowConfig:  followConfig,
 						Followers:     []string{},
 						IncludeConfig: *clusterSpec.MergePgParameters,
 					},
@@ -856,7 +876,7 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 			} else {
 				// if synchronous replication is enabled, only choose new master in the synchronous replication standbys.
 				var bestNewMasterDB *cluster.DB
-				if *clusterSpec.SynchronousReplication {
+				if s.syncRepl(clusterSpec) {
 					onlyFake := true
 					// if only fake synchronous standbys are defined we cannot choose any standby
 					for _, dbUID := range curMasterDB.Spec.SynchronousStandbys {
@@ -894,17 +914,27 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 			oldMasterdb := newcd.DBs[curMasterDBUID]
 			oldMasterdb.Spec.Followers = []string{}
 
+			masterDBRole := common.RoleMaster
+			var followConfig *cluster.FollowConfig
+			if *clusterSpec.Role == cluster.ClusterRoleStandby {
+				masterDBRole = common.RoleStandby
+				followConfig = &cluster.FollowConfig{
+					Type:            cluster.FollowTypeExternal,
+					StandbySettings: clusterSpec.StandbySettings,
+				}
+			}
+
 			newcd.Cluster.Status.Master = wantedMasterDBUID
 			newMasterDB := newcd.DBs[wantedMasterDBUID]
-			newMasterDB.Spec.Role = common.RoleMaster
-			newMasterDB.Spec.FollowConfig = nil
+			newMasterDB.Spec.Role = masterDBRole
+			newMasterDB.Spec.FollowConfig = followConfig
 
 			// Tell proxy that there's currently no active master
 			newcd.Proxy.Spec.MasterDBUID = ""
 			newcd.Proxy.ChangeTime = time.Now()
 
 			// Setup synchronous standbys to the one of the previous master (replacing ourself with the previous master)
-			if *clusterSpec.SynchronousReplication {
+			if s.syncRepl(clusterSpec) {
 				for _, dbUID := range oldMasterdb.Spec.SynchronousStandbys {
 					newMasterDB.Spec.SynchronousStandbys = []string{}
 					if dbUID != newMasterDB.UID {
@@ -924,6 +954,13 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 		// Setup standbys, do this only when there's no master change
 		if curMasterDBUID == wantedMasterDBUID {
 			masterDB := newcd.DBs[curMasterDBUID]
+
+			// change master db role to "master" if the cluster role has been changed in the spec
+			if *clusterSpec.Role == cluster.ClusterRoleMaster {
+				masterDB.Spec.Role = common.RoleMaster
+				masterDB.Spec.FollowConfig = nil
+			}
+
 			// Set standbys to follow master only if it's healthy and converged
 			if masterDB.Status.Healthy && s.dbConvergenceState(masterDB, clusterSpec.ConvergenceTimeout.Duration) == Converged {
 				// Tell proxy that there's a new active master
@@ -974,7 +1011,7 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 				}
 
 				// Setup synchronous standbys
-				if *clusterSpec.SynchronousReplication {
+				if s.syncRepl(clusterSpec) {
 					// make a map of synchronous standbys starting from the current ones
 					synchronousStandbys := map[string]struct{}{}
 					for _, dbUID := range masterDB.Spec.SynchronousStandbys {
