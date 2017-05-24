@@ -7,6 +7,7 @@
 * Backup/Restore
  * [Point In Time Recovery](pitr.md)
   * [Point In Time Recovery with wal-e](pitr_wal-e.md)
+* [Standby Cluster](standbycluster.md)
 * Examples
  * [Simple test cluster](simplecluster.md)
  * [Kubernetes](../examples/kubernetes/README.md)
