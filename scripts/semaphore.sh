@@ -39,14 +39,23 @@ export CONSUL_BIN="${PWD}/consul/consul"
 
 OLDPATH=$PATH
 
+# Increase sysv ipc semaphores to accomode a big number of parallel postgres instances
+sudo /bin/sh -c 'echo "32000 1024000000 500 32000" > /proc/sys/kernel/sem'
+
+# Free up some disk space
+rm -rf ~/.rbenv
+
+export INTEGRATION=1
+export PARALLEL=20
+
 # Test with postgresql 9.5
 echo "===== Testing with postgreSQL 9.5 ====="
-export PATH=/usr/lib/postgresql/9.5/bin/:$OLDPATH ; INTEGRATION=1 ./test
+export PATH=/usr/lib/postgresql/9.5/bin/:$OLDPATH ; ./test
 
 # Test with postgresql 9.6
 echo "===== Testing with postgreSQL 9.6 ====="
-export PATH=/usr/lib/postgresql/9.6/bin/:$OLDPATH ; INTEGRATION=1 ./test
+export PATH=/usr/lib/postgresql/9.6/bin/:$OLDPATH ; ./test
 
 # Test with postgresql 10
 echo "===== Testing with postgreSQL 10 ====="
-export PATH=/usr/lib/postgresql/10/bin/:$OLDPATH ; INTEGRATION=1 ./test
+export PATH=/usr/lib/postgresql/10/bin/:$OLDPATH ; ./test
