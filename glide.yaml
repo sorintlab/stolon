@@ -1,9 +1,5 @@
 package: github.com/sorintlab/stolon
 import:
-- package: github.com/coreos/rkt
-  version: v1.16.0
-  subpackages:
-  - pkg/lock
 - package: github.com/davecgh/go-spew
   version: 6d212800a42e8ab5c146b8ace3490ee17e5225f9
   subpackages:

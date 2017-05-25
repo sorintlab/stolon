@@ -35,7 +35,6 @@ import (
 	"github.com/sorintlab/stolon/pkg/store"
 	"github.com/sorintlab/stolon/pkg/util"
 
-	"github.com/coreos/rkt/pkg/lock"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/spf13/cobra"
 	"github.com/uber-go/zap"
@@ -1463,11 +1462,28 @@ func keeper(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	// Take an exclusive lock on dataDir
-	_, err = lock.TryExclusiveLock(cfg.dataDir, lock.Dir)
+	// Open (and create if needed) the lock file.
+	// There is no need to clean up this file since we don't use the file as an actual lock. We get a lock
+	// on the file. So the lock get released when our process stops (or dies).
+	lockFileName := filepath.Join(cfg.dataDir, "lock")
+	lockFile, err := os.OpenFile(lockFileName, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
-		die("cannot take exclusive lock on data dir %q: %v", cfg.dataDir, err)
+		die("cannot take exclusive lock on data dir %q: %v", lockFileName, err)
 	}
+
+	// Get a lock on our lock file.
+	ft := &syscall.Flock_t{
+		Type:   syscall.F_WRLCK,
+		Whence: int16(os.SEEK_SET),
+		Start:  0,
+		Len:    0, // Entire file.
+	}
+
+	err = syscall.FcntlFlock(lockFile.Fd(), syscall.F_SETLK, ft)
+	if err != nil {
+		die("cannot take exclusive lock on data dir %q: %v", lockFileName, err)
+	}
+
 	log.Info("exclusive lock on data dir taken")
 
 	if cfg.uid != "" {
