@@ -342,6 +342,7 @@ func testFailover(t *testing.T, syncRepl bool) {
 
 	// wait for the keepers to have reported their state (needed to know the instance XLogPos)
 	time.Sleep(5 * time.Second)
+	WaitClusterSyncedXLogPos([]string{master.uid, standby.uid}, sm, 20*time.Second)
 
 	// Stop the keeper process on master, should also stop the database
 	t.Logf("Stopping current master keeper: %s", master.uid)
@@ -405,6 +406,7 @@ func testFailoverFailed(t *testing.T, syncRepl bool) {
 
 	// wait for the keepers to have reported their state (needed to know the instance XLogPos)
 	time.Sleep(5 * time.Second)
+	WaitClusterSyncedXLogPos([]string{master.uid, standby.uid}, sm, 20*time.Second)
 
 	// Stop the keeper process on master, should also stop the database
 	t.Logf("Stopping current master keeper: %s", master.uid)
@@ -474,6 +476,10 @@ func TestFailoverTooMuchLag(t *testing.T) {
 	// stop the standby and write more than MaxStandbyLag data to the master
 	t.Logf("Stopping current standby keeper: %s", standby.uid)
 	standby.Stop()
+	if err := standby.WaitDBDown(30 * time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
 	for i := 1; i < 1000; i++ {
 		if err := write(t, master, i, i); err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -529,6 +535,7 @@ func testOldMasterRestart(t *testing.T, syncRepl, usePgrewind bool) {
 
 	// wait for the keepers to have reported their state (needed to know the instance XLogPos)
 	time.Sleep(5 * time.Second)
+	WaitClusterSyncedXLogPos([]string{master.uid, standbys[0].uid}, sm, 20*time.Second)
 
 	// Stop the keeper process on master, should also stop the database
 	t.Logf("Stopping current master keeper: %s", master.uid)
@@ -637,6 +644,7 @@ func testPartition1(t *testing.T, syncRepl, usePgrewind bool) {
 
 	// wait for the keepers to have reported their state (needed to know the instance XLogPos)
 	time.Sleep(5 * time.Second)
+	WaitClusterSyncedXLogPos([]string{master.uid, standbys[0].uid}, sm, 20*time.Second)
 
 	// Freeze the keeper and postgres processes on the master
 	t.Logf("SIGSTOPping current master keeper: %s", master.uid)
@@ -754,6 +762,7 @@ func testTimelineFork(t *testing.T, syncRepl, usePgrewind bool) {
 
 	// wait for the keepers to have reported their state (needed to know the instance XLogPos)
 	time.Sleep(5 * time.Second)
+	WaitClusterSyncedXLogPos([]string{master.uid, standbys[0].uid}, sm, 20*time.Second)
 
 	// Wait replicated data to standby
 	if err := waitLines(t, standbys[0], 1, 10*time.Second); err != nil {
@@ -897,6 +906,7 @@ func TestMasterChangedAddress(t *testing.T) {
 
 	// wait for the keepers to have reported their state (needed to know the instance XLogPos)
 	time.Sleep(5 * time.Second)
+	WaitClusterSyncedXLogPos([]string{master.uid, standbys[0].uid}, sm, 20*time.Second)
 
 	// Wait standby synced with master
 	if err := waitLines(t, master, 1, 60*time.Second); err != nil {

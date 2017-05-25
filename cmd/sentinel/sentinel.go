@@ -374,7 +374,7 @@ func (s *Sentinel) isLagBelowMax(cd *cluster.ClusterData, curMasterDB, db *clust
 	if !*cd.Cluster.DefSpec().SynchronousReplication {
 		log.Debug(fmt.Sprintf("curMasterDB.Status.XLogPos: %d, db.Status.XLogPos: %d, lag: %d", curMasterDB.Status.XLogPos, db.Status.XLogPos, int64(curMasterDB.Status.XLogPos-db.Status.XLogPos)))
 		if int64(curMasterDB.Status.XLogPos-db.Status.XLogPos) > int64(*cd.Cluster.DefSpec().MaxStandbyLag) {
-			log.Debug("ignoring keeper since its behind that maximum xlog position", zap.String("db", db.UID), zap.Uint64("dbXLogPos", db.Status.XLogPos), zap.Uint64("masterXLogPos", curMasterDB.Status.XLogPos))
+			log.Info("ignoring keeper since its behind that maximum xlog position", zap.String("db", db.UID), zap.Uint64("dbXLogPos", db.Status.XLogPos), zap.Uint64("masterXLogPos", curMasterDB.Status.XLogPos))
 			return false
 		}
 	}

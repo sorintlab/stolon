@@ -888,6 +888,44 @@ func WaitClusterDataKeepers(keepersUIDs []string, e *store.StoreManager, timeout
 	return fmt.Errorf("timeout")
 }
 
+// WaitClusterSyncedXLogPos waits for all the specified keepers to have the same
+// reported XLogPos
+func WaitClusterSyncedXLogPos(keepersUIDs []string, e *store.StoreManager, timeout time.Duration) error {
+	start := time.Now()
+	for time.Now().Add(-timeout).Before(start) {
+		c := 0
+		curXLogPos := uint64(0)
+		cd, _, err := e.GetClusterData()
+		if err != nil || cd == nil {
+			goto end
+		}
+		// Check for db on keeper to be initialized
+		for _, keeper := range cd.Keepers {
+			if !util.StringInSlice(keepersUIDs, keeper.UID) {
+				continue
+			}
+			for _, db := range cd.DBs {
+				if db.Spec.KeeperUID == keeper.UID {
+					if c == 0 {
+						curXLogPos = db.Status.XLogPos
+					} else {
+						if db.Status.XLogPos != curXLogPos {
+							goto end
+						}
+					}
+				}
+			}
+			c++
+		}
+		if c == len(keepersUIDs) {
+			return nil
+		}
+	end:
+		time.Sleep(sleepInterval)
+	}
+	return fmt.Errorf("timeout")
+}
+
 func testFreeTCPPort(port int) error {
 	ln, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", curPort))
 	if err != nil {
