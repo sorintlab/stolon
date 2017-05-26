@@ -104,13 +104,16 @@ func (p *Manager) Init() error {
 	pwfile.WriteString(p.suPassword)
 
 	name := filepath.Join(p.pgBinPath, "initdb")
-	out, err := exec.Command(name, "-D", p.dataDir, "-U", p.suUsername, "--pwfile", pwfile.Name()).CombinedOutput()
-	if err != nil {
-		err = fmt.Errorf("error: %v, output: %s", err, out)
-		goto out
+	cmd := exec.Command(name, "-D", p.dataDir, "-U", p.suUsername, "--pwfile", pwfile.Name())
+	log.Debug("execing cmd", zap.Object("cmd", cmd))
+
+	//Pipe command's std[err|out] to parent.
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err = cmd.Run(); err != nil {
+		err = fmt.Errorf("error: %v", err)
 	}
-	// On every error remove the dataDir, so we don't end with an half initialized database
-out:
+	// remove the dataDir, so we don't end with an half initialized database
 	if err != nil {
 		os.RemoveAll(p.dataDir)
 		return err
@@ -120,7 +123,7 @@ out:
 
 func (p *Manager) Restore(command string) error {
 	var err error
-	var output []byte
+	var cmd *exec.Cmd
 
 	command = expand(command, p.dataDir)
 
@@ -128,9 +131,14 @@ func (p *Manager) Restore(command string) error {
 		err = fmt.Errorf("cannot create data dir: %v", err)
 		goto out
 	}
-	output, err = exec.Command("/bin/sh", "-c", command).CombinedOutput()
-	if err != nil {
-		err = fmt.Errorf("error: %v, output: %s", err, output)
+	cmd = exec.Command("/bin/sh", "-c", command)
+	log.Debug("execing cmd", zap.Object("cmd", cmd))
+
+	//Pipe command's std[err|out] to parent.
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err = cmd.Run(); err != nil {
+		err = fmt.Errorf("error: %v", err)
 		goto out
 	}
 	// On every error remove the dataDir, so we don't end with an half initialized database
@@ -193,6 +201,7 @@ func (p *Manager) start(args ...string) error {
 	args = append([]string{"start", "-w", "-D", p.dataDir, "-o", "-c unix_socket_directories=/tmp"}, args...)
 	cmd := exec.Command(name, args...)
 	log.Debug("execing cmd", zap.Object("cmd", cmd))
+
 	//Pipe command's std[err|out] to parent.
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -209,9 +218,13 @@ func (p *Manager) Stop(fast bool) error {
 	if fast {
 		cmd.Args = append(cmd.Args, "-m", "fast")
 	}
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("error: %v, output: %s", err, string(out))
+	log.Debug("execing cmd", zap.Object("cmd", cmd))
+
+	//Pipe command's std[err|out] to parent.
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("error: %v", err)
 	}
 	return nil
 }
@@ -242,8 +255,13 @@ func (p *Manager) Reload() error {
 	}
 	name := filepath.Join(p.pgBinPath, "pg_ctl")
 	cmd := exec.Command(name, "reload", "-D", p.dataDir, "-o", "-c unix_socket_directories=/tmp")
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("error: %v, output: %s", err, string(out))
+	log.Debug("execing cmd", zap.Object("cmd", cmd))
+
+	//Pipe command's std[err|out] to parent.
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("error: %v", err)
 	}
 	return nil
 }
@@ -263,8 +281,13 @@ func (p *Manager) Promote() error {
 	log.Info("promoting database")
 	name := filepath.Join(p.pgBinPath, "pg_ctl")
 	cmd := exec.Command(name, "promote", "-w", "-D", p.dataDir)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("error: %v, output: %s", err, string(out))
+	log.Debug("execing cmd", zap.Object("cmd", cmd))
+
+	//Pipe command's std[err|out] to parent.
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("error: %v", err)
 	}
 	return nil
 }
@@ -563,11 +586,13 @@ func (p *Manager) SyncFromFollowedPGRewind(followedConnParams ConnParams, passwo
 	cmd := exec.Command(name, "--debug", "-D", p.dataDir, "--source-server="+followedConnString)
 	cmd.Env = append(cmd.Env, fmt.Sprintf("PGPASSFILE=%s", pgpass.Name()))
 	log.Debug("execing cmd", zap.Object("cmd", cmd))
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("error: %v, output: %s", err, string(out))
+
+	//Pipe command's std[err|out] to parent.
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("error: %v", err)
 	}
-	log.Debug("cmd out", zap.String("out", string(out)))
 	return nil
 }
 
@@ -602,8 +627,12 @@ func (p *Manager) SyncFromFollowed(followedConnParams ConnParams) error {
 	cmd := exec.Command(name, "-R", "-D", p.dataDir, "-d", followedConnString)
 	cmd.Env = append(cmd.Env, fmt.Sprintf("PGPASSFILE=%s", pgpass.Name()))
 	log.Debug("execing cmd", zap.Object("cmd", cmd))
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("error: %v, output: %s", err, string(out))
+
+	//Pipe command's std[err|out] to parent.
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("error: %v", err)
 	}
 	return nil
 }

@@ -959,6 +959,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				log.Error("failed to remove the postgres data dir", zap.Error(err))
 				return
 			}
+			log.Info("executing DataRestoreCommand")
 			if err = pgm.Restore(db.Spec.PITRConfig.DataRestoreCommand); err != nil {
 				log.Error("failed to restore postgres database cluster", zap.Error(err))
 				return
