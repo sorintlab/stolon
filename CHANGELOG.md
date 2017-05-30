@@ -1,3 +1,26 @@
+### v0.7.0
+
+#### New features
+
+* Added ability to define custom pg_hba.conf entries ([#341](https://github.com/sorintlab/stolon/pull/341))
+* Added ability to set Locale, Encoding and DataChecksums when initializing a new pg db cluster ([#338](https://github.com/sorintlab/stolon/pull/338))
+* Added stolonctl `clusterdata` command to dump the current clusterdata saved in the store ([#318](https://github.com/sorintlab/stolon/pull/318))
+* Detect if a standby cannot sync due to missing wal files on primary ([#312](https://github.com/sorintlab/stolon/pull/312))
+* Various improvements to proxy logic ([#308](https://github.com/sorintlab/stolon/pull/308)) ([#310](https://github.com/sorintlab/stolon/pull/310))
+* Added cluster spec option to define additional wal senders ([#311](https://github.com/sorintlab/stolon/pull/311))
+* Added various postgresql recovery target settings for point in time recovery ([#303](https://github.com/sorintlab/stolon/pull/303))
+* Added `--log-level` argument to stolon commands (deprecating `--debug`)  ([#298](https://github.com/sorintlab/stolon/pull/298))
+
+#### BugFixes
+* IPV6 fixes ([#326](https://github.com/sorintlab/stolon/pull/326))
+* Handle null values in pg_file_settings view ([#322](https://github.com/sorintlab/stolon/pull/322))
+
+and [many other](https://github.com/sorintlab/stolon/milestone/6) bug fixes and documentation improvements
+
+Thanks to everybody who contributed to this release:
+
+Albert Vaca, @emded, Niklas Hambüchen, Tim Heckman
+
 ### v0.6.0
 
 This version introduces various interesting new features (like support for upcoming PostgreSQL 10 and standby cluster) and different bug fixes.
