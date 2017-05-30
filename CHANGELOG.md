@@ -1,3 +1,26 @@
+### v0.6.0
+
+This version introduces various interesting new features (like support for upcoming PostgreSQL 10 and standby cluster) and different bug fixes.
+
+#### New features
+* Support for PostgreSQL 10 ([#281](https://github.com/sorintlab/stolon/pull/281))
+* Standby cluster (for multi site disaster recovery and near zero downtime migration) ([#283](https://github.com/sorintlab/stolon/pull/283))
+* Old dead keeper removal ([#280](https://github.com/sorintlab/stolon/pull/280))
+* On asynchronous clusters elect master only if behind a user defined lag ([#268](https://github.com/sorintlab/stolon/pull/268))
+* Docker standalone, swarm and compose examples ([#231](https://github.com/sorintlab/stolon/pull/231)) and ([#238](https://github.com/sorintlab/stolon/pull/238))
+
+#### BugFixes
+
+* Fix incorrect parsing of `synchronous_standby_names` when using synchronous replication with two or more synchronous standbys ([#264](https://github.com/sorintlab/stolon/pull/264))
+* Fix non atomic writes of local state files ([#265](https://github.com/sorintlab/stolon/pull/265))
+
+and [many other](https://github.com/sorintlab/stolon/milestone/5)
+
+Thanks to everybody who contributed to this release:
+
+Alexander Ermolaev, Dario Nieuwenhuis, Euan Kemp, Ivan Sim, Jasper Siepkes, Niklas Hambüchen, Sajal Kayan
+
+
 ### v0.5.0
 
 This version is a big step forward previous releases and provides many new features and a better cluster management.
@@ -22,12 +45,12 @@ Some cleanups and changes in preparation for release v0.5.0 that will receive a 
 
 ### v0.3.0
 
-* Support multiple stores via [libkv](https://github.com/docker/libkv) ([#102](https://github.com/sorintlab/stolon/pull/102)). Currently etcd and consul are supported. 
+* Support multiple stores via [libkv](https://github.com/docker/libkv) ([#102](https://github.com/sorintlab/stolon/pull/102)). Currently etcd and consul are supported.
 * Can use pg_rewind to sync slaves instead of doing a full resync ([#122](https://github.com/sorintlab/stolon/pull/122)).
 * The `--initial-cluster-config` option has been added to the `stolon-sentinel` to provide an initial cluster configuration ([#107](https://github.com/sorintlab/stolon/pull/107)).
 * A cluster config option for initializing the cluster also if multiple keepers are registred has been added ([#106](https://github.com/sorintlab/stolon/pull/106)). By default a sentinel won't initialize a new if multiple keepers are registered since it cannot know which one should be the master. With this option a random keeper will be choosed as the master. This is useful when an user wants to create a new cluster with an empty database and starting all the keeper together instead of having to start only one keeper, wait it to being elected as master and then starting the other keepers.
 * The `--discovery-type` option has been added to the `stolon-sentinel` to choose if keeper discovery should be done using the store or kubernetes ([#129](https://github.com/sorintlab/stolon/pull/129)).
-* Various options has been added to the `stolon-keeper` for setting postgres superuser, replication and initial superuser usernames and passwords ([#136](https://github.com/sorintlab/stolon/pull/136)). 
+* Various options has been added to the `stolon-keeper` for setting postgres superuser, replication and initial superuser usernames and passwords ([#136](https://github.com/sorintlab/stolon/pull/136)).
 * Numerous enhancements and bugfixes.
 
 Thanks to all the contributors!
