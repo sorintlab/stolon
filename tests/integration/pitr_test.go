@@ -98,7 +98,7 @@ func TestPITR(t *testing.T) {
 	if err := tk.WaitDBUp(60 * time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	if err := tk.WaitRole(common.RoleMaster, 30*time.Second); err != nil {
+	if err := tk.WaitDBRole(common.RoleMaster, nil, 30*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	if err := populate(t, tk); err != nil {
@@ -188,7 +188,7 @@ func TestPITR(t *testing.T) {
 	if err := tk.WaitDBUp(60 * time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	if err := tk.WaitRole(common.RoleMaster, 30*time.Second); err != nil {
+	if err := tk.WaitDBRole(common.RoleMaster, nil, 30*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 

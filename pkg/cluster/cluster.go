@@ -105,15 +105,19 @@ const (
 type ClusterInitMode string
 
 const (
-	// Initialize a cluster starting from a freshly initialized database cluster
+	// Initialize a cluster starting from a freshly initialized database cluster. Valid only when cluster role is master.
 	ClusterInitModeNew ClusterInitMode = "new"
-	// Initialize a cluster doing a point in time recovery on a keeper. The other keepers will sync with it.
+	// Initialize a cluster doing a point in time recovery on a keeper.
 	ClusterInitModePITR ClusterInitMode = "pitr"
-	// Initialize a cluster with an user specified already populated db cluster. The other keepers will sync with it.
+	// Initialize a cluster with an user specified already populated db cluster.
 	ClusterInitModeExisting ClusterInitMode = "existing"
 )
 
 func ClusterInitModeP(s ClusterInitMode) *ClusterInitMode {
+	return &s
+}
+
+func ClusterRoleP(s ClusterRole) *ClusterRole {
 	return &s
 }
 
@@ -225,7 +229,6 @@ type ClusterSpec struct {
 type ClusterStatus struct {
 	CurrentGeneration int64        `json:"currentGeneration,omitempty"`
 	Phase             ClusterPhase `json:"phase,omitempty"`
-	Role              ClusterRole  `json:"mode,omitempty"`
 	// Master DB UID
 	Master string `json:"master,omitempty"`
 }
@@ -369,6 +372,9 @@ func (os *ClusterSpec) Validate() error {
 	}
 	switch *s.InitMode {
 	case ClusterInitModeNew:
+		if *s.Role == ClusterRoleStandby {
+			return fmt.Errorf("invalid cluster role standby when initMode is \"new\"")
+		}
 	case ClusterInitModeExisting:
 		if s.ExistingConfig == nil {
 			return fmt.Errorf("existingConfig undefined. Required when initMode is \"existing\"")
@@ -391,6 +397,12 @@ func (os *ClusterSpec) Validate() error {
 	switch *s.Role {
 	case ClusterRoleMaster:
 	case ClusterRoleStandby:
+		if s.StandbySettings == nil {
+			return fmt.Errorf("standbySettings undefined. Required when cluster role is \"standby\"")
+		}
+		if s.StandbySettings.PrimaryConninfo == "" {
+			return fmt.Errorf("standbySettings primaryConnInfo undefined. Required when cluster role is \"standby\"")
+		}
 	default:
 		return fmt.Errorf("unknown role: %q", *s.InitMode)
 	}
