@@ -9,7 +9,7 @@ There're two examples. The difference between them is how the keepers pods are d
 
 ## Docker image
 
-Prebuilt images are available on the dockerhub, the images' tags are the stolon release version plus the postgresql version (for example v0.5.0-pg9.6). Additional images are available:
+Prebuilt images are available on the dockerhub, the images' tags are the stolon release version plus the postgresql version (for example v0.6.0-pg9.6). Additional images are available:
 
 * `latest-pg9.6`: latest released image (for stolon versions >= v0.5.0).
 * `master-pg9.6`: automatically built after every commit to the master branch.
@@ -24,4 +24,4 @@ make PGVERSION=9.6 TAG=stolon:master-pg9.6
 
 Once the image is built you should push it to the docker registry used by your kubernetes infrastructure.
 
-The provided example uses `sorintlab/stolon:master-pg9.6` 
+The provided example uses `sorintlab/stolon:master-pg9.6`
