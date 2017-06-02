@@ -68,6 +68,46 @@ There can be tons of different partitioning cases. The primary ones are covered 
 
 See [here](doc/faq.md) for a list of faq. If you have additional questions please ask.
 
+### Does proxy send read-only requests to standbys?
+
+Currently the proxy redirects all requests to the master. There is a [feature request](https://github.com/sorintlab/stolon/issues/132) for using the proxy also for standbys but it's low in the priority list. There is a workaround though.
+
+Application can learn cluster configuration from `stolon/cluster/mycluster/clusterdata` key. Consul allows to subscribe to updates of this key like this: 
+
+```
+http://localhost:8500/v1/kv/stolon/cluster/mycluster/clusterdata?wait=0s&index=14379
+```
+
+... where 14379 is ModifyIndex of a key reported by Consul.
+
+### How stolon decide which standby should be promoted to master?
+
+Currently it tries to find the best standby, the one with the xlog location nearest to the master latest knows xlog location. If a master is down there's no way to know its latest xlog position (stolon get and save it at some intervals) so there's no way to guarantee that the standby is not behind but just that the best standby of the ones available will be choosen. 
+
+### Does synchronous replication mean that I can't loose any data?
+
+Since version 9.6 PostgreSQL supports [synchronous replication to the quorum](https://www.postgresql.org/docs/9.6/static/runtime-config-replication.html#GUC-SYNCHRONOUS-STANDBY-NAMES). Unfortunately stolon doesn't support this feature yet and configures replication like this:
+
+```
+# on postgres1 server
+synchronous_standby_names = 'postgres2,postgres3'
+```
+
+According to PostgreSQL documentation:
+
+> Specifies a comma-separated list of standby names that can support synchronous replication, as described in Section 25.2.8. At any one time there will be at most one active synchronous standby; transactions waiting for commit will be allowed to proceed after this standby server confirms receipt of their data. The synchronous standby will be the first standby named in this list that is both currently connected and streaming data in real-time (as shown by a state of streaming in the pg\_stat\_replication view). Other standby servers appearing later in this list represent potential synchronous standbys.
+
+It means that in case of netsplit synchronous standby can be not among majority nodes. In this case some recent changes will be lost. Although it's not a major problem for most web projects, currently you shouldn't use stolon for storing data that under no circumstances can't be lost.
+
+### Does stolon use Consul as a DNS server as well?
+
+Consul (or etcd) is used only as a key-value storage.
+
+### Lets say I have multiple stolon clusters. Do I need a separate Consul / etcd cluster for each stolon cluster?
+
+It depends on your architecture and where the different stolon clusters are located. In general, if two clusters live on complitely different hardware, to to handle all possible courner cases (like netslits) you need a separate Consul / etcd cluster for each stolon cluster.
+
+
 ## Contributing to stolon
 
 stolon is an open source project under the Apache 2.0 license, and contributions are gladly welcomed!
