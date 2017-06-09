@@ -63,10 +63,10 @@ func TestPITR(t *testing.T) {
 		SleepInterval:      &cluster.Duration{Duration: 2 * time.Second},
 		FailInterval:       &cluster.Duration{Duration: 5 * time.Second},
 		ConvergenceTimeout: &cluster.Duration{Duration: 30 * time.Second},
-		PGParameters: cluster.PGParameters{
+		PGParameters: pgParametersWithDefaults(cluster.PGParameters{
 			"archive_mode":    "on",
 			"archive_command": fmt.Sprintf("cp %%p %s/%%f", archiveBackupDir),
-		},
+		}),
 	}
 	initialClusterSpecFile, err := writeClusterSpec(dir, initialClusterSpec)
 	if err != nil {
@@ -160,9 +160,9 @@ func TestPITR(t *testing.T) {
 				RestoreCommand: fmt.Sprintf("cp %s/%%f %%p", archiveBackupDir),
 			},
 		},
-		PGParameters: cluster.PGParameters{
+		PGParameters: pgParametersWithDefaults(cluster.PGParameters{
 			"max_prepared_transactions": "100",
-		},
+		}),
 	}
 	initialClusterSpecFile, err = writeClusterSpec(dir, initialClusterSpec)
 	if err != nil {

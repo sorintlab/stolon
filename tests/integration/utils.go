@@ -51,8 +51,23 @@ const (
 	MaxPort = 16384
 )
 
+var (
+	defaultPGParameters = cluster.PGParameters{"log_destination": "stderr", "logging_collector": "false"}
+)
+
 var curPort = MinPort
 var portMutex = sync.Mutex{}
+
+func pgParametersWithDefaults(p cluster.PGParameters) cluster.PGParameters {
+	pd := cluster.PGParameters{}
+	for k, v := range defaultPGParameters {
+		pd[k] = v
+	}
+	for k, v := range p {
+		pd[k] = v
+	}
+	return pd
+}
 
 type Process struct {
 	t    *testing.T

@@ -105,7 +105,7 @@ func TestInitStandbyCluster(t *testing.T) {
 		FailInterval:       &cluster.Duration{Duration: 5 * time.Second},
 		ConvergenceTimeout: &cluster.Duration{Duration: 30 * time.Second},
 		MaxStandbyLag:      cluster.Uint32P(50 * 1024), // limit lag to 50kiB
-		PGParameters:       make(cluster.PGParameters),
+		PGParameters:       defaultPGParameters,
 		PITRConfig: &cluster.PITRConfig{
 			DataRestoreCommand: fmt.Sprintf("PGPASSFILE=%s pg_basebackup -D %%d -h %s -p %s -U %s", pgpass.Name(), ptk.pgListenAddress, ptk.pgPort, ptk.pgReplUsername),
 		},
@@ -232,7 +232,7 @@ func TestPromoteStandbyCluster(t *testing.T) {
 		FailInterval:       &cluster.Duration{Duration: 5 * time.Second},
 		ConvergenceTimeout: &cluster.Duration{Duration: 30 * time.Second},
 		MaxStandbyLag:      cluster.Uint32P(50 * 1024), // limit lag to 50kiB
-		PGParameters:       make(cluster.PGParameters),
+		PGParameters:       defaultPGParameters,
 		PITRConfig: &cluster.PITRConfig{
 			DataRestoreCommand: fmt.Sprintf("PGPASSFILE=%s pg_basebackup -D %%d -h %s -p %s -U %s", pgpass.Name(), ptk.pgListenAddress, ptk.pgPort, ptk.pgReplUsername),
 		},
