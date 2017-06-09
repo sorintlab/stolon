@@ -617,7 +617,7 @@ func (p *Manager) SyncFromFollowedPGRewind(followedConnParams ConnParams, passwo
 	log.Info("running pg_rewind")
 	name := filepath.Join(p.pgBinPath, "pg_rewind")
 	cmd := exec.Command(name, "--debug", "-D", p.dataDir, "--source-server="+followedConnString)
-	cmd.Env = append(cmd.Env, fmt.Sprintf("PGPASSFILE=%s", pgpass.Name()))
+	cmd.Env = append(os.Environ(), fmt.Sprintf("PGPASSFILE=%s", pgpass.Name()))
 	log.Debug("execing cmd", zap.Object("cmd", cmd))
 
 	//Pipe command's std[err|out] to parent.
@@ -658,7 +658,7 @@ func (p *Manager) SyncFromFollowed(followedConnParams ConnParams) error {
 	log.Info("running pg_basebackup")
 	name := filepath.Join(p.pgBinPath, "pg_basebackup")
 	cmd := exec.Command(name, "-R", "-D", p.dataDir, "-d", followedConnString)
-	cmd.Env = append(cmd.Env, fmt.Sprintf("PGPASSFILE=%s", pgpass.Name()))
+	cmd.Env = append(os.Environ(), fmt.Sprintf("PGPASSFILE=%s", pgpass.Name()))
 	log.Debug("execing cmd", zap.Object("cmd", cmd))
 
 	//Pipe command's std[err|out] to parent.
