@@ -130,7 +130,7 @@ func setupServers(t *testing.T, clusterName, dir string, numKeepers, numSentinel
 			MaxStandbyLag:          cluster.Uint32P(50 * 1024), // limit lag to 50kiB
 			SynchronousReplication: cluster.BoolP(syncRepl),
 			UsePgrewind:            cluster.BoolP(usePgrewind),
-			PGParameters:           make(cluster.PGParameters),
+			PGParameters:           defaultPGParameters,
 		}
 	} else {
 		// if primaryKeeper is provided then we should create a standby cluster and do a
@@ -151,7 +151,7 @@ func setupServers(t *testing.T, clusterName, dir string, numKeepers, numSentinel
 			ConvergenceTimeout:     &cluster.Duration{Duration: 30 * time.Second},
 			MaxStandbyLag:          cluster.Uint32P(50 * 1024), // limit lag to 50kiB
 			SynchronousReplication: cluster.BoolP(syncRepl),
-			PGParameters:           make(cluster.PGParameters),
+			PGParameters:           defaultPGParameters,
 			PITRConfig: &cluster.PITRConfig{
 				DataRestoreCommand: fmt.Sprintf("PGPASSFILE=%s pg_basebackup -D %%d -h %s -p %s -U %s", pgpass.Name(), primaryKeeper.pgListenAddress, primaryKeeper.pgPort, primaryKeeper.pgReplUsername),
 			},
@@ -1142,7 +1142,7 @@ func TestFailedStandby(t *testing.T) {
 		FailInterval:         &cluster.Duration{Duration: 5 * time.Second},
 		ConvergenceTimeout:   &cluster.Duration{Duration: 30 * time.Second},
 		MaxStandbysPerSender: cluster.Uint16P(1),
-		PGParameters:         make(cluster.PGParameters),
+		PGParameters:         defaultPGParameters,
 	}
 
 	// Create 3 keepers
@@ -1233,7 +1233,7 @@ func TestLoweredMaxStandbysPerSender(t *testing.T) {
 		FailInterval:         &cluster.Duration{Duration: 5 * time.Second},
 		ConvergenceTimeout:   &cluster.Duration{Duration: 30 * time.Second},
 		MaxStandbysPerSender: cluster.Uint16P(2),
-		PGParameters:         make(cluster.PGParameters),
+		PGParameters:         defaultPGParameters,
 	}
 
 	// Create 3 keepers
@@ -1300,7 +1300,7 @@ func TestKeeperRemoval(t *testing.T) {
 		// very low DeadKeeperRemovalInterval to test this behavior
 		DeadKeeperRemovalInterval: &cluster.Duration{Duration: 10 * time.Second},
 		MaxStandbysPerSender:      cluster.Uint16P(1),
-		PGParameters:              make(cluster.PGParameters),
+		PGParameters:              defaultPGParameters,
 	}
 
 	// Create 2 keepers

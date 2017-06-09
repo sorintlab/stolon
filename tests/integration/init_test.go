@@ -50,6 +50,7 @@ func TestInit(t *testing.T) {
 		SleepInterval:      &cluster.Duration{Duration: 2 * time.Second},
 		FailInterval:       &cluster.Duration{Duration: 5 * time.Second},
 		ConvergenceTimeout: &cluster.Duration{Duration: 30 * time.Second},
+		PGParameters:       defaultPGParameters,
 	}
 	initialClusterSpecFile, err := writeClusterSpec(dir, initialClusterSpec)
 	if err != nil {
@@ -112,6 +113,7 @@ func testInitNew(t *testing.T, merge bool) {
 		FailInterval:       &cluster.Duration{Duration: 10 * time.Second},
 		ConvergenceTimeout: &cluster.Duration{Duration: 30 * time.Second},
 		MergePgParameters:  &merge,
+		PGParameters:       defaultPGParameters,
 	}
 	initialClusterSpecFile, err := writeClusterSpec(dir, initialClusterSpec)
 	if err != nil {
@@ -187,9 +189,9 @@ func testInitExisting(t *testing.T, merge bool) {
 		SleepInterval:      &cluster.Duration{Duration: 2 * time.Second},
 		FailInterval:       &cluster.Duration{Duration: 5 * time.Second},
 		ConvergenceTimeout: &cluster.Duration{Duration: 30 * time.Second},
-		PGParameters: cluster.PGParameters{
+		PGParameters: pgParametersWithDefaults(cluster.PGParameters{
 			"archive_mode": "on",
-		},
+		}),
 	}
 	initialClusterSpecFile, err := writeClusterSpec(dir, initialClusterSpec)
 	if err != nil {
@@ -234,6 +236,7 @@ func testInitExisting(t *testing.T, merge bool) {
 		FailInterval:       &cluster.Duration{Duration: 5 * time.Second},
 		ConvergenceTimeout: &cluster.Duration{Duration: 30 * time.Second},
 		MergePgParameters:  &merge,
+		PGParameters:       defaultPGParameters,
 		ExistingConfig: &cluster.ExistingConfig{
 			KeeperUID: tk.uid,
 		},
@@ -332,6 +335,7 @@ func TestInitUsers(t *testing.T) {
 		SleepInterval:      &cluster.Duration{Duration: 2 * time.Second},
 		FailInterval:       &cluster.Duration{Duration: 5 * time.Second},
 		ConvergenceTimeout: &cluster.Duration{Duration: 30 * time.Second},
+		PGParameters:       defaultPGParameters,
 	}
 	initialClusterSpecFile, err := writeClusterSpec(dir, initialClusterSpec)
 	if err != nil {
@@ -423,6 +427,7 @@ func TestInitialClusterSpec(t *testing.T) {
 		FailInterval:           &cluster.Duration{Duration: 5 * time.Second},
 		ConvergenceTimeout:     &cluster.Duration{Duration: 30 * time.Second},
 		SynchronousReplication: cluster.BoolP(true),
+		PGParameters:           defaultPGParameters,
 	}
 	initialClusterSpecFile, err := writeClusterSpec(dir, initialClusterSpec)
 	if err != nil {
