@@ -1015,11 +1015,17 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				log.Error("err", zap.Error(err))
 				return
 			}
+			if err = pgm.StartTmpMerged(); err != nil {
+				log.Error("failed to start instance", zap.Error(err))
+				return
+			}
+			// wait for the db having replyed all the wals
+			if err = pgm.WaitReady(cd.Cluster.DefSpec().SyncTimeout.Duration); err != nil {
+				log.Error("instance not ready", zap.Error(err))
+				return
+			}
+
 			if db.Spec.IncludeConfig {
-				if err = pgm.StartTmpMerged(); err != nil {
-					log.Error("failed to start instance", zap.Error(err))
-					return
-				}
 				pgParameters, err = pgm.GetConfigFilePGParameters()
 				if err != nil {
 					log.Error("failed to retrieve postgres parameters", zap.Error(err))
@@ -1028,11 +1034,6 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				p.localStateMutex.Lock()
 				dbls.InitPGParameters = pgParameters
 				p.localStateMutex.Unlock()
-			} else {
-				if err = pgm.StartTmpMerged(); err != nil {
-					log.Error("failed to start instance", zap.Error(err))
-					return
-				}
 			}
 			initialized = true
 
@@ -1098,9 +1099,19 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				tryPgrewind = false
 			}
 
-			// TODO(sgotti) pg_rewind considers databases on the same timeline as in sync and doesn't check if they diverged at different position in previous timelines.
-			// So check that the db as been synced or resync again with pg_rewind disabled. Will need to report this upstream.
+			// TODO(sgotti) pg_rewind considers databases on the same timeline
+			// as in sync and doesn't check if they diverged at different
+			// position in previous timelines.
+			// So check that the db as been synced or resync again with
+			// pg_rewind disabled. Will need to report this upstream.
 
+			// TODO(sgotti) The rewinded standby needs wal from the master
+			// starting from the common ancestor, if they aren't available the
+			// instance will keep waiting for them, now we assume that if the
+			// instance isn't ready after the start timeout, it's waiting for
+			// wals and we'll force a full resync.
+			// We have to find a better way to detect if a standby is waiting
+			// for unavailable wals.
 			if err = p.resync(db, followedDB, tryPgrewind); err != nil {
 				log.Error("failed to resync from followed instance", zap.Error(err))
 				return
@@ -1111,24 +1122,38 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 			}
 			started = true
 
-			// Check again if it was really synced
-			var pgState *cluster.PostgresState
-			pgState, err = p.GetPGState(pctx)
-			if err != nil {
-				log.Error("cannot get current pgstate", zap.Error(err))
-				return
-			}
-			if p.isDifferentTimelineBranch(followedDB, pgState) {
-				if started {
-					if err = pgm.Stop(true); err != nil {
-						log.Error("failed to stop pg instance", zap.Error(err))
+			if tryPgrewind {
+				fullResync := false
+				// if not accepting connection assume that it's blocked waiting for missing wal
+				// (see above TODO), so do a full resync using pg_basebackup.
+				if err = pgm.Ping(); err != nil {
+					log.Error("pg_rewinded standby is not accepting connection. it's probably waiting for unavailable wals. Forcing a full resync")
+					fullResync = true
+				} else {
+					// Check again if it was really synced
+					var pgState *cluster.PostgresState
+					pgState, err = p.GetPGState(pctx)
+					if err != nil {
+						log.Error("cannot get current pgstate", zap.Error(err))
 						return
 					}
-					started = false
+					if p.isDifferentTimelineBranch(followedDB, pgState) {
+						fullResync = true
+					}
 				}
-				if err = p.resync(db, followedDB, false); err != nil {
-					log.Error("failed to resync from followed instance", zap.Error(err))
-					return
+
+				if fullResync {
+					if started {
+						if err = pgm.Stop(true); err != nil {
+							log.Error("failed to stop pg instance", zap.Error(err))
+							return
+						}
+						started = false
+					}
+					if err = p.resync(db, followedDB, false); err != nil {
+						log.Error("failed to resync from followed instance", zap.Error(err))
+						return
+					}
 				}
 			}
 			initialized = true

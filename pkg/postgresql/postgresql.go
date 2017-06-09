@@ -198,7 +198,7 @@ func (p *Manager) Start() error {
 func (p *Manager) start(args ...string) error {
 	log.Info("starting database")
 	name := filepath.Join(p.pgBinPath, "pg_ctl")
-	args = append([]string{"start", "-w", "-D", p.dataDir, "-o", "-c unix_socket_directories=/tmp"}, args...)
+	args = append([]string{"start", "-w", "--timeout", "60", "-D", p.dataDir, "-o", "-c unix_socket_directories=/tmp"}, args...)
 	cmd := exec.Command(name, args...)
 	log.Debug("execing cmd", zap.Object("cmd", cmd))
 
@@ -208,6 +208,11 @@ func (p *Manager) start(args ...string) error {
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("error: %v", err)
 	}
+
+	// pg_ctl with -w will exit after the timeout and return 0 also if the
+	// instance isn't accepting connection because already in recovery (usually
+	// waiting for wals during a pitr or a pg_rewind)
+	// so a start doesn't mean the instance is ready.
 	return nil
 }
 
@@ -275,6 +280,17 @@ func (p *Manager) Restart(fast bool) error {
 		return err
 	}
 	return nil
+}
+
+func (p *Manager) WaitReady(timeout time.Duration) error {
+	start := time.Now()
+	for time.Now().Add(-timeout).Before(start) {
+		if err := p.Ping(); err == nil {
+			return nil
+		}
+		time.Sleep(1 * time.Second)
+	}
+	return fmt.Errorf("timeout waiting for db ready")
 }
 
 func (p *Manager) Promote() error {
@@ -689,4 +705,10 @@ func (p *Manager) GetConfigFilePGParameters() (common.Parameters, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), p.requestTimeout)
 	defer cancel()
 	return getConfigFilePGParameters(ctx, p.localConnParams)
+}
+
+func (p *Manager) Ping() error {
+	ctx, cancel := context.WithTimeout(context.Background(), p.requestTimeout)
+	defer cancel()
+	return ping(ctx, p.localConnParams)
 }
