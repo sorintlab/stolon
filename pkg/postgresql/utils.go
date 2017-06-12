@@ -75,7 +75,7 @@ func query(ctx context.Context, db *sql.DB, query string, args ...interface{}) (
 	}
 }
 
-func checkDBStatus(ctx context.Context, connParams ConnParams) error {
+func ping(ctx context.Context, connParams ConnParams) error {
 	db, err := sql.Open("postgres", connParams.ConnString())
 	if err != nil {
 		return err
