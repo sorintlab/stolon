@@ -993,11 +993,17 @@ func testTimelineFork(t *testing.T, syncRepl, usePgrewind bool) {
 		return
 	}
 
+	if err := write(t, standbys[0], 3, 3); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := write(t, standbys[0], 4, 4); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
 	c, err := getLines(t, standbys[0])
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	if c != 1 {
+	if c != 3 {
 		t.Fatalf("wrong number of lines, want: %d, got: %d", 1, c)
 	}
 
@@ -1007,10 +1013,23 @@ func testTimelineFork(t *testing.T, syncRepl, usePgrewind bool) {
 	// Standby[1] will start, then it'll detect it's in another timelinehistory,
 	// will stop, full resync and start. We have to avoid detecting it up
 	// at the first start. Do this waiting for the number of expected lines.
-	if err := waitLines(t, standbys[1], 1, 60*time.Second); err != nil {
+
+	// TODO(sgotti) sometimes, when using pg_rewind, the rewinded standby needs wals
+	// not available anymore on the source master, until we implement better way to
+	// detect missing wals we have to just wait for the start timeout (60s) and
+	// then a full resync should be executed.
+	if err := waitLines(t, standbys[1], 3, 120*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	if err := standbys[1].WaitDBRole(common.RoleStandby, nil, 60*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// Check that standby 1 is receiving wals
+	if err := write(t, standbys[0], 5, 5); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := waitLines(t, standbys[1], 4, 60*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 }
