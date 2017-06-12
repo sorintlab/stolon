@@ -10,6 +10,7 @@
 * [Standby Cluster](standbycluster.md)
 * Examples
  * [Simple test cluster](simplecluster.md)
+ * [Live Migration to Stolon without Wal-e](live_migration_no_wal_e.md)
  * [Kubernetes](../examples/kubernetes/README.md)
 * Misc topics
  * [Enabling pg_rewind](pg_rewind.md)
