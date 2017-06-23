@@ -82,7 +82,7 @@ func initCluster(cmd *cobra.Command, args []string) {
 	if cd != nil {
 		stdout("WARNING: The current cluster data will be removed")
 	}
-	stdout("WARNING: The databases managed by the keepers will be overwrited depending on the provided cluster spec.")
+	stdout("WARNING: The databases managed by the keepers will be overwritten depending on the provided cluster spec.")
 
 	accepted := true
 	if !initOpts.forceYes {
