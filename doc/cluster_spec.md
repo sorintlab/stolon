@@ -45,22 +45,36 @@ Some options in a running cluster specification can be changed to update the des
 
 | Name                    | Description                                                                                                                                                                                                      | Required | Type                    | Default |
 |-------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------|-------------------------|---------|
-| DataRestoreCommand      | defines the command to execute for restoring the db cluster data. %d is replaced with the full path to the db cluster datadir. Use %% to embed an actual % character. Must return a 0 exit code only on success. | yes      | string                  |         |
-| ArchiveRecoverySettings | archive recovery configuration                                                                                                                                                                                   | yes      | ArchiveRecoverySettings |         |
+| dataRestoreCommand      | defines the command to execute for restoring the db cluster data. %d is replaced with the full path to the db cluster datadir. Use %% to embed an actual % character. Must return a 0 exit code only on success. | yes      | string                  |         |
+| archiveRecoverySettings | archive recovery configuration                                                                                                                                                                                   | yes      | ArchiveRecoverySettings |         |
+| recoveryTargetSettings | recovery target configuration                                                                                                                                                                                     | no       | RecoveryTargetSettings  |         |
 
 #### ArchiveRecoverySettings
 
 | Name                    | Description                                                                                                                                                                | Required | Type                    | Default |
 |-------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------|-------------------------|---------|
-| RestoreCommand          | defines the command to execute for restoring the archives. See the related [postgresql doc](https://www.postgresql.org/docs/current/static/archive-recovery-settings.html) | yes      | string                  |         |
+| restoreCommand          | defines the command to execute for restoring the archives. See the related [postgresql doc](https://www.postgresql.org/docs/current/static/archive-recovery-settings.html) | yes      | string                  |         |
+
+#### RecoveryTargetSettings
+
+These parameters are the same as defined in [postgresql recovery target settings doc](https://www.postgresql.org/docs/current/static/recovery-target-settings.html)
+
+| Name                    | Description                                                                                                                                  | Required | Type                    | Default |
+|-------------------------|----------------------------------------------------------------------------------------------------------------------------------------------|----------|-------------------------|---------|
+| recoveryTarget          | See `recovery_target` in the related [postgresql doc](https://www.postgresql.org/docs/current/static/recovery-target-settings.html)          | no       | string                  |         |
+| recoveryTargetLsn       | See `recovery_target_lsn` in the related [postgresql doc](https://www.postgresql.org/docs/current/static/recovery-target-settings.html)      | no       | string                  |         |
+| recoveryTargetName      | See `recovery_target_name` in the related [postgresql doc](https://www.postgresql.org/docs/current/static/recovery-target-settings.html)     | no       | string                  |         |
+| recoveryTargetTime      | See `recovery_target_time` in the related [postgresql doc](https://www.postgresql.org/docs/current/static/recovery-target-settings.html)     | no       | string                  |         |
+| recoveryTargetXid       | See `recovery_target_xid` in the related [postgresql doc](https://www.postgresql.org/docs/current/static/recovery-target-settings.html)      | no       | string                  |         |
+| recoveryTargetTimeline  | See `recovery_target_timeline` in the related [postgresql doc](https://www.postgresql.org/docs/current/static/recovery-target-settings.html) | no       | string                  |         |
 
 #### StandbySettings
 
-| Name                    | Description                                                                                                                                                                | Required | Type                    | Default |
-|-------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------|-------------------------|---------|
-| primaryConnInfo          | connection string to connect to the primary server (its value will be placed in the `primary_conninfo` parameter of the instance `recovery.conf` file. See the related [postgresql doc](https://www.postgresql.org/docs/current/static/standby-settings.html) | yes      | string                  |         |
-| primarySlotName          | optional replication slot to use (its value will be placed in the `primary_slot_name` parameter of the instance `recovery.conf` file. See the related [postgresql doc](https://www.postgresql.org/docs/current/static/standby-settings.html) | no      | string                  |         |
-| recoveryMinApplyDelay          | delay recovery for a fixed period of time (its value will be placed in the `recovery_min_apply_delay` parameter of the instance `recovery.conf` file. See the related [postgresql doc](https://www.postgresql.org/docs/current/static/standby-settings.html) | no      | string                  |         |
+| Name                    | Description                                                                                                                                                                                                                                                   | Required | Type                    | Default |
+|-------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------|-------------------------|---------|
+| primaryConnInfo         | connection string to connect to the primary server (its value will be placed in the `primary_conninfo` parameter of the instance `recovery.conf` file. See the related [postgresql doc](https://www.postgresql.org/docs/current/static/standby-settings.html) | yes      | string                  |         |
+| primarySlotName         | optional replication slot to use (its value will be placed in the `primary_slot_name` parameter of the instance `recovery.conf` file. See the related [postgresql doc](https://www.postgresql.org/docs/current/static/standby-settings.html)                  | no       | string                  |         |
+| recoveryMinApplyDelay   | delay recovery for a fixed period of time (its value will be placed in the `recovery_min_apply_delay` parameter of the instance `recovery.conf` file. See the related [postgresql doc](https://www.postgresql.org/docs/current/static/standby-settings.html)  | no       | string                  |         |
 
 #### Special Types
 duration types (as described in https://golang.org/pkg/time/#ParseDuration) are signed sequence of decimal numbers, each with optional fraction and a unit suffix, such as "300ms", "-1.5h" or "2h45m". Valid time units are "ns", "us" (or "µs"), "ms", "s", "m", "h".

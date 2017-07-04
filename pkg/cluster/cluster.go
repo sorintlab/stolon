@@ -156,12 +156,16 @@ type ExistingConfig struct {
 type ArchiveRecoverySettings struct {
 	// value for restore_command
 	RestoreCommand string `json:"restoreCommand,omitempty"`
-	//TODO(sgotti) add missing options
 }
 
 // RecoveryTargetSettings defines the recovery target settings in the recovery.conf file (https://www.postgresql.org/docs/9.6/static/recovery-target-settings.html )
 type RecoveryTargetSettings struct {
-	//TODO(sgotti) add options
+	RecoveryTarget         string `json:"recoveryTarget,omitempty"`
+	RecoveryTargetLsn      string `json:"recoveryTargetLsn,omitempty"`
+	RecoveryTargetName     string `json:"recoveryTargetName,omitempty"`
+	RecoveryTargetTime     string `json:"recoveryTargetTime,omitempty"`
+	RecoveryTargetXid      string `json:"recoveryTargetXid,omitempty"`
+	RecoveryTargetTimeline string `json:"recoveryTargetTimeline,omitempty"`
 }
 
 // StandbySettings defines the standby settings in the recovery.conf file (https://www.postgresql.org/docs/9.6/static/standby-settings.html )
