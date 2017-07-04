@@ -112,7 +112,7 @@ func TestInitWithMultipleKeepers(t *testing.T) {
 	defer shutdown(tks, tss, tstore)
 
 	// Wait for clusterView containing a master
-	masterUID, err := WaitClusterDataWithMaster(sm, 30*time.Second)
+	masterUID, err := WaitClusterDataWithMaster(sm, 60*time.Second)
 	if err != nil {
 		t.Fatal("expected a master in cluster view")
 	}
@@ -269,7 +269,7 @@ func waitKeeperReady(t *testing.T, sm *store.StoreManager, keeper *TestKeeper) {
 
 func waitMasterStandbysReady(t *testing.T, sm *store.StoreManager, tks testKeepers) (master *TestKeeper, standbys []*TestKeeper) {
 	// Wait for normal cluster phase (master ready)
-	masterUID, err := WaitClusterDataWithMaster(sm, 30*time.Second)
+	masterUID, err := WaitClusterDataWithMaster(sm, 60*time.Second)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
