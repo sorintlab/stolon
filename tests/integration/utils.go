@@ -993,15 +993,16 @@ func WaitClusterSyncedXLogPos(keepersUIDs []string, e *store.StoreManager, timeo
 }
 
 func testFreeTCPPort(port int) error {
-	ln, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", curPort))
+	ln, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", port))
 	if err != nil {
 		return err
 	}
 	ln.Close()
 	return nil
 }
+
 func testFreeUDPPort(port int) error {
-	ln, err := net.ListenPacket("udp", fmt.Sprintf("localhost:%d", curPort))
+	ln, err := net.ListenPacket("udp", fmt.Sprintf("localhost:%d", port))
 	if err != nil {
 		return err
 	}

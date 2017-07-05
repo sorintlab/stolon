@@ -47,7 +47,7 @@ func setupStore(t *testing.T, dir string) *TestStore {
 	if err := tstore.Start(); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	if err := tstore.WaitUp(10 * time.Second); err != nil {
+	if err := tstore.WaitUp(30 * time.Second); err != nil {
 		t.Fatalf("error waiting on store up: %v", err)
 	}
 	return tstore
@@ -112,7 +112,7 @@ func TestInitWithMultipleKeepers(t *testing.T) {
 	defer shutdown(tks, tss, tstore)
 
 	// Wait for clusterView containing a master
-	masterUID, err := WaitClusterDataWithMaster(sm, 30*time.Second)
+	masterUID, err := WaitClusterDataWithMaster(sm, 60*time.Second)
 	if err != nil {
 		t.Fatal("expected a master in cluster view")
 	}
@@ -269,7 +269,7 @@ func waitKeeperReady(t *testing.T, sm *store.StoreManager, keeper *TestKeeper) {
 
 func waitMasterStandbysReady(t *testing.T, sm *store.StoreManager, tks testKeepers) (master *TestKeeper, standbys []*TestKeeper) {
 	// Wait for normal cluster phase (master ready)
-	masterUID, err := WaitClusterDataWithMaster(sm, 30*time.Second)
+	masterUID, err := WaitClusterDataWithMaster(sm, 60*time.Second)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -325,7 +325,7 @@ func testMasterStandby(t *testing.T, syncRepl bool) {
 	if c != 1 {
 		t.Fatalf("wrong number of lines, want: %d, got: %d", 1, c)
 	}
-	if err := waitLines(t, standby, 1, 10*time.Second); err != nil {
+	if err := waitLines(t, standby, 1, 30*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 }
@@ -925,7 +925,7 @@ func testTimelineFork(t *testing.T, syncRepl, usePgrewind bool) {
 	WaitClusterSyncedXLogPos([]string{master.uid, standbys[0].uid}, sm, 20*time.Second)
 
 	// Wait replicated data to standby
-	if err := waitLines(t, standbys[0], 1, 10*time.Second); err != nil {
+	if err := waitLines(t, standbys[0], 1, 30*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
@@ -959,7 +959,7 @@ func testTimelineFork(t *testing.T, syncRepl, usePgrewind bool) {
 	}
 
 	// Wait replicated data to standby[1]
-	if err := waitLines(t, standbys[1], 2, 10*time.Second); err != nil {
+	if err := waitLines(t, standbys[1], 2, 30*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
@@ -1226,7 +1226,7 @@ func TestFailedStandby(t *testing.T) {
 		}
 	}
 
-	if err := WaitStandbyKeeper(sm, newStandby.uid, 20*time.Second); err != nil {
+	if err := WaitStandbyKeeper(sm, newStandby.uid, 30*time.Second); err != nil {
 		t.Fatalf("expected keeper %s to have a standby db assigned: %v", newStandby.uid, err)
 	}
 
