@@ -27,6 +27,7 @@ import (
 	"github.com/sorintlab/stolon/pkg/flagutil"
 	slog "github.com/sorintlab/stolon/pkg/log"
 	"github.com/sorintlab/stolon/pkg/store"
+	"github.com/sorintlab/stolon/pkg/util"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/sorintlab/pollon"
@@ -175,11 +176,10 @@ func (c *ClusterChecker) sendPollonConfData(confData pollon.ConfData) {
 	}
 }
 
-func (c *ClusterChecker) SetProxyInfo(e *store.StoreManager, uid string, generation int64, ttl time.Duration) error {
+func (c *ClusterChecker) SetProxyInfo(e *store.StoreManager, generation int64, ttl time.Duration) error {
 	proxyInfo := &cluster.ProxyInfo{
-		UID:             c.uid,
-		ProxyUID:        uid,
-		ProxyGeneration: generation,
+		UID:        c.uid,
+		Generation: generation,
 	}
 	log.Debugf("proxyInfo dump: %s", spew.Sdump(proxyInfo))
 
@@ -221,7 +221,7 @@ func (c *ClusterChecker) Check() error {
 		log.Infow("no proxy object available, closing connections to master")
 		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
 		// ignore errors on setting proxy info
-		if err = c.SetProxyInfo(c.e, proxy.UID, proxy.Generation, 2*cluster.DefaultProxyTimeoutInterval); err != nil {
+		if err = c.SetProxyInfo(c.e, cluster.NoGeneration, 2*cluster.DefaultProxyTimeoutInterval); err != nil {
 			log.Errorw("failed to update proxyInfo", zap.Error(err))
 		}
 		return nil
@@ -232,7 +232,7 @@ func (c *ClusterChecker) Check() error {
 		log.Infow("no db object available, closing connections to master", "db", proxy.Spec.MasterDBUID)
 		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
 		// ignore errors on setting proxy info
-		if err = c.SetProxyInfo(c.e, proxy.UID, proxy.Generation, 2*cluster.DefaultProxyTimeoutInterval); err != nil {
+		if err = c.SetProxyInfo(c.e, proxy.Generation, 2*cluster.DefaultProxyTimeoutInterval); err != nil {
 			log.Errorw("failed to update proxyInfo", zap.Error(err))
 		}
 		return nil
@@ -245,12 +245,24 @@ func (c *ClusterChecker) Check() error {
 		return nil
 	}
 	log.Infow("master address", "address", addr)
-	// ignore errors on setting proxy info
-	if err = c.SetProxyInfo(c.e, proxy.UID, proxy.Generation, 2*cluster.DefaultProxyTimeoutInterval); err != nil {
+	if err = c.SetProxyInfo(c.e, proxy.Generation, 2*cluster.DefaultProxyTimeoutInterval); err != nil {
+		// if we failed to update our proxy info when a master is defined we
+		// cannot ignore this error since the sentinel won't know that we exist
+		// and are sending connections to a master so, when electing a new
+		// master, it'll not wait for us to close connections to the old one.
+		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
 		log.Errorw("failed to update proxyInfo", zap.Error(err))
+		return nil
 	}
 
-	c.sendPollonConfData(pollon.ConfData{DestAddr: addr})
+	// start proxing only if we are inside enabledProxies, this ensures that the
+	// sentinel has read our proxyinfo and knows we are alive
+	if util.StringInSlice(proxy.Spec.EnabledProxies, c.uid) {
+		log.Infow("proxying to master address", "address", addr)
+		c.sendPollonConfData(pollon.ConfData{DestAddr: addr})
+	} else {
+		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
+	}
 
 	return nil
 }

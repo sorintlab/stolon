@@ -641,7 +641,7 @@ func (s *Sentinel) findBestNewMasters(cd *cluster.ClusterData, masterDB *cluster
 	return bestNewMasters
 }
 
-func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData, error) {
+func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInfo) (*cluster.ClusterData, error) {
 	// take a cd deepCopy to check that the code isn't changing it (it'll be a bug)
 	origcd := cd.DeepCopy()
 	newcd := cd.DeepCopy()
@@ -915,7 +915,7 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 
 		// New master elected
 		if curMasterDBUID != wantedMasterDBUID {
-			// maintain the current role, remove followers
+			// maintain the current role of the old master and just remove followers
 			oldMasterdb := newcd.DBs[curMasterDBUID]
 			oldMasterdb.Spec.Followers = []string{}
 
@@ -935,8 +935,12 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 			newMasterDB.Spec.FollowConfig = followConfig
 
 			// Tell proxy that there's currently no active master
-			newcd.Proxy.Spec.MasterDBUID = ""
-			newcd.Proxy.ChangeTime = time.Now()
+			if newcd.Proxy.Spec.MasterDBUID != "" {
+				// Tell proxies that there's currently no active master
+				newcd.Proxy.Spec.MasterDBUID = ""
+				newcd.Proxy.Generation++
+				newcd.Proxy.ChangeTime = time.Now()
+			}
 
 			// Setup synchronous standbys to the one of the previous master (replacing ourself with the previous master)
 			if s.syncRepl(clusterSpec) {
@@ -954,11 +958,19 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 			}
 		}
 
-		// TODO(sgotti) Wait for the proxies being converged (closed connections to old master)?
-
-		// Setup standbys, do this only when there's no master change
 		if curMasterDBUID == wantedMasterDBUID {
 			masterDB := newcd.DBs[curMasterDBUID]
+
+			proxiesReady := true
+			for _, pi := range pis {
+				if pi.Generation != newcd.Proxy.Generation {
+					proxiesReady = false
+				}
+			}
+			if !proxiesReady {
+				log.Infow("waiting for proxies to close connections to old master")
+				return newcd, nil
+			}
 
 			// change master db role to "master" if the cluster role has been changed in the spec
 			if *clusterSpec.Role == cluster.ClusterRoleMaster {
@@ -966,11 +978,32 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData,
 				masterDB.Spec.FollowConfig = nil
 			}
 
+			// update enabled proxies to current available proxies in proxyInfo.
+			// We do this only when the master isn't changed since during a master
+			// change we don't want new proxies coming up and start listening on
+			// the old master for a time window. For example: proxy starts and
+			// read proxy spec with a masterdb defined, sentinel elects new
+			// master, proxy publishes its proxyinfo, it's not in enabledProxies
+			// so won't start listening.
+			enabledProxies := []string{}
+			for _, pi := range pis {
+				enabledProxies = append(enabledProxies, pi.UID)
+			}
+			sort.Strings(enabledProxies)
+			if !reflect.DeepEqual(newcd.Proxy.Spec.EnabledProxies, enabledProxies) {
+				newcd.Proxy.Spec.EnabledProxies = enabledProxies
+				newcd.Proxy.Generation++
+				newcd.Proxy.ChangeTime = time.Now()
+			}
+
 			// Set standbys to follow master only if it's healthy and converged
 			if masterDB.Status.Healthy && s.dbConvergenceState(masterDB, clusterSpec.ConvergenceTimeout.Duration) == Converged {
 				// Tell proxy that there's a new active master
-				newcd.Proxy.Spec.MasterDBUID = wantedMasterDBUID
-				newcd.Proxy.ChangeTime = time.Now()
+				if newcd.Proxy.Spec.MasterDBUID != wantedMasterDBUID {
+					newcd.Proxy.Spec.MasterDBUID = wantedMasterDBUID
+					newcd.Proxy.Generation++
+					newcd.Proxy.ChangeTime = time.Now()
+				}
 
 				// Remove old masters
 				toRemove := []*cluster.DB{}
@@ -1483,6 +1516,12 @@ func (s *Sentinel) clusterSentinelCheck(pctx context.Context) {
 	}
 	log.Debugf("keepersInfo dump: %s", spew.Sdump(keepersInfo))
 
+	proxiesInfo, err := s.e.GetProxiesInfo()
+	if err != nil {
+		log.Errorw("failed to get proxies info", zap.Error(err))
+		return
+	}
+
 	isLeader, leadershipCount := s.leaderInfo()
 	if !isLeader {
 		return
@@ -1510,7 +1549,7 @@ func (s *Sentinel) clusterSentinelCheck(pctx context.Context) {
 	newcd, newKeeperInfoHistories := s.updateKeepersStatus(cd, keepersInfo, firstRun)
 	log.Debugf("newcd dump after updateKeepersStatus: %s", spew.Sdump(newcd))
 
-	newcd, err = s.updateCluster(newcd)
+	newcd, err = s.updateCluster(newcd, proxiesInfo)
 	if err != nil {
 		log.Errorw("failed to update cluster data", zap.Error(err))
 		return
