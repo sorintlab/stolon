@@ -248,7 +248,7 @@ func (p *PostgresKeeper) createPGParameters(db *cluster.DB) common.Parameters {
 	parameters["max_replication_slots"] = strconv.FormatUint(uint64(db.Spec.MaxStandbys), 10)
 	// Add some more wal senders, since also the keeper will use them
 	// TODO(sgotti) changing max_wal_senders requires an instance restart.
-	parameters["max_wal_senders"] = strconv.FormatUint(uint64(db.Spec.MaxStandbys+2), 10)
+	parameters["max_wal_senders"] = strconv.FormatUint(uint64(db.Spec.MaxStandbys+2+db.Spec.AdditionalWalSenders), 10)
 
 	// required by pg_rewind (if data checksum is enabled it's ignored)
 	if db.Spec.UsePgrewind {
