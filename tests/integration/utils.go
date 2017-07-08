@@ -555,6 +555,13 @@ func (tp *TestProxy) WaitListening(timeout time.Duration) error {
 	return fmt.Errorf("timeout")
 }
 
+func (tp *TestProxy) CheckListening() bool {
+	_, err := net.Dial("tcp", net.JoinHostPort(tp.listenAddress, tp.port))
+	if err != nil {
+		return false
+	}
+	return true
+}
 func (tp *TestProxy) WaitNotListening(timeout time.Duration) error {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {

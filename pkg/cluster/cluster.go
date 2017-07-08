@@ -44,7 +44,8 @@ const (
 )
 
 const (
-	DefaultProxyCheckInterval = 5 * time.Second
+	DefaultProxyCheckInterval   = 5 * time.Second
+	DefaultProxyTimeoutInterval = 15 * time.Second
 
 	DefaultSleepInterval                         = 5 * time.Second
 	DefaultRequestTimeout                        = 10 * time.Second

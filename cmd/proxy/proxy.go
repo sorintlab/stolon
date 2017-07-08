@@ -185,44 +185,39 @@ func (c *ClusterChecker) SetProxyInfo(e *store.StoreManager, uid string, generat
 	return nil
 }
 
+// Check reads the cluster data and apply the right pollon configuration.
 func (c *ClusterChecker) Check() error {
 	cd, _, err := c.e.GetClusterData()
 	if err != nil {
-		log.Error("cannot get cluster data", zap.Error(err))
-		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
-		if c.stopListening {
-			c.stopPollonProxy()
-		}
-		return nil
-	}
-	log.Debug("cd dump", zap.String("cd", spew.Sdump(cd)))
-	if cd == nil {
-		log.Info("no clusterdata available, closing connections to previous master")
-		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
-		return nil
-	}
-	if cd.FormatVersion != cluster.CurrentCDFormatVersion {
-		log.Error("unsupported clusterdata format version", zap.Uint64("version", cd.FormatVersion))
-		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
-		return nil
-	}
-	if err = cd.Cluster.Spec.Validate(); err != nil {
-		log.Error("clusterdata validation failed", zap.Error(err))
-		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
-		return nil
+		return fmt.Errorf("cannot get cluster data: %v", err)
 	}
 
 	// Start pollon if not active
 	if err = c.startPollonProxy(); err != nil {
-		log.Error("failed to start proxy", zap.Error(err))
+		return fmt.Errorf("failed to start proxy: %v", err)
+	}
+
+	log.Debug("cd dump", zap.String("cd", spew.Sdump(cd)))
+	if cd == nil {
+		log.Info("no clusterdata available, closing connections to master")
+		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
 		return nil
+	}
+	if cd.FormatVersion != cluster.CurrentCDFormatVersion {
+		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
+		return fmt.Errorf("unsupported clusterdata format version: %d", cd.FormatVersion)
+	}
+	if err = cd.Cluster.Spec.Validate(); err != nil {
+		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
+		return fmt.Errorf("clusterdata validation failed: %v", err)
 	}
 
 	proxy := cd.Proxy
 	if proxy == nil {
-		log.Info("no proxy object available, closing connections to previous master")
+		log.Info("no proxy object available, closing connections to master")
 		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
-		if err = c.SetProxyInfo(c.e, proxy.UID, proxy.Generation, 2*cluster.DefaultProxyCheckInterval); err != nil {
+		// ignore errors on setting proxy info
+		if err = c.SetProxyInfo(c.e, proxy.UID, proxy.Generation, 2*cluster.DefaultProxyTimeoutInterval); err != nil {
 			log.Error("failed to update proxyInfo", zap.Error(err))
 		}
 		return nil
@@ -230,9 +225,10 @@ func (c *ClusterChecker) Check() error {
 
 	db, ok := cd.DBs[proxy.Spec.MasterDBUID]
 	if !ok {
-		log.Info("no db object available, closing connections to previous master", zap.String("db", proxy.Spec.MasterDBUID))
+		log.Info("no db object available, closing connections to master", zap.String("db", proxy.Spec.MasterDBUID))
 		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
-		if err = c.SetProxyInfo(c.e, proxy.UID, proxy.Generation, 2*cluster.DefaultProxyCheckInterval); err != nil {
+		// ignore errors on setting proxy info
+		if err = c.SetProxyInfo(c.e, proxy.UID, proxy.Generation, 2*cluster.DefaultProxyTimeoutInterval); err != nil {
 			log.Error("failed to update proxyInfo", zap.Error(err))
 		}
 		return nil
@@ -245,18 +241,48 @@ func (c *ClusterChecker) Check() error {
 		return nil
 	}
 	log.Info("master address", zap.Stringer("address", addr))
-	if err = c.SetProxyInfo(c.e, proxy.UID, proxy.Generation, 2*cluster.DefaultProxyCheckInterval); err != nil {
+	// ignore errors on setting proxy info
+	if err = c.SetProxyInfo(c.e, proxy.UID, proxy.Generation, 2*cluster.DefaultProxyTimeoutInterval); err != nil {
 		log.Error("failed to update proxyInfo", zap.Error(err))
 	}
 
 	c.sendPollonConfData(pollon.ConfData{DestAddr: addr})
+
+	return nil
+}
+
+func (c *ClusterChecker) TimeoutChecker(checkOkCh chan struct{}) error {
+	timeoutTimer := time.NewTimer(cluster.DefaultProxyTimeoutInterval)
+
+	for true {
+		select {
+		case <-timeoutTimer.C:
+			log.Info("check timeout timer fired")
+			// if the check timeouts close all connections and stop listening
+			// (for example to avoid load balancers forward connections to us
+			// since we aren't ready or in a bad state)
+			c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
+			if c.stopListening {
+				c.stopPollonProxy()
+			}
+
+		case <-checkOkCh:
+			log.Debug("check ok message received")
+
+			// ignore if stop succeeded or not due to timer already expired
+			timeoutTimer.Stop()
+			timeoutTimer = time.NewTimer(cluster.DefaultProxyTimeoutInterval)
+		}
+	}
 	return nil
 }
 
 func (c *ClusterChecker) Start() error {
-	endPollonProxyCh := make(chan error)
+	checkOkCh := make(chan struct{})
 	checkCh := make(chan error)
 	timerCh := time.NewTimer(0).C
+
+	go c.TimeoutChecker(checkOkCh)
 
 	for true {
 		select {
@@ -266,13 +292,14 @@ func (c *ClusterChecker) Start() error {
 			}()
 		case err := <-checkCh:
 			if err != nil {
-				log.Debug("check reported error", zap.Error(err))
-			}
-			if err != nil {
-				return fmt.Errorf("checker fatal error: %v", err)
+				// don't report check ok since it returned an error
+				log.Debug("check function error", zap.Error(err))
+			} else {
+				// report that check was ok
+				checkOkCh <- struct{}{}
 			}
 			timerCh = time.NewTimer(cluster.DefaultProxyCheckInterval).C
-		case err := <-endPollonProxyCh:
+		case err := <-c.endPollonProxyCh:
 			if err != nil {
 				return fmt.Errorf("proxy error: %v", err)
 			}
@@ -308,5 +335,7 @@ func proxy(cmd *cobra.Command, args []string) {
 	if err != nil {
 		die("cannot create cluster checker: %v", err)
 	}
-	clusterChecker.Start()
+	if err = clusterChecker.Start(); err != nil {
+		die("cluster checker ended with error: %v", err)
+	}
 }

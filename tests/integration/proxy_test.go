@@ -19,6 +19,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"syscall"
 	"testing"
 	"time"
 
@@ -149,7 +150,7 @@ func TestProxyListening(t *testing.T) {
 	}
 
 	// tp should not listen because it cannot talk with the store
-	if err := tp.WaitNotListening(10 * time.Second); err != nil {
+	if err := tp.WaitNotListening(cluster.DefaultProxyTimeoutInterval * 2); err != nil {
 		t.Fatalf("expecting tp not listening due to failed store communication, but it's listening.")
 	}
 
@@ -163,6 +164,32 @@ func TestProxyListening(t *testing.T) {
 	}
 	// tp should listen
 	if err := tp.WaitListening(10 * time.Second); err != nil {
+		t.Fatalf("expecting tp listening, but it's not listening.")
+	}
+
+	t.Logf("test proxy error communicating with store but restored before proxy check timeout. Should continue listening")
+	// Stop store
+	tstore.Stop()
+	if err := tstore.WaitDown(10 * time.Second); err != nil {
+		t.Fatalf("error waiting on store down: %v", err)
+	}
+	// wait less than DefaultProxyTimeoutInterval
+	time.Sleep(cluster.DefaultProxyTimeoutInterval / 3)
+	// Start store
+	if err := tstore.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := tstore.WaitUp(10 * time.Second); err != nil {
+		t.Fatalf("error waiting on store up: %v", err)
+	}
+	// tp should listen
+	if ok := tp.CheckListening(); !ok {
+		t.Fatalf("expecting tp listening, but it's not listening.")
+	}
+	// wait proxy reading again from the store
+	time.Sleep(cluster.DefaultProxyCheckInterval)
+	// tp should listen
+	if ok := tp.CheckListening(); !ok {
 		t.Fatalf("expecting tp listening, but it's not listening.")
 	}
 
@@ -196,6 +223,28 @@ func TestProxyListening(t *testing.T) {
 	// remove whole clusterview
 	_, err = sm.AtomicPutClusterData(nil, pair)
 	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// tp should listen
+	if err := tp.WaitListening(10 * time.Second); err != nil {
+		t.Fatalf("expecting tp listening, but it's not listening.")
+	}
+
+	// simulate the store in hang by freezing its process
+	t.Logf("SIGSTOPping the store: %s", tstore.uid)
+	if err := tstore.Signal(syscall.SIGSTOP); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// tp should not listen because it cannot talk with the store
+	if err := tp.WaitNotListening(cluster.DefaultProxyTimeoutInterval * 2); err != nil {
+		t.Fatalf("expecting tp not listening due to failed store communication, but it's listening.")
+	}
+
+	// resume the store
+	t.Logf("SIGCONTing the store: %s", tstore.uid)
+	if err := tstore.Signal(syscall.SIGCONT); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
