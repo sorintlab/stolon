@@ -24,9 +24,15 @@ import (
 
 	"github.com/sorintlab/stolon/common"
 
+	"os"
+
 	_ "github.com/lib/pq"
 	"golang.org/x/net/context"
-	"os"
+)
+
+const (
+	// TODO(sgotti) for now we assume wal size is the default 16MiB size
+	WalSegSize = (16 * 1024 * 1024) // 16MiB
 )
 
 var (
@@ -423,4 +429,38 @@ func ParseVersion(v string) (int, int, error) {
 	}
 
 	return maj, min, nil
+}
+
+func IsWalFileName(name string) bool {
+	walChars := "0123456789ABCDEF"
+	if len(name) != 24 {
+		return false
+	}
+	for _, c := range name {
+		ok := false
+		for _, v := range walChars {
+			if c == v {
+				ok = true
+			}
+		}
+		if !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func XlogPosToWalFileNameNoTimeline(XLogPos uint64) string {
+	id := uint32(XLogPos >> 32)
+	offset := uint32(XLogPos)
+	// TODO(sgotti) for now we assume wal size is the default 16M size
+	seg := offset / WalSegSize
+	return fmt.Sprintf("%08X%08X", id, seg)
+}
+
+func WalFileNameNoTimeLine(name string) (string, error) {
+	if !IsWalFileName(name) {
+		return "", fmt.Errorf("bad wal file name")
+	}
+	return name[8:24], nil
 }

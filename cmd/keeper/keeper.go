@@ -564,7 +564,8 @@ func (p *PostgresKeeper) GetPGState(pctx context.Context) (*cluster.PostgresStat
 		// if timeline <= 1 then no timeline history file exists.
 		pgState.TimelinesHistory = cluster.PostgresTimelinesHistory{}
 		if pgState.TimelineID > 1 {
-			tlsh, err := p.pgm.GetTimelinesHistory(pgState.TimelineID)
+			var tlsh []*postgresql.TimelineHistory
+			tlsh, err = p.pgm.GetTimelinesHistory(pgState.TimelineID)
 			if err != nil {
 				log.Errorw("error getting timeline history", zap.Error(err))
 				return pgState, nil
@@ -580,6 +581,14 @@ func (p *PostgresKeeper) GetPGState(pctx context.Context) (*cluster.PostgresStat
 				ctlsh = append(ctlsh, ctlh)
 			}
 			pgState.TimelinesHistory = ctlsh
+		}
+
+		ow, err := p.pgm.OlderWalFile()
+		if err != nil {
+			log.Warnw("error getting older wal file", zap.Error(err))
+		} else {
+			log.Debugw("older wal file", "filename", ow)
+			pgState.OlderWalFile = ow
 		}
 		pgState.Healthy = true
 	}

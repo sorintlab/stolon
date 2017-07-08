@@ -1434,3 +1434,108 @@ func TestKeeperRemoval(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 }
+
+func TestStandbyCantSync(t *testing.T) {
+	dir, err := ioutil.TempDir("", "stolon")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer os.RemoveAll(dir)
+
+	clusterName := uuid.NewV4().String()
+
+	tks, tss, tp, tstore := setupServers(t, clusterName, dir, 3, 1, false, false, nil)
+	defer shutdown(tks, tss, tp, tstore)
+
+	storePath := filepath.Join(common.StoreBasePath, clusterName)
+	sm := store.NewStoreManager(tstore.store, storePath)
+
+	master, standbys := waitMasterStandbysReady(t, sm, tks)
+
+	if err := populate(t, master); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := write(t, master, 1, 1); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	c, err := getLines(t, master)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if c != 1 {
+		t.Fatalf("wrong number of lines, want: %d, got: %d", 1, c)
+	}
+	if err := waitLines(t, standbys[0], 1, 30*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := waitLines(t, standbys[1], 1, 30*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// stop standbys[0]
+	t.Logf("Stopping standbys[0] keeper: %s", standbys[0].uid)
+	standbys[0].Stop()
+
+	// switch wals a lot of times to ensure wals on standbys aren't enough for syncing standbys[0] from it
+	if err := master.SwitchWals(100); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// make standby[1] become new master
+	master.Stop()
+
+	// Wait for cluster data containing standbys[1] as master
+	if err := WaitClusterDataMaster(standbys[1].uid, sm, 30*time.Second); err != nil {
+		t.Fatalf("expected master %q in cluster view", standbys[1].uid)
+	}
+	if err := standbys[1].WaitDBRole(common.RoleMaster, nil, 30*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// get current stanbdys[0] db uid
+	cd, _, err := sm.GetClusterData()
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	var standby0DBUID string
+	for _, db := range cd.DBs {
+		if db.Spec.KeeperUID == standbys[0].uid {
+			standby0DBUID = db.UID
+		}
+	}
+
+	// start standbys[0]
+	t.Logf("Starting standbys[0] keeper: %s", standbys[0].uid)
+	standbys[0].Start()
+
+	// wait for standbys[0] dbuid being changed
+
+	// write something to new master to check that standbys[0] keeps syncing
+	if err := write(t, standbys[1], 2, 2); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := waitLines(t, standbys[0], 2, 120*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// check that the current stanbdys[0] db uid is different. This means the
+	// sentinel found that standbys[0] won't sync due to missing wals and asked
+	// the keeper to resync (defining e new db in the cluster data)
+	cd, _, err = sm.GetClusterData()
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	var newStandby0DBUID string
+	for _, db := range cd.DBs {
+		if db.Spec.KeeperUID == standbys[0].uid {
+			newStandby0DBUID = db.UID
+		}
+	}
+
+	t.Logf("previous standbys[0] dbUID: %s, current standbys[0] dbUID: %s", standby0DBUID, newStandby0DBUID)
+	if newStandby0DBUID == standby0DBUID {
+		t.Fatalf("expected different dbuid for standbys[0]: got the same: %q", newStandby0DBUID)
+	}
+}

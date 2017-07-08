@@ -47,6 +47,8 @@ const (
 	DefaultProxyCheckInterval   = 5 * time.Second
 	DefaultProxyTimeoutInterval = 15 * time.Second
 
+	DefaultDBNotIncreasingXLogPosTimes = 10
+
 	DefaultSleepInterval                         = 5 * time.Second
 	DefaultRequestTimeout                        = 10 * time.Second
 	DefaultConvergenceTimeout                    = 30 * time.Second
@@ -537,6 +539,7 @@ type DBStatus struct {
 
 	PGParameters        PGParameters `json:"pgParameters,omitempty"`
 	SynchronousStandbys []string     `json:"synchronousStandbys"`
+	OlderWalFile        string       `json:"olderWalFile,omitempty"`
 }
 
 type DB struct {
