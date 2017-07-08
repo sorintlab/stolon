@@ -57,8 +57,9 @@ const (
 	DefaultMaxStandbysPerSender      uint16      = 3
 	DefaultMaxStandbyLag                         = 1024 * 1204
 	DefaultSynchronousReplication                = false
-	DefaultMaxSynchronousStandbys    uint16      = 1
 	DefaultMinSynchronousStandbys    uint16      = 1
+	DefaultMaxSynchronousStandbys    uint16      = 1
+	DefaultAdditionalWalSenders                  = 5
 	DefaultUsePgrewind                           = false
 	DefaultMergePGParameter                      = true
 	DefaultRole                      ClusterRole = ClusterRoleMaster
@@ -206,6 +207,9 @@ type ClusterSpec struct {
 	// MaxSynchronousStandbys is the maximum number if synchronous standbys
 	// to be configured when SynchronousReplication is true
 	MaxSynchronousStandbys *uint16 `json:"maxSynchronousStandbys,omitempty"`
+	// AdditionalWalSenders defines the number of additional wal_senders in
+	// addition to the ones internally defined by stolon
+	AdditionalWalSenders *uint16 `json:"additionalWalSenders"`
 	// Whether to use pg_rewind
 	UsePgrewind *bool `json:"usePgrewind,omitempty"`
 	// InitMode defines the cluster initialization mode. Current modes are: new, existing, pitr
@@ -317,6 +321,9 @@ func (os *ClusterSpec) WithDefaults() *ClusterSpec {
 	}
 	if s.MaxSynchronousStandbys == nil {
 		s.MaxSynchronousStandbys = Uint16P(DefaultMaxSynchronousStandbys)
+	}
+	if s.AdditionalWalSenders == nil {
+		s.AdditionalWalSenders = Uint16P(DefaultAdditionalWalSenders)
 	}
 	if s.MergePgParameters == nil {
 		s.MergePgParameters = BoolP(DefaultMergePGParameter)
@@ -493,6 +500,9 @@ type DBSpec struct {
 	SynchronousReplication bool `json:"synchronousReplication,omitempty"`
 	// Whether to use pg_rewind
 	UsePgrewind bool `json:"usePgrewind,omitempty"`
+	// AdditionalWalSenders defines the number of additional wal_senders in
+	// addition to the ones internally defined by stolon
+	AdditionalWalSenders uint16 `json:"additionalWalSenders"`
 	// InitMode defines the db initialization mode. Current modes are: none, new
 	InitMode DBInitMode `json:"initMode,omitempty"`
 	// Point in time recovery init configuration used when InitMode is "pitr"

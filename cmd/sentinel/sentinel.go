@@ -341,6 +341,7 @@ func (s *Sentinel) setDBSpecFromClusterSpec(cd *cluster.ClusterData) {
 		if db.Spec.FollowConfig != nil && db.Spec.FollowConfig.Type == cluster.FollowTypeExternal {
 			db.Spec.FollowConfig.StandbySettings = clusterSpec.StandbySettings
 		}
+		db.Spec.AdditionalWalSenders = *clusterSpec.AdditionalWalSenders
 	}
 }
 
