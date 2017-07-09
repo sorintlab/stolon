@@ -52,6 +52,7 @@ type config struct {
 	listenAddress      string
 	port               string
 	stopListening      bool
+	logLevel           string
 	debug              bool
 }
 
@@ -68,7 +69,10 @@ func init() {
 	cmdProxy.PersistentFlags().StringVar(&cfg.listenAddress, "listen-address", "127.0.0.1", "proxy listening address")
 	cmdProxy.PersistentFlags().StringVar(&cfg.port, "port", "5432", "proxy listening port")
 	cmdProxy.PersistentFlags().BoolVar(&cfg.stopListening, "stop-listening", true, "stop listening on store error")
+	cmdProxy.PersistentFlags().StringVar(&cfg.logLevel, "log-level", "info", "debug, info (default), warn or error")
 	cmdProxy.PersistentFlags().BoolVar(&cfg.debug, "debug", false, "enable debug logging")
+
+	cmdProxy.PersistentFlags().MarkDeprecated("debug", "use --log-level=debug instead")
 }
 
 func stderr(format string, a ...interface{}) {
@@ -317,6 +321,18 @@ func main() {
 func proxy(cmd *cobra.Command, args []string) {
 	if cfg.debug {
 		log.SetLevel(zap.DebugLevel)
+	}
+	switch cfg.logLevel {
+	case "error":
+		log.SetLevel(zap.ErrorLevel)
+	case "warn":
+		log.SetLevel(zap.WarnLevel)
+	case "info":
+		log.SetLevel(zap.InfoLevel)
+	case "debug":
+		log.SetLevel(zap.DebugLevel)
+	default:
+		die("invalid log level: %v", cfg.logLevel)
 	}
 	stdlog, _ := zwrap.Standardize(log, zap.DebugLevel)
 	pollon.SetLogger(stdlog)

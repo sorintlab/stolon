@@ -74,6 +74,7 @@ type config struct {
 	storeSkipTlsVerify      bool
 	dataDir                 string
 	clusterName             string
+	logLevel                string
 	debug                   bool
 	pgListenAddress         string
 	pgPort                  string
@@ -115,9 +116,11 @@ func init() {
 	cmdKeeper.PersistentFlags().StringVar(&cfg.pgSUUsername, "pg-su-username", user, "postgres superuser user name. Used for keeper managed instance access and pg_rewind based synchronization. It'll be created on db initialization. Defaults to the name of the effective user running stolon-keeper. Must be the same for all keepers.")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.pgSUPassword, "pg-su-password", "", "postgres superuser password. Needed for pg_rewind based synchronization. If provided it'll be configured on db initialization. Only one of --pg-su-password or --pg-su-passwordfile is required. Must be the same for all keepers.")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.pgSUPasswordFile, "pg-su-passwordfile", "", "postgres superuser password file. Requires --pg-su-username. Must be the same for all keepers)")
+	cmdKeeper.PersistentFlags().StringVar(&cfg.logLevel, "log-level", "info", "debug, info (default), warn or error")
 	cmdKeeper.PersistentFlags().BoolVar(&cfg.debug, "debug", false, "enable debug logging")
 
 	cmdKeeper.PersistentFlags().MarkDeprecated("id", "please use --uid")
+	cmdKeeper.PersistentFlags().MarkDeprecated("debug", "use --log-level=debug instead")
 }
 
 var mandatoryPGParameters = common.Parameters{
@@ -314,7 +317,6 @@ type PostgresKeeper struct {
 	storeEndpoints      string
 	listenAddress       string
 	port                string
-	debug               bool
 	pgListenAddress     string
 	pgPort              string
 	pgBinPath           string
@@ -366,7 +368,6 @@ func NewPostgresKeeper(cfg *config, stop chan bool, end chan error) (*PostgresKe
 		storeBackend:   cfg.storeBackend,
 		storeEndpoints: cfg.storeEndpoints,
 
-		debug:               cfg.debug,
 		pgListenAddress:     cfg.pgListenAddress,
 		pgPort:              cfg.pgPort,
 		pgBinPath:           cfg.pgBinPath,
@@ -1512,6 +1513,18 @@ func keeper(cmd *cobra.Command, args []string) {
 	var err error
 	if cfg.debug {
 		log.SetLevel(zap.DebugLevel)
+	}
+	switch cfg.logLevel {
+	case "error":
+		log.SetLevel(zap.ErrorLevel)
+	case "warn":
+		log.SetLevel(zap.WarnLevel)
+	case "info":
+		log.SetLevel(zap.InfoLevel)
+	case "debug":
+		log.SetLevel(zap.DebugLevel)
+	default:
+		die("invalid log level: %v", cfg.logLevel)
 	}
 	pg.SetLogger(log)
 

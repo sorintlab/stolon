@@ -62,6 +62,7 @@ type config struct {
 	storeSkipTlsVerify     bool
 	clusterName            string
 	initialClusterSpecFile string
+	logLevel               string
 	debug                  bool
 }
 
@@ -76,7 +77,10 @@ func init() {
 	cmdSentinel.PersistentFlags().StringVar(&cfg.storeCAFile, "store-ca-file", "", "verify certificates of HTTPS-enabled store servers using this CA bundle")
 	cmdSentinel.PersistentFlags().StringVar(&cfg.clusterName, "cluster-name", "", "cluster name")
 	cmdSentinel.PersistentFlags().StringVar(&cfg.initialClusterSpecFile, "initial-cluster-spec", "", "a file providing the initial cluster specification, used only at cluster initialization, ignored if cluster is already initialized")
-	cmdSentinel.PersistentFlags().BoolVar(&cfg.debug, "debug", false, "enable debug logging")
+	cmdSentinel.PersistentFlags().StringVar(&cfg.logLevel, "log-level", "info", "debug, info(default), warn or error")
+	cmdSentinel.PersistentFlags().BoolVar(&cfg.debug, "debug", false, "enable debug logging (deprecated, use log-level instead)")
+
+	cmdSentinel.PersistentFlags().MarkDeprecated("debug", "use --log-level=debug instead")
 }
 
 var log = zap.New(zap.NewTextEncoder(), zap.AddCaller())
@@ -1543,6 +1547,18 @@ func main() {
 func sentinel(cmd *cobra.Command, args []string) {
 	if cfg.debug {
 		log.SetLevel(zap.DebugLevel)
+	}
+	switch cfg.logLevel {
+	case "error":
+		log.SetLevel(zap.ErrorLevel)
+	case "warn":
+		log.SetLevel(zap.WarnLevel)
+	case "info":
+		log.SetLevel(zap.InfoLevel)
+	case "debug":
+		log.SetLevel(zap.DebugLevel)
+	default:
+		die("invalid log level: %v", cfg.logLevel)
 	}
 	if cfg.clusterName == "" {
 		die("cluster name required")
