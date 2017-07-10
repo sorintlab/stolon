@@ -25,16 +25,16 @@ import (
 	"github.com/sorintlab/stolon/common"
 	"github.com/sorintlab/stolon/pkg/cluster"
 	"github.com/sorintlab/stolon/pkg/flagutil"
+	slog "github.com/sorintlab/stolon/pkg/log"
 	"github.com/sorintlab/stolon/pkg/store"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/sorintlab/pollon"
 	"github.com/spf13/cobra"
-	"github.com/uber-go/zap"
-	"github.com/uber-go/zap/zwrap"
+	"go.uber.org/zap"
 )
 
-var log = zap.New(zap.NewTextEncoder(), zap.AddCaller())
+var log = slog.S()
 
 var cmdProxy = &cobra.Command{
 	Use: "stolon-proxy",
@@ -134,7 +134,7 @@ func (c *ClusterChecker) startPollonProxy() error {
 		return nil
 	}
 
-	log.Info("Starting proxying")
+	log.Infow("Starting proxying")
 	addr, err := net.ResolveTCPAddr("tcp", net.JoinHostPort(cfg.listenAddress, cfg.port))
 	if err != nil {
 		return fmt.Errorf("error resolving tcp addr %q: %v", addr.String(), err)
@@ -161,7 +161,7 @@ func (c *ClusterChecker) startPollonProxy() error {
 
 func (c *ClusterChecker) stopPollonProxy() {
 	if c.pp != nil {
-		log.Info("Stopping listening")
+		log.Infow("Stopping listening")
 		c.pp.Stop()
 		c.pp = nil
 		c.listener.Close()
@@ -181,7 +181,7 @@ func (c *ClusterChecker) SetProxyInfo(e *store.StoreManager, uid string, generat
 		ProxyUID:        uid,
 		ProxyGeneration: generation,
 	}
-	log.Debug("proxyInfo dump", zap.String("proxyInfo", spew.Sdump(proxyInfo)))
+	log.Debugf("proxyInfo dump: %s", spew.Sdump(proxyInfo))
 
 	if err := c.e.SetProxyInfo(proxyInfo, ttl); err != nil {
 		return err
@@ -189,7 +189,7 @@ func (c *ClusterChecker) SetProxyInfo(e *store.StoreManager, uid string, generat
 	return nil
 }
 
-// Check reads the cluster data and apply the right pollon configuration.
+// Check reads the cluster data and applies the right pollon configuration.
 func (c *ClusterChecker) Check() error {
 	cd, _, err := c.e.GetClusterData()
 	if err != nil {
@@ -201,9 +201,9 @@ func (c *ClusterChecker) Check() error {
 		return fmt.Errorf("failed to start proxy: %v", err)
 	}
 
-	log.Debug("cd dump", zap.String("cd", spew.Sdump(cd)))
+	log.Debugf("cd dump: %s", spew.Sdump(cd))
 	if cd == nil {
-		log.Info("no clusterdata available, closing connections to master")
+		log.Infow("no clusterdata available, closing connections to master")
 		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
 		return nil
 	}
@@ -218,36 +218,36 @@ func (c *ClusterChecker) Check() error {
 
 	proxy := cd.Proxy
 	if proxy == nil {
-		log.Info("no proxy object available, closing connections to master")
+		log.Infow("no proxy object available, closing connections to master")
 		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
 		// ignore errors on setting proxy info
 		if err = c.SetProxyInfo(c.e, proxy.UID, proxy.Generation, 2*cluster.DefaultProxyTimeoutInterval); err != nil {
-			log.Error("failed to update proxyInfo", zap.Error(err))
+			log.Errorw("failed to update proxyInfo", zap.Error(err))
 		}
 		return nil
 	}
 
 	db, ok := cd.DBs[proxy.Spec.MasterDBUID]
 	if !ok {
-		log.Info("no db object available, closing connections to master", zap.String("db", proxy.Spec.MasterDBUID))
+		log.Infow("no db object available, closing connections to master", "db", proxy.Spec.MasterDBUID)
 		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
 		// ignore errors on setting proxy info
 		if err = c.SetProxyInfo(c.e, proxy.UID, proxy.Generation, 2*cluster.DefaultProxyTimeoutInterval); err != nil {
-			log.Error("failed to update proxyInfo", zap.Error(err))
+			log.Errorw("failed to update proxyInfo", zap.Error(err))
 		}
 		return nil
 	}
 
 	addr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%s", db.Status.ListenAddress, db.Status.Port))
 	if err != nil {
-		log.Error("error", zap.Error(err))
+		log.Errorw("cannot resolve db address", zap.Error(err))
 		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
 		return nil
 	}
-	log.Info("master address", zap.Stringer("address", addr))
+	log.Infow("master address", "address", addr)
 	// ignore errors on setting proxy info
 	if err = c.SetProxyInfo(c.e, proxy.UID, proxy.Generation, 2*cluster.DefaultProxyTimeoutInterval); err != nil {
-		log.Error("failed to update proxyInfo", zap.Error(err))
+		log.Errorw("failed to update proxyInfo", zap.Error(err))
 	}
 
 	c.sendPollonConfData(pollon.ConfData{DestAddr: addr})
@@ -261,7 +261,7 @@ func (c *ClusterChecker) TimeoutChecker(checkOkCh chan struct{}) error {
 	for true {
 		select {
 		case <-timeoutTimer.C:
-			log.Info("check timeout timer fired")
+			log.Infow("check timeout timer fired")
 			// if the check timeouts close all connections and stop listening
 			// (for example to avoid load balancers forward connections to us
 			// since we aren't ready or in a bad state)
@@ -271,7 +271,7 @@ func (c *ClusterChecker) TimeoutChecker(checkOkCh chan struct{}) error {
 			}
 
 		case <-checkOkCh:
-			log.Debug("check ok message received")
+			log.Debugw("check ok message received")
 
 			// ignore if stop succeeded or not due to timer already expired
 			timeoutTimer.Stop()
@@ -297,7 +297,7 @@ func (c *ClusterChecker) Start() error {
 		case err := <-checkCh:
 			if err != nil {
 				// don't report check ok since it returned an error
-				log.Debug("check function error", zap.Error(err))
+				log.Debugw("check function error", zap.Error(err))
 			} else {
 				// report that check was ok
 				checkOkCh <- struct{}{}
@@ -319,23 +319,25 @@ func main() {
 }
 
 func proxy(cmd *cobra.Command, args []string) {
-	if cfg.debug {
-		log.SetLevel(zap.DebugLevel)
-	}
 	switch cfg.logLevel {
 	case "error":
-		log.SetLevel(zap.ErrorLevel)
+		slog.SetLevel(zap.ErrorLevel)
 	case "warn":
-		log.SetLevel(zap.WarnLevel)
+		slog.SetLevel(zap.WarnLevel)
 	case "info":
-		log.SetLevel(zap.InfoLevel)
+		slog.SetLevel(zap.InfoLevel)
 	case "debug":
-		log.SetLevel(zap.DebugLevel)
+		slog.SetLevel(zap.DebugLevel)
 	default:
 		die("invalid log level: %v", cfg.logLevel)
 	}
-	stdlog, _ := zwrap.Standardize(log, zap.DebugLevel)
-	pollon.SetLogger(stdlog)
+	if cfg.debug {
+		slog.SetDebug()
+	}
+	if slog.IsDebug() {
+		stdlog := slog.StdLog()
+		pollon.SetLogger(stdlog)
+	}
 
 	if cfg.clusterName == "" {
 		die("cluster name required")
@@ -345,7 +347,7 @@ func proxy(cmd *cobra.Command, args []string) {
 	}
 
 	uid := common.UID()
-	log.Info("proxy uid", zap.String("uid", uid))
+	log.Infow("proxy uid", "uid", uid)
 
 	clusterChecker, err := NewClusterChecker(uid, cfg)
 	if err != nil {
