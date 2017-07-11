@@ -550,13 +550,11 @@ type DB struct {
 }
 
 type ProxySpec struct {
-	MasterDBUID string `json:"masterDbUid,omitempty"`
+	MasterDBUID    string   `json:"masterDbUid,omitempty"`
+	EnabledProxies []string `json:"enabledProxies,omitempty"`
 }
 
 type ProxyStatus struct {
-	// TODO(sgotti) register current active proxies status. Useful
-	// if in future we want to wait for all proxies having converged
-	// before enabling new master
 }
 
 type Proxy struct {

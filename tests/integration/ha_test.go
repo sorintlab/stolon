@@ -109,7 +109,7 @@ func TestInitWithMultipleKeepers(t *testing.T) {
 		tss[ts.uid] = ts
 	}
 
-	defer shutdown(tks, tss, tstore)
+	defer shutdown(tks, tss, nil, tstore)
 
 	// Wait for clusterView containing a master
 	masterUID, err := WaitClusterDataWithMaster(sm, 60*time.Second)
@@ -119,7 +119,7 @@ func TestInitWithMultipleKeepers(t *testing.T) {
 	waitKeeperReady(t, sm, tks[masterUID])
 }
 
-func setupServers(t *testing.T, clusterName, dir string, numKeepers, numSentinels uint8, syncRepl bool, usePgrewind bool, primaryKeeper *TestKeeper) (testKeepers, testSentinels, *TestStore) {
+func setupServers(t *testing.T, clusterName, dir string, numKeepers, numSentinels uint8, syncRepl bool, usePgrewind bool, primaryKeeper *TestKeeper) (testKeepers, testSentinels, *TestProxy, *TestStore) {
 	var initialClusterSpec *cluster.ClusterSpec
 	if primaryKeeper == nil {
 		initialClusterSpec = &cluster.ClusterSpec{
@@ -164,7 +164,7 @@ func setupServers(t *testing.T, clusterName, dir string, numKeepers, numSentinel
 	return setupServersCustom(t, clusterName, dir, numKeepers, numSentinels, initialClusterSpec)
 }
 
-func setupServersCustom(t *testing.T, clusterName, dir string, numKeepers, numSentinels uint8, initialClusterSpec *cluster.ClusterSpec) (testKeepers, testSentinels, *TestStore) {
+func setupServersCustom(t *testing.T, clusterName, dir string, numKeepers, numSentinels uint8, initialClusterSpec *cluster.ClusterSpec) (testKeepers, testSentinels, *TestProxy, *TestStore) {
 	tstore := setupStore(t, dir)
 
 	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
@@ -200,7 +200,15 @@ func setupServersCustom(t *testing.T, clusterName, dir string, numKeepers, numSe
 		}
 		tks[tk.uid] = tk
 	}
-	return tks, tss, tstore
+
+	tp, err := NewTestProxy(t, dir, clusterName, pgSUUsername, pgSUPassword, tstore.storeBackend, storeEndpoints)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := tp.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	return tks, tss, tp, tstore
 }
 
 func populate(t *testing.T, tk *TestKeeper) error {
@@ -213,8 +221,8 @@ func write(t *testing.T, tk *TestKeeper, id, value int) error {
 	return err
 }
 
-func getLines(t *testing.T, tk *TestKeeper) (int, error) {
-	rows, err := tk.Query("SELECT FROM table01")
+func getLines(t *testing.T, q Querier) (int, error) {
+	rows, err := q.Query("SELECT FROM table01")
 	if err != nil {
 		return 0, err
 	}
@@ -225,11 +233,11 @@ func getLines(t *testing.T, tk *TestKeeper) (int, error) {
 	return c, rows.Err()
 }
 
-func waitLines(t *testing.T, tk *TestKeeper, num int, timeout time.Duration) error {
+func waitLines(t *testing.T, q Querier, num int, timeout time.Duration) error {
 	start := time.Now()
 	c := -1
 	for time.Now().Add(-timeout).Before(start) {
-		c, err := getLines(t, tk)
+		c, err := getLines(t, q)
 		if err != nil {
 			goto end
 		}
@@ -242,7 +250,7 @@ func waitLines(t *testing.T, tk *TestKeeper, num int, timeout time.Duration) err
 	return fmt.Errorf("timeout waiting for %d lines, got: %d", num, c)
 }
 
-func shutdown(tks map[string]*TestKeeper, tss map[string]*TestSentinel, tstore *TestStore) {
+func shutdown(tks map[string]*TestKeeper, tss map[string]*TestSentinel, tp *TestProxy, tstore *TestStore) {
 	for _, ts := range tss {
 		if ts.cmd != nil {
 			ts.Stop()
@@ -251,6 +259,11 @@ func shutdown(tks map[string]*TestKeeper, tss map[string]*TestSentinel, tstore *
 	for _, tk := range tks {
 		if tk.cmd != nil {
 			tk.Stop()
+		}
+	}
+	if tp != nil {
+		if tp.cmd != nil {
+			tp.Kill()
 		}
 	}
 	if tstore.cmd != nil {
@@ -297,8 +310,8 @@ func testMasterStandby(t *testing.T, syncRepl bool) {
 
 	clusterName := uuid.NewV4().String()
 
-	tks, tss, tstore := setupServers(t, clusterName, dir, 2, 1, syncRepl, false, nil)
-	defer shutdown(tks, tss, tstore)
+	tks, tss, tp, tstore := setupServers(t, clusterName, dir, 2, 1, syncRepl, false, nil)
+	defer shutdown(tks, tss, tp, tstore)
 
 	storePath := filepath.Join(common.StoreBasePath, clusterName)
 	sm := store.NewStoreManager(tstore.store, storePath)
@@ -351,8 +364,8 @@ func testFailover(t *testing.T, syncRepl bool, standbyCluster bool) {
 	var primary *TestKeeper
 	if standbyCluster {
 		primaryClusterName := uuid.NewV4().String()
-		ptks, ptss, ptstore := setupServers(t, primaryClusterName, dir, 1, 1, false, false, nil)
-		defer shutdown(ptks, ptss, ptstore)
+		ptks, ptss, ptp, ptstore := setupServers(t, primaryClusterName, dir, 1, 1, false, false, nil)
+		defer shutdown(ptks, ptss, ptp, ptstore)
 		for _, ptk = range ptks {
 			break
 		}
@@ -361,8 +374,8 @@ func testFailover(t *testing.T, syncRepl bool, standbyCluster bool) {
 
 	clusterName := uuid.NewV4().String()
 
-	tks, tss, tstore := setupServers(t, clusterName, dir, 2, 1, syncRepl, false, ptk)
-	defer shutdown(tks, tss, tstore)
+	tks, tss, tp, tstore := setupServers(t, clusterName, dir, 2, 1, syncRepl, false, ptk)
+	defer shutdown(tks, tss, tp, tstore)
 
 	storePath := filepath.Join(common.StoreBasePath, clusterName)
 	sm := store.NewStoreManager(tstore.store, storePath)
@@ -392,6 +405,11 @@ func testFailover(t *testing.T, syncRepl bool, standbyCluster bool) {
 	time.Sleep(5 * time.Second)
 	WaitClusterSyncedXLogPos([]string{master.uid, standby.uid}, sm, 20*time.Second)
 
+	// the proxy should connect to the right master
+	if err := tp.WaitRightMaster(master, 2*cluster.DefaultProxyCheckInterval); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
 	// Stop the keeper process on master, should also stop the database
 	t.Logf("Stopping current master keeper: %s", master.uid)
 	master.Stop()
@@ -413,6 +431,11 @@ func testFailover(t *testing.T, syncRepl bool, standbyCluster bool) {
 	}
 	if c != 1 {
 		t.Fatalf("wrong number of lines, want: %d, got: %d", 1, c)
+	}
+
+	// the proxy should connect to the right master
+	if err := tp.WaitRightMaster(standby, 2*cluster.DefaultProxyCheckInterval); err != nil {
+		t.Fatalf("unexpected err: %v", err)
 	}
 }
 
@@ -449,8 +472,8 @@ func testFailoverFailed(t *testing.T, syncRepl bool, standbyCluster bool) {
 	var primary *TestKeeper
 	if standbyCluster {
 		primaryClusterName := uuid.NewV4().String()
-		ptks, ptss, ptstore := setupServers(t, primaryClusterName, dir, 1, 1, false, false, nil)
-		defer shutdown(ptks, ptss, ptstore)
+		ptks, ptss, ptp, ptstore := setupServers(t, primaryClusterName, dir, 1, 1, false, false, nil)
+		defer shutdown(ptks, ptss, ptp, ptstore)
 		for _, ptk = range ptks {
 			break
 		}
@@ -459,8 +482,8 @@ func testFailoverFailed(t *testing.T, syncRepl bool, standbyCluster bool) {
 
 	clusterName := uuid.NewV4().String()
 
-	tks, tss, tstore := setupServers(t, clusterName, dir, 2, 1, syncRepl, false, ptk)
-	defer shutdown(tks, tss, tstore)
+	tks, tss, tp, tstore := setupServers(t, clusterName, dir, 2, 1, syncRepl, false, ptk)
+	defer shutdown(tks, tss, tp, tstore)
 
 	storePath := filepath.Join(common.StoreBasePath, clusterName)
 	sm := store.NewStoreManager(tstore.store, storePath)
@@ -548,8 +571,8 @@ func testFailoverTooMuchLag(t *testing.T, standbyCluster bool) {
 	var primary *TestKeeper
 	if standbyCluster {
 		primaryClusterName := uuid.NewV4().String()
-		ptks, ptss, ptstore := setupServers(t, primaryClusterName, dir, 1, 1, false, false, nil)
-		defer shutdown(ptks, ptss, ptstore)
+		ptks, ptss, ptp, ptstore := setupServers(t, primaryClusterName, dir, 1, 1, false, false, nil)
+		defer shutdown(ptks, ptss, ptp, ptstore)
 		for _, ptk = range ptks {
 			break
 		}
@@ -558,8 +581,8 @@ func testFailoverTooMuchLag(t *testing.T, standbyCluster bool) {
 
 	clusterName := uuid.NewV4().String()
 
-	tks, tss, tstore := setupServers(t, clusterName, dir, 2, 1, false, false, ptk)
-	defer shutdown(tks, tss, tstore)
+	tks, tss, tp, tstore := setupServers(t, clusterName, dir, 2, 1, false, false, ptk)
+	defer shutdown(tks, tss, tp, tstore)
 
 	storePath := filepath.Join(common.StoreBasePath, clusterName)
 	sm := store.NewStoreManager(tstore.store, storePath)
@@ -625,8 +648,8 @@ func testOldMasterRestart(t *testing.T, syncRepl, usePgrewind bool, standbyClust
 	var primary *TestKeeper
 	if standbyCluster {
 		primaryClusterName := uuid.NewV4().String()
-		ptks, ptss, ptstore := setupServers(t, primaryClusterName, dir, 1, 1, false, false, nil)
-		defer shutdown(ptks, ptss, ptstore)
+		ptks, ptss, ptp, ptstore := setupServers(t, primaryClusterName, dir, 1, 1, false, false, nil)
+		defer shutdown(ptks, ptss, ptp, ptstore)
 		for _, ptk = range ptks {
 			break
 		}
@@ -635,8 +658,8 @@ func testOldMasterRestart(t *testing.T, syncRepl, usePgrewind bool, standbyClust
 
 	clusterName := uuid.NewV4().String()
 
-	tks, tss, tstore := setupServers(t, clusterName, dir, 2, 1, syncRepl, usePgrewind, ptk)
-	defer shutdown(tks, tss, tstore)
+	tks, tss, tp, tstore := setupServers(t, clusterName, dir, 2, 1, syncRepl, usePgrewind, ptk)
+	defer shutdown(tks, tss, tp, tstore)
 
 	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
 	storePath := filepath.Join(common.StoreBasePath, clusterName)
@@ -758,8 +781,8 @@ func testPartition1(t *testing.T, syncRepl, usePgrewind bool, standbyCluster boo
 	var primary *TestKeeper
 	if standbyCluster {
 		primaryClusterName := uuid.NewV4().String()
-		ptks, ptss, ptstore := setupServers(t, primaryClusterName, dir, 1, 1, false, false, nil)
-		defer shutdown(ptks, ptss, ptstore)
+		ptks, ptss, ptp, ptstore := setupServers(t, primaryClusterName, dir, 1, 1, false, false, nil)
+		defer shutdown(ptks, ptss, ptp, ptstore)
 		for _, ptk = range ptks {
 			break
 		}
@@ -768,8 +791,8 @@ func testPartition1(t *testing.T, syncRepl, usePgrewind bool, standbyCluster boo
 
 	clusterName := uuid.NewV4().String()
 
-	tks, tss, tstore := setupServers(t, clusterName, dir, 2, 1, syncRepl, usePgrewind, ptk)
-	defer shutdown(tks, tss, tstore)
+	tks, tss, tp, tstore := setupServers(t, clusterName, dir, 2, 1, syncRepl, usePgrewind, ptk)
+	defer shutdown(tks, tss, tp, tstore)
 
 	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
 	storePath := filepath.Join(common.StoreBasePath, clusterName)
@@ -839,6 +862,11 @@ func testPartition1(t *testing.T, syncRepl, usePgrewind bool, standbyCluster boo
 		t.Fatalf("unexpected err: %v", err)
 	}
 
+	// the proxy should connect to the right master
+	if err := tp.WaitRightMaster(standbys[0], 2*cluster.DefaultProxyCheckInterval); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
 	if !standbyCluster {
 		primary = standbys[0]
 	}
@@ -859,6 +887,7 @@ func testPartition1(t *testing.T, syncRepl, usePgrewind bool, standbyCluster boo
 	if err := waitLines(t, master, 2, 60*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
+	// Old master should become a standby of the new one
 	if err := master.WaitDBRole(common.RoleStandby, ptk, 60*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -898,8 +927,8 @@ func testTimelineFork(t *testing.T, syncRepl, usePgrewind bool) {
 
 	clusterName := uuid.NewV4().String()
 
-	tks, tss, tstore := setupServers(t, clusterName, dir, 2, 1, syncRepl, usePgrewind, nil)
-	defer shutdown(tks, tss, tstore)
+	tks, tss, tp, tstore := setupServers(t, clusterName, dir, 2, 1, syncRepl, usePgrewind, nil)
+	defer shutdown(tks, tss, tp, tstore)
 
 	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
 	storePath := filepath.Join(common.StoreBasePath, clusterName)
@@ -1068,8 +1097,8 @@ func testMasterChangedAddress(t *testing.T, standbyCluster bool) {
 	var primary *TestKeeper
 	if standbyCluster {
 		primaryClusterName := uuid.NewV4().String()
-		ptks, ptss, ptstore := setupServers(t, primaryClusterName, dir, 1, 1, false, false, nil)
-		defer shutdown(ptks, ptss, ptstore)
+		ptks, ptss, ptp, ptstore := setupServers(t, primaryClusterName, dir, 1, 1, false, false, nil)
+		defer shutdown(ptks, ptss, ptp, ptstore)
 		for _, ptk = range ptks {
 			break
 		}
@@ -1078,8 +1107,8 @@ func testMasterChangedAddress(t *testing.T, standbyCluster bool) {
 
 	clusterName := uuid.NewV4().String()
 
-	tks, tss, tstore := setupServers(t, clusterName, dir, 2, 1, false, false, ptk)
-	defer shutdown(tks, tss, tstore)
+	tks, tss, tp, tstore := setupServers(t, clusterName, dir, 2, 1, false, false, ptk)
+	defer shutdown(tks, tss, tp, tstore)
 
 	storePath := filepath.Join(common.StoreBasePath, clusterName)
 	sm := store.NewStoreManager(tstore.store, storePath)
@@ -1165,8 +1194,8 @@ func TestFailedStandby(t *testing.T) {
 	}
 
 	// Create 3 keepers
-	tks, tss, tstore := setupServersCustom(t, clusterName, dir, 3, 1, initialClusterSpec)
-	defer shutdown(tks, tss, tstore)
+	tks, tss, tp, tstore := setupServersCustom(t, clusterName, dir, 3, 1, initialClusterSpec)
+	defer shutdown(tks, tss, tp, tstore)
 
 	storePath := filepath.Join(common.StoreBasePath, clusterName)
 	sm := store.NewStoreManager(tstore.store, storePath)
@@ -1256,8 +1285,8 @@ func TestLoweredMaxStandbysPerSender(t *testing.T) {
 	}
 
 	// Create 3 keepers
-	tks, tss, tstore := setupServersCustom(t, clusterName, dir, 3, 1, initialClusterSpec)
-	defer shutdown(tks, tss, tstore)
+	tks, tss, tp, tstore := setupServersCustom(t, clusterName, dir, 3, 1, initialClusterSpec)
+	defer shutdown(tks, tss, tp, tstore)
 
 	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
 	storePath := filepath.Join(common.StoreBasePath, clusterName)
@@ -1323,8 +1352,8 @@ func TestKeeperRemoval(t *testing.T) {
 	}
 
 	// Create 2 keepers
-	tks, tss, tstore := setupServersCustom(t, clusterName, dir, 2, 1, initialClusterSpec)
-	defer shutdown(tks, tss, tstore)
+	tks, tss, tp, tstore := setupServersCustom(t, clusterName, dir, 2, 1, initialClusterSpec)
+	defer shutdown(tks, tss, tp, tstore)
 
 	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
 	storePath := filepath.Join(common.StoreBasePath, clusterName)

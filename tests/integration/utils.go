@@ -69,6 +69,30 @@ func pgParametersWithDefaults(p cluster.PGParameters) cluster.PGParameters {
 	return pd
 }
 
+type Querier interface {
+	Exec(query string, args ...interface{}) (sql.Result, error)
+	Query(query string, args ...interface{}) (*sql.Rows, error)
+}
+
+func GetPGParameters(q Querier) (common.Parameters, error) {
+	var pgParameters = common.Parameters{}
+	rows, err := q.Query("select name, setting, source from pg_settings")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name, setting, source string
+		if err = rows.Scan(&name, &setting, &source); err != nil {
+			return nil, err
+		}
+		if source == "configuration file" {
+			pgParameters[name] = setting
+		}
+	}
+	return pgParameters, nil
+}
+
 type Process struct {
 	t    *testing.T
 	uid  string
@@ -421,22 +445,7 @@ func (tk *TestKeeper) WaitDBRole(r common.Role, ptk *TestKeeper, timeout time.Du
 }
 
 func (tk *TestKeeper) GetPGParameters() (common.Parameters, error) {
-	var pgParameters = common.Parameters{}
-	rows, err := tk.Query("select name, setting, source from pg_settings")
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var name, setting, source string
-		if err = rows.Scan(&name, &setting, &source); err != nil {
-			return nil, err
-		}
-		if source == "configuration file" {
-			pgParameters[name] = setting
-		}
-	}
-	return pgParameters, nil
+	return GetPGParameters(tk)
 }
 
 type CheckFunc func(time.Duration) error
@@ -501,9 +510,10 @@ type TestProxy struct {
 	Process
 	listenAddress string
 	port          string
+	db            *sql.DB
 }
 
-func NewTestProxy(t *testing.T, dir string, clusterName string, storeBackend store.Backend, storeEndpoints string, a ...string) (*TestProxy, error) {
+func NewTestProxy(t *testing.T, dir string, clusterName, pgSUUsername, pgSUPassword string, storeBackend store.Backend, storeEndpoints string, a ...string) (*TestProxy, error) {
 	u := uuid.NewV4()
 	uid := fmt.Sprintf("%x", u[:4])
 
@@ -523,6 +533,21 @@ func NewTestProxy(t *testing.T, dir string, clusterName string, storeBackend sto
 	}
 	args = append(args, a...)
 
+	connParams := pg.ConnParams{
+		"user":     pgSUUsername,
+		"password": pgSUPassword,
+		"host":     listenAddress,
+		"port":     port,
+		"dbname":   "postgres",
+		"sslmode":  "disable",
+	}
+
+	connString := connParams.ConnString()
+	db, err := sql.Open("postgres", connString)
+	if err != nil {
+		return nil, err
+	}
+
 	bin := os.Getenv("STPROXY_BIN")
 	if bin == "" {
 		return nil, fmt.Errorf("missing STPROXY_BIN env")
@@ -538,6 +563,7 @@ func NewTestProxy(t *testing.T, dir string, clusterName string, storeBackend sto
 		},
 		listenAddress: listenAddress,
 		port:          port,
+		db:            db,
 	}
 	return tp, nil
 }
@@ -570,6 +596,44 @@ func (tp *TestProxy) WaitNotListening(timeout time.Duration) error {
 			return nil
 		}
 		tp.t.Logf("tp: %v, error: %v", tp.uid, err)
+		time.Sleep(sleepInterval)
+	}
+	return fmt.Errorf("timeout")
+}
+
+func (tp *TestProxy) Exec(query string, args ...interface{}) (sql.Result, error) {
+	res, err := tp.db.Exec(query, args...)
+	if err != nil {
+		return nil, err
+	}
+
+	return res, nil
+}
+
+func (tp *TestProxy) Query(query string, args ...interface{}) (*sql.Rows, error) {
+	res, err := tp.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+
+	return res, nil
+}
+
+func (tp *TestProxy) GetPGParameters() (common.Parameters, error) {
+	return GetPGParameters(tp)
+}
+
+func (tp *TestProxy) WaitRightMaster(tk *TestKeeper, timeout time.Duration) error {
+	start := time.Now()
+	for time.Now().Add(-timeout).Before(start) {
+		pgParameters, err := GetPGParameters(tp)
+		if err != nil {
+			goto end
+		}
+		if pgParameters["port"] == tk.pgPort {
+			return nil
+		}
+	end:
 		time.Sleep(sleepInterval)
 	}
 	return fmt.Errorf("timeout")

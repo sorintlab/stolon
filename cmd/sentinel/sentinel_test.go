@@ -477,8 +477,10 @@ func TestUpdateCluster(t *testing.T) {
 					},
 				},
 				Proxy: &cluster.Proxy{
+					Generation: 1,
 					Spec: cluster.ProxySpec{
-						MasterDBUID: "db1",
+						MasterDBUID:    "db1",
+						EnabledProxies: []string{},
 					},
 				},
 			},
@@ -559,8 +561,10 @@ func TestUpdateCluster(t *testing.T) {
 					},
 				},
 				Proxy: &cluster.Proxy{
+					Generation: 1,
 					Spec: cluster.ProxySpec{
-						MasterDBUID: "db1",
+						MasterDBUID:    "db1",
+						EnabledProxies: []string{},
 					},
 				},
 			},
@@ -642,8 +646,10 @@ func TestUpdateCluster(t *testing.T) {
 					},
 				},
 				Proxy: &cluster.Proxy{
+					Generation: 1,
 					Spec: cluster.ProxySpec{
-						MasterDBUID: "db1",
+						MasterDBUID:    "db1",
+						EnabledProxies: []string{},
 					},
 				},
 			},
@@ -717,7 +723,13 @@ func TestUpdateCluster(t *testing.T) {
 						},
 					},
 				},
-				Proxy: &cluster.Proxy{},
+				Proxy: &cluster.Proxy{
+					Generation: 2,
+					Spec: cluster.ProxySpec{
+						MasterDBUID:    "",
+						EnabledProxies: []string{},
+					},
+				},
 			},
 		},
 		// #6 From the previous test, new master (db2) converged. Old master setup to follow new master (db2).
@@ -792,7 +804,13 @@ func TestUpdateCluster(t *testing.T) {
 						},
 					},
 				},
-				Proxy: &cluster.Proxy{},
+				Proxy: &cluster.Proxy{
+					Generation: 1,
+					Spec: cluster.ProxySpec{
+						MasterDBUID:    "",
+						EnabledProxies: []string{},
+					},
+				},
 			},
 			outcd: &cluster.ClusterData{
 				Cluster: &cluster.Cluster{
@@ -870,8 +888,10 @@ func TestUpdateCluster(t *testing.T) {
 					},
 				},
 				Proxy: &cluster.Proxy{
+					Generation: 2,
 					Spec: cluster.ProxySpec{
-						MasterDBUID: "db2",
+						MasterDBUID:    "db2",
+						EnabledProxies: []string{},
 					},
 				},
 			},
@@ -953,8 +973,10 @@ func TestUpdateCluster(t *testing.T) {
 					},
 				},
 				Proxy: &cluster.Proxy{
+					Generation: 1,
 					Spec: cluster.ProxySpec{
-						MasterDBUID: "db1",
+						MasterDBUID:    "db1",
+						EnabledProxies: []string{},
 					},
 				},
 			},
@@ -1033,8 +1055,10 @@ func TestUpdateCluster(t *testing.T) {
 					},
 				},
 				Proxy: &cluster.Proxy{
+					Generation: 1,
 					Spec: cluster.ProxySpec{
-						MasterDBUID: "db1",
+						MasterDBUID:    "db1",
+						EnabledProxies: []string{},
 					},
 				},
 			},
@@ -1116,8 +1140,10 @@ func TestUpdateCluster(t *testing.T) {
 					},
 				},
 				Proxy: &cluster.Proxy{
+					Generation: 1,
 					Spec: cluster.ProxySpec{
-						MasterDBUID: "db1",
+						MasterDBUID:    "db1",
+						EnabledProxies: []string{},
 					},
 				},
 			},
@@ -1191,7 +1217,13 @@ func TestUpdateCluster(t *testing.T) {
 						},
 					},
 				},
-				Proxy: &cluster.Proxy{},
+				Proxy: &cluster.Proxy{
+					Generation: 2,
+					Spec: cluster.ProxySpec{
+						MasterDBUID:    "",
+						EnabledProxies: []string{},
+					},
+				},
 			},
 		},
 		// #9 One master and one standby, 3 keepers (one available). Standby ok. No new standby db on free keeper created.
@@ -1281,8 +1313,10 @@ func TestUpdateCluster(t *testing.T) {
 					},
 				},
 				Proxy: &cluster.Proxy{
+					Generation: 1,
 					Spec: cluster.ProxySpec{
-						MasterDBUID: "db1",
+						MasterDBUID:    "db1",
+						EnabledProxies: []string{},
 					},
 				},
 			},
@@ -1371,8 +1405,10 @@ func TestUpdateCluster(t *testing.T) {
 					},
 				},
 				Proxy: &cluster.Proxy{
+					Generation: 1,
 					Spec: cluster.ProxySpec{
-						MasterDBUID: "db1",
+						MasterDBUID:    "db1",
+						EnabledProxies: []string{},
 					},
 				},
 			},
@@ -1462,8 +1498,10 @@ func TestUpdateCluster(t *testing.T) {
 					},
 				},
 				Proxy: &cluster.Proxy{
+					Generation: 1,
 					Spec: cluster.ProxySpec{
-						MasterDBUID: "db1",
+						MasterDBUID:    "db1",
+						EnabledProxies: []string{},
 					},
 				},
 			},
@@ -1572,8 +1610,10 @@ func TestUpdateCluster(t *testing.T) {
 					},
 				},
 				Proxy: &cluster.Proxy{
+					Generation: 1,
 					Spec: cluster.ProxySpec{
-						MasterDBUID: "db1",
+						MasterDBUID:    "db1",
+						EnabledProxies: []string{},
 					},
 				},
 			},
@@ -1685,8 +1725,10 @@ func TestUpdateCluster(t *testing.T) {
 					},
 				},
 				Proxy: &cluster.Proxy{
+					Generation: 1,
 					Spec: cluster.ProxySpec{
-						MasterDBUID: "db1",
+						MasterDBUID:    "db1",
+						EnabledProxies: []string{},
 					},
 				},
 			},
@@ -1774,8 +1816,10 @@ func TestUpdateCluster(t *testing.T) {
 					},
 				},
 				Proxy: &cluster.Proxy{
+					Generation: 1,
 					Spec: cluster.ProxySpec{
-						MasterDBUID: "db1",
+						MasterDBUID:    "db1",
+						EnabledProxies: []string{},
 					},
 				},
 			},
@@ -1859,8 +1903,10 @@ func TestUpdateCluster(t *testing.T) {
 					},
 				},
 				Proxy: &cluster.Proxy{
+					Generation: 1,
 					Spec: cluster.ProxySpec{
-						MasterDBUID: "db1",
+						MasterDBUID:    "db1",
+						EnabledProxies: []string{},
 					},
 				},
 			},
@@ -1941,8 +1987,10 @@ func TestUpdateCluster(t *testing.T) {
 					},
 				},
 				Proxy: &cluster.Proxy{
+					Generation: 1,
 					Spec: cluster.ProxySpec{
-						MasterDBUID: "db1",
+						MasterDBUID:    "db1",
+						EnabledProxies: []string{},
 					},
 				},
 			},
@@ -2004,8 +2052,10 @@ func TestUpdateCluster(t *testing.T) {
 					},
 				},
 				Proxy: &cluster.Proxy{
+					Generation: 1,
 					Spec: cluster.ProxySpec{
-						MasterDBUID: "db1",
+						MasterDBUID:    "db1",
+						EnabledProxies: []string{},
 					},
 				},
 			},
@@ -2056,8 +2106,10 @@ func TestUpdateCluster(t *testing.T) {
 					},
 				},
 				Proxy: &cluster.Proxy{
+					Generation: 1,
 					Spec: cluster.ProxySpec{
-						MasterDBUID: "db1",
+						MasterDBUID:    "db1",
+						EnabledProxies: []string{},
 					},
 				},
 			},
@@ -2153,8 +2205,10 @@ func TestUpdateCluster(t *testing.T) {
 					},
 				},
 				Proxy: &cluster.Proxy{
+					Generation: 1,
 					Spec: cluster.ProxySpec{
-						MasterDBUID: "db1",
+						MasterDBUID:    "db1",
+						EnabledProxies: []string{},
 					},
 				},
 			},
@@ -2248,8 +2302,10 @@ func TestUpdateCluster(t *testing.T) {
 					},
 				},
 				Proxy: &cluster.Proxy{
+					Generation: 1,
 					Spec: cluster.ProxySpec{
-						MasterDBUID: "db1",
+						MasterDBUID:    "db1",
+						EnabledProxies: []string{},
 					},
 				},
 			},
@@ -2276,7 +2332,7 @@ func TestUpdateCluster(t *testing.T) {
 		fmt.Printf("test #%d\n", i)
 		t.Logf("test #%d", i)
 
-		outcd, err := s.updateCluster(tt.cd)
+		outcd, err := s.updateCluster(tt.cd, cluster.ProxiesInfo{})
 		if tt.err != nil {
 			if err == nil {
 				t.Errorf("got no error, wanted error: %v", tt.err)
