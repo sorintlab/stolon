@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/sorintlab/stolon/common"
@@ -102,6 +103,8 @@ type ClusterChecker struct {
 	pp               *pollon.Proxy
 	e                *store.StoreManager
 	endPollonProxyCh chan error
+
+	pollonMutex sync.Mutex
 }
 
 func NewClusterChecker(uid string, cfg config) (*ClusterChecker, error) {
@@ -131,6 +134,8 @@ func NewClusterChecker(uid string, cfg config) (*ClusterChecker, error) {
 }
 
 func (c *ClusterChecker) startPollonProxy() error {
+	c.pollonMutex.Lock()
+	defer c.pollonMutex.Unlock()
 	if c.pp != nil {
 		return nil
 	}
@@ -161,6 +166,8 @@ func (c *ClusterChecker) startPollonProxy() error {
 }
 
 func (c *ClusterChecker) stopPollonProxy() {
+	c.pollonMutex.Lock()
+	defer c.pollonMutex.Unlock()
 	if c.pp != nil {
 		log.Infow("Stopping listening")
 		c.pp.Stop()
@@ -171,6 +178,8 @@ func (c *ClusterChecker) stopPollonProxy() {
 }
 
 func (c *ClusterChecker) sendPollonConfData(confData pollon.ConfData) {
+	c.pollonMutex.Lock()
+	defer c.pollonMutex.Unlock()
 	if c.pp != nil {
 		c.pp.C <- confData
 	}
