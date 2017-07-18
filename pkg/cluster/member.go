@@ -128,7 +128,6 @@ func (p ProxiesInfo) Less(i, j int) bool { return p[i].UID < p[j].UID }
 func (p ProxiesInfo) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 
 type ProxyInfo struct {
-	UID             string
-	ProxyUID        string
-	ProxyGeneration int64
+	UID        string
+	Generation int64
 }

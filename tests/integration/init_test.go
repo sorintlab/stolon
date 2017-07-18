@@ -397,7 +397,7 @@ func TestInitUsers(t *testing.T) {
 	if err := tk3.cmd.ExpectTimeout("superuser password set", 60*time.Second); err != nil {
 		t.Fatalf("expecting keeper reporting superuser password set")
 	}
-	if err := tk3.cmd.ExpectTimeout("replication role created role=user02", 60*time.Second); err != nil {
+	if _, err := tk3.cmd.ExpectTimeoutRegexFind(`replication role created\s+{"role": "user02"}`, 60*time.Second); err != nil {
 		t.Fatalf("expecting keeper reporting replication role user02 created")
 	}
 }

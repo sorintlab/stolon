@@ -1,5 +1,5 @@
-hash: 37ad54dfd451cec30e56572eb271771b8407095136ddc26c1e0db59999bdfcb1
-updated: 2016-11-23T11:24:52.287567975+01:00
+hash: b41517a5f41d92e8eef396e212e6a04c3ffb3218cdb4b8d393394fac8603e7ae
+updated: 2017-07-04T17:29:30.314317672+02:00
 imports:
 - name: github.com/coreos/etcd
   version: bc9ddf260115d2680191c46977ae72b837785472
@@ -9,10 +9,6 @@ imports:
   - client
   - pkg/pathutil
   - pkg/types
-- name: github.com/coreos/rkt
-  version: daeae7ea528ff30afe6aaea52df9cacd03e24eb9
-  subpackages:
-  - pkg/lock
 - name: github.com/davecgh/go-spew
   version: 6d212800a42e8ab5c146b8ace3490ee17e5225f9
   subpackages:
@@ -33,8 +29,6 @@ imports:
   version: daacc4be8bee214e3fc4b32a6dd385f5ef1b4c36
   subpackages:
   - api
-- name: github.com/hashicorp/errwrap
-  version: 7554cd9344cec97297fa6649b055a8c98c2a1e55
 - name: github.com/hashicorp/go-cleanhttp
   version: 875fb671b3ddc66f8e2f0acc33829c8cb989a38d
 - name: github.com/hashicorp/serf
@@ -56,7 +50,7 @@ imports:
 - name: github.com/mitchellh/copystructure
   version: 5af94aef99f597e6a9e1f6ac6be6ce0f3c96b49d
 - name: github.com/mitchellh/reflectwalk
-  version: 9ad27c461a633e32a235a061d523aefe8f18571d
+  version: 8d802ff4ae93611b807597f639c19f76074df5c6
 - name: github.com/satori/go.uuid
   version: 879c5887cd475cd7864858769793b2ceb0d44feb
 - name: github.com/sgotti/gexpect
@@ -67,16 +61,21 @@ imports:
   version: 9c28e4bbd74e5c3ed7aacbc552b2cab7cfdfe744
 - name: github.com/spf13/pflag
   version: 6fd2ff4ff8dfcdf5556fbdc0ac0284408274b1a7
-- name: github.com/uber-go/atomic
-  version: 9e99152552a6ce13fa3b2ce4a9c4fb117cca4506
-- name: github.com/uber-go/zap
-  version: 9c9a580ac83fe7208a472eb27262817825ddcd77
-  subpackages:
-  - zwrap
 - name: github.com/ugorji/go
   version: f1f1a805ed361a0e078bb537e4ea78cd37dcf065
   subpackages:
   - codec
+- name: go.uber.org/atomic
+  version: 4e336646b2ef9fc6e47be8e21594178f98e5ebcf
+- name: go.uber.org/zap
+  version: 9cabc84638b70e564c3dab2766efcb1ded2aac9f
+  subpackages:
+  - buffer
+  - internal/bufferpool
+  - internal/color
+  - internal/exit
+  - internal/multierror
+  - zapcore
 - name: golang.org/x/net
   version: 9313baa13d9262e49d07b20ed57dceafcd7240cc
   subpackages:
