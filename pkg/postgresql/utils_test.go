@@ -205,3 +205,40 @@ func TestParseVersion(t *testing.T) {
 		}
 	}
 }
+
+func TestIsWalFileName(t *testing.T) {
+	tests := []struct {
+		name  string
+		valid bool
+	}{
+		{"000000000000000000000000", true},
+		{"ABCDEF0123456789ABCDEF00", true},
+		{"", false},
+		{"ABCDEF0123456789ABCDEF0", false},
+		{"$123", false},
+	}
+
+	for i, tt := range tests {
+		valid := IsWalFileName(tt.name)
+		if valid != tt.valid {
+			t.Errorf("%d: wal filename %q got valid: %t but wanted valid: %t", i, tt.name, valid, tt.valid)
+		}
+	}
+}
+
+func TestWalFileNameNoTimeLine(t *testing.T) {
+	tests := []struct {
+		name string
+		out  string
+	}{
+		{"000000000000000000000000", "0000000000000000"},
+		{"ABCDEF0123456789ABCDEF00", "23456789ABCDEF00"},
+	}
+
+	for i, tt := range tests {
+		out, _ := WalFileNameNoTimeLine(tt.name)
+		if out != tt.out {
+			t.Errorf("%d: wal filename %q got: %s but wanted: %s", i, tt.name, out, tt.out)
+		}
+	}
+}

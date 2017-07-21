@@ -88,13 +88,16 @@ type PostgresState struct {
 	ListenAddress string `json:"listenAddress,omitempty"`
 	Port          string `json:"port,omitempty"`
 
-	Healthy             bool                     `json:"healthy,omitempty"`
-	SystemID            string                   `json:"systemID,omitempty"`
-	TimelineID          uint64                   `json:"timelineID,omitempty"`
-	XLogPos             uint64                   `json:"xLogPos,omitempty"`
-	TimelinesHistory    PostgresTimelinesHistory `json:"timelinesHistory,omitempty"`
-	PGParameters        common.Parameters        `json:"pgParameters,omitempty"`
-	SynchronousStandbys []string                 `json:"synchronousStandbys"`
+	Healthy bool `json:"healthy,omitempty"`
+
+	SystemID         string                   `json:"systemID,omitempty"`
+	TimelineID       uint64                   `json:"timelineID,omitempty"`
+	XLogPos          uint64                   `json:"xLogPos,omitempty"`
+	TimelinesHistory PostgresTimelinesHistory `json:"timelinesHistory,omitempty"`
+
+	PGParameters        common.Parameters `json:"pgParameters,omitempty"`
+	SynchronousStandbys []string          `json:"synchronousStandbys"`
+	OlderWalFile        string            `json:"olderWalFile,omitempty"`
 }
 
 func (p *PostgresState) DeepCopy() *PostgresState {

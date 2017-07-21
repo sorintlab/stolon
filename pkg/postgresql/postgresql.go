@@ -22,6 +22,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"syscall"
 	"time"
@@ -706,4 +707,45 @@ func (p *Manager) Ping() error {
 	ctx, cancel := context.WithTimeout(context.Background(), p.requestTimeout)
 	defer cancel()
 	return ping(ctx, p.localConnParams)
+}
+
+func (p *Manager) OlderWalFile() (string, error) {
+	maj, _, err := p.PGDataVersion()
+	if err != nil {
+		return "", err
+	}
+	var walDir string
+	if maj < 10 {
+		walDir = "pg_xlog"
+	} else {
+		walDir = "pg_wal"
+	}
+
+	f, err := os.Open(filepath.Join(p.dataDir, walDir))
+	if err != nil {
+		return "", err
+	}
+	names, err := f.Readdirnames(-1)
+	f.Close()
+	if err != nil {
+		return "", err
+	}
+	sort.Strings(names)
+
+	for _, name := range names {
+		if IsWalFileName(name) {
+			fi, err := os.Stat(filepath.Join(p.dataDir, walDir, name))
+			if err != nil {
+				return "", err
+			}
+			// if the file size is different from the currently supported one
+			// (16Mib) return without checking other possible wal files
+			if fi.Size() != WalSegSize {
+				return "", fmt.Errorf("wal file has unsupported size: %d", fi.Size())
+			}
+			return name, nil
+		}
+	}
+
+	return "", nil
 }
