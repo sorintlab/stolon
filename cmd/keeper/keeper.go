@@ -853,6 +853,9 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 		// If we are here this means that the db initialization or
 		// resync has failed so we have to clean up stale data
 		log.Errorw("db failed to initialize or resync")
+
+		pgm.Stop(true)
+
 		// Clean up cluster db datadir
 		if err = pgm.RemoveAll(); err != nil {
 			log.Errorw("failed to remove the postgres data dir", zap.Error(err))
