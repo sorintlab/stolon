@@ -1,5 +1,8 @@
 ## Stolon Documentation
 
+We suggest that you first read the [Stolon Architecture and Requirements](architecture.md) to understand the primary concepts and avoid possible mistakes.
+
+* [Stolon Architecture and Requirements](architecture.md)
 * [Cluster Specification](cluster_spec.md)
 * [Cluster Initialization](initialization.md)
 * [Setting instance parameters](postgres_parameters.md)
