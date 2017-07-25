@@ -15,6 +15,7 @@ We suggest that you first read the [Stolon Architecture and Requirements](archit
 ### Misc topics
   * [Enabling pg_rewind](pg_rewind.md)
   * [Enabling synchronous replication](syncrepl.md)
+  * [Commands Invocation](commands_invocation.md)
 
 ### Recipes
   * [Manual switchover without transactions loss](manual_switchover.md)
