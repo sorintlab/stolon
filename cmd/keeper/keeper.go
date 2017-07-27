@@ -283,7 +283,7 @@ func (p *PostgresKeeper) createPGParameters(db *cluster.DB) common.Parameters {
 	return parameters
 }
 
-func (p *PostgresKeeper) createRecoveryParameters(standbySettings *cluster.StandbySettings, archiveRecoverySettings *cluster.ArchiveRecoverySettings) common.Parameters {
+func (p *PostgresKeeper) createRecoveryParameters(standbySettings *cluster.StandbySettings, archiveRecoverySettings *cluster.ArchiveRecoverySettings, recoveryTargetSettings *cluster.RecoveryTargetSettings) common.Parameters {
 	parameters := common.Parameters{}
 
 	if standbySettings != nil {
@@ -297,12 +297,34 @@ func (p *PostgresKeeper) createRecoveryParameters(standbySettings *cluster.Stand
 		if standbySettings.RecoveryMinApplyDelay != "" {
 			parameters["recovery_min_apply_delay"] = standbySettings.RecoveryMinApplyDelay
 		}
-
-		parameters["recovery_target_timeline"] = "latest"
 	}
 
 	if archiveRecoverySettings != nil {
 		parameters["restore_command"] = archiveRecoverySettings.RestoreCommand
+	}
+
+	if recoveryTargetSettings == nil {
+		parameters["recovery_target_timeline"] = "latest"
+	} else {
+		if recoveryTargetSettings.RecoveryTarget != "" {
+			parameters["recovery_target"] = recoveryTargetSettings.RecoveryTarget
+		}
+		if recoveryTargetSettings.RecoveryTargetLsn != "" {
+			parameters["recovery_target_lsn"] = recoveryTargetSettings.RecoveryTargetLsn
+		}
+		if recoveryTargetSettings.RecoveryTargetName != "" {
+			parameters["recovery_target_name"] = recoveryTargetSettings.RecoveryTargetName
+		}
+		if recoveryTargetSettings.RecoveryTargetTime != "" {
+			parameters["recovery_target_time"] = recoveryTargetSettings.RecoveryTargetTime
+		}
+		if recoveryTargetSettings.RecoveryTargetXid != "" {
+			parameters["recovery_target_xid"] = recoveryTargetSettings.RecoveryTargetXid
+		}
+
+		if recoveryTargetSettings.RecoveryTargetTimeline != "" {
+			parameters["recovery_target_timeline"] = recoveryTargetSettings.RecoveryTargetTimeline
+		}
 	}
 
 	return parameters
@@ -564,7 +586,8 @@ func (p *PostgresKeeper) GetPGState(pctx context.Context) (*cluster.PostgresStat
 		// if timeline <= 1 then no timeline history file exists.
 		pgState.TimelinesHistory = cluster.PostgresTimelinesHistory{}
 		if pgState.TimelineID > 1 {
-			tlsh, err := p.pgm.GetTimelinesHistory(pgState.TimelineID)
+			var tlsh []*postgresql.TimelineHistory
+			tlsh, err = p.pgm.GetTimelinesHistory(pgState.TimelineID)
 			if err != nil {
 				log.Errorw("error getting timeline history", zap.Error(err))
 				return pgState, nil
@@ -580,6 +603,14 @@ func (p *PostgresKeeper) GetPGState(pctx context.Context) (*cluster.PostgresStat
 				ctlsh = append(ctlsh, ctlh)
 			}
 			pgState.TimelinesHistory = ctlsh
+		}
+
+		ow, err := p.pgm.OlderWalFile()
+		if err != nil {
+			log.Warnw("error getting older wal file", zap.Error(err))
+		} else {
+			log.Debugw("older wal file", "filename", ow)
+			pgState.OlderWalFile = ow
 		}
 		pgState.Healthy = true
 	}
@@ -688,7 +719,7 @@ func (p *PostgresKeeper) resync(db, followedDB *cluster.DB, tryPgrewind bool) er
 			// log pg_rewind error and fallback to pg_basebackup
 			log.Errorw("error syncing with pg_rewind", zap.Error(err))
 		} else {
-			if err := pgm.WriteRecoveryConf(p.createRecoveryParameters(standbySettings, nil)); err != nil {
+			if err := pgm.WriteRecoveryConf(p.createRecoveryParameters(standbySettings, nil, nil)); err != nil {
 				return fmt.Errorf("err: %v", err)
 			}
 			return nil
@@ -708,7 +739,7 @@ func (p *PostgresKeeper) resync(db, followedDB *cluster.DB, tryPgrewind bool) er
 	}
 	log.Infow("sync succeeded")
 
-	if err := pgm.WriteRecoveryConf(p.createRecoveryParameters(standbySettings, nil)); err != nil {
+	if err := pgm.WriteRecoveryConf(p.createRecoveryParameters(standbySettings, nil, nil)); err != nil {
 		return fmt.Errorf("err: %v", err)
 	}
 	return nil
@@ -853,6 +884,9 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 		// If we are here this means that the db initialization or
 		// resync has failed so we have to clean up stale data
 		log.Errorw("db failed to initialize or resync")
+
+		pgm.Stop(true)
+
 		// Clean up cluster db datadir
 		if err = pgm.RemoveAll(); err != nil {
 			log.Errorw("failed to remove the postgres data dir", zap.Error(err))
@@ -1013,7 +1047,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 			if db.Spec.FollowConfig != nil && db.Spec.FollowConfig.Type == cluster.FollowTypeExternal {
 				standbySettings = db.Spec.FollowConfig.StandbySettings
 			}
-			if err = pgm.WriteRecoveryConf(p.createRecoveryParameters(standbySettings, db.Spec.PITRConfig.ArchiveRecoverySettings)); err != nil {
+			if err = pgm.WriteRecoveryConf(p.createRecoveryParameters(standbySettings, db.Spec.PITRConfig.ArchiveRecoverySettings, db.Spec.PITRConfig.RecoveryTargetSettings)); err != nil {
 				log.Errorw("error writing recovery.conf", zap.Error(err))
 				return
 			}
@@ -1314,7 +1348,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 		case common.RoleStandby:
 			log.Infow("already standby")
 			if !started {
-				if err = pgm.WriteRecoveryConf(p.createRecoveryParameters(standbySettings, nil)); err != nil {
+				if err = pgm.WriteRecoveryConf(p.createRecoveryParameters(standbySettings, nil, nil)); err != nil {
 					log.Errorw("error writing recovery.conf", zap.Error(err))
 					return
 				}
@@ -1350,7 +1384,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				if !curReplConnParams.Equals(newReplConnParams) {
 					log.Infow("connection parameters changed. Reconfiguring.", "followedDB", followedUID, "replConnParams", newReplConnParams)
 					standbySettings := &cluster.StandbySettings{PrimaryConninfo: newReplConnParams.ConnString(), PrimarySlotName: common.StolonName(db.UID)}
-					if err = pgm.WriteRecoveryConf(p.createRecoveryParameters(standbySettings, nil)); err != nil {
+					if err = pgm.WriteRecoveryConf(p.createRecoveryParameters(standbySettings, nil, nil)); err != nil {
 						log.Errorw("error writing recovery.conf", zap.Error(err))
 						return
 					}
@@ -1385,7 +1419,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 
 				if !curReplConnParams.Equals(newReplConnParams) || curPrimarySlotName != db.Spec.FollowConfig.StandbySettings.PrimarySlotName {
 					standbySettings := db.Spec.FollowConfig.StandbySettings
-					if err = pgm.WriteRecoveryConf(p.createRecoveryParameters(standbySettings, nil)); err != nil {
+					if err = pgm.WriteRecoveryConf(p.createRecoveryParameters(standbySettings, nil, nil)); err != nil {
 						log.Errorw("error writing recovery.conf", zap.Error(err))
 						return
 					}

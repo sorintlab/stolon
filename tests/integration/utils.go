@@ -324,6 +324,35 @@ func (tk *TestKeeper) Query(query string, args ...interface{}) (*sql.Rows, error
 	return res, nil
 }
 
+func (tk *TestKeeper) SwitchWals(times int) error {
+	maj, _, err := tk.PGDataVersion()
+	if err != nil {
+		return err
+	}
+	var switchLogFunc string
+	if maj < 10 {
+		switchLogFunc = "select pg_switch_xlog()"
+	} else {
+		switchLogFunc = "select pg_switch_wal()"
+	}
+
+	tk.Exec("DROP TABLE switchwal")
+	if _, err := tk.Exec("CREATE TABLE switchwal(ID INT PRIMARY KEY NOT NULL)"); err != nil {
+		return err
+	}
+	// if times > 1 we have to do some transactions or the wal won't switch
+	for i := 0; i < times; i++ {
+		if _, err := tk.Exec("INSERT INTO switchwal VALUES ($1)", i); err != nil {
+			return err
+		}
+		if _, err := tk.db.Exec(switchLogFunc); err != nil {
+			return err
+		}
+	}
+	tk.Exec("DROP TABLE switchwal")
+	return nil
+}
+
 func (tk *TestKeeper) WaitDBUp(timeout time.Duration) error {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {

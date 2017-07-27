@@ -12,7 +12,7 @@ We are open to alternative solutions (PRs are welcome) like using haproxy if the
 
 ## Does the stolon proxy sends read-only requests to standbys?
 
-Currently the proxy redirects all requests to the master. There is a [feature request](https://github.com/sorintlab/stolon/issues/132) for using the proxy also for standbys but it's low in the priority list. 
+Currently the proxy redirects all requests to the master. There is a [feature request](https://github.com/sorintlab/stolon/issues/132) for using the proxy also for standbys but it's low in the priority list.
 
 If your application want to query the hot standbys, currently you can read the standby dbs and their status form the cluster data directly from the store (but be warned that this isn't meant to be stable).
 
@@ -48,8 +48,7 @@ The stolon pros are the same of the above question and it'll let you avoid the n
 
 ## What happens if etcd/consul is partitioned?
 
-If etcd or consul becomes partitioned, thanks to the raft protocol, only the quorate partition can accept writes.
-When this happens all the stolon component not able to read or write to a quorate partition (stolon uses quorum reads) will just retry without any serveice disruption. Additionally the stolon-proxy, if it cannot talk with the store, by default, will drop all connection to the master since it cannot know if the cluster data has changed (for example if the proxy has problems reading with the store but the sentinel can write to it).
+See [Stolon Architecture and Requirements](doc/architecture.md)
 
 ## How are backups handled with stolon?
 
@@ -69,4 +68,4 @@ Consul (or etcd) is used only as a key-value storage.
 
 stolon will create its keys using the cluster name as part of the key hierarchy. So multiple stolon clusters can share the same store.
 
-The suggestion is to use a store located in the same *region*/*datacenter* (the concepts are related on your architecture/cloud provider) with the stolon cluster. 
+The suggestion is to use a store located in the same *region*/*datacenter* (the concepts are related on your architecture/cloud provider) with the stolon cluster.

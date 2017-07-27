@@ -33,6 +33,7 @@ import (
 	"github.com/sorintlab/stolon/pkg/cluster"
 	"github.com/sorintlab/stolon/pkg/flagutil"
 	slog "github.com/sorintlab/stolon/pkg/log"
+	"github.com/sorintlab/stolon/pkg/postgresql"
 	"github.com/sorintlab/stolon/pkg/store"
 	"github.com/sorintlab/stolon/pkg/timer"
 	"github.com/sorintlab/stolon/pkg/util"
@@ -184,6 +185,20 @@ func (s *Sentinel) CleanDBError(uid string) {
 	}
 }
 
+func (s *Sentinel) SetDBNotIncreasingXLogPos(uid string) {
+	if _, ok := s.dbNotIncreasingXLogPos[uid]; !ok {
+		s.dbNotIncreasingXLogPos[uid] = 1
+	} else {
+		s.dbNotIncreasingXLogPos[uid] = s.dbNotIncreasingXLogPos[uid] + 1
+	}
+}
+
+func (s *Sentinel) CleanDBNotIncreasingXLogPos(uid string) {
+	if _, ok := s.dbNotIncreasingXLogPos[uid]; ok {
+		delete(s.dbNotIncreasingXLogPos, uid)
+	}
+}
+
 func (s *Sentinel) updateKeepersStatus(cd *cluster.ClusterData, keepersInfo cluster.KeepersInfo, firstRun bool) (*cluster.ClusterData, KeeperInfoHistories) {
 	// Create a copy of cd
 	cd = cd.DeepCopy()
@@ -285,6 +300,13 @@ func (s *Sentinel) updateKeepersStatus(cd *cluster.ClusterData, keepersInfo clus
 			continue
 		}
 		log.Debugw("received db state", "db", db.UID)
+
+		if db.Status.XLogPos == dbs.XLogPos {
+			s.SetDBNotIncreasingXLogPos(db.UID)
+		} else {
+			s.CleanDBNotIncreasingXLogPos(db.UID)
+		}
+
 		db.Status.ListenAddress = dbs.ListenAddress
 		db.Status.Port = dbs.Port
 		db.Status.CurrentGeneration = dbs.Generation
@@ -295,12 +317,16 @@ func (s *Sentinel) updateKeepersStatus(cd *cluster.ClusterData, keepersInfo clus
 			db.Status.XLogPos = dbs.XLogPos
 			db.Status.TimelinesHistory = dbs.TimelinesHistory
 			db.Status.PGParameters = cluster.PGParameters(dbs.PGParameters)
+
 			// Sort synchronousStandbys so we can compare the slice regardless of its order
 			sort.Sort(sort.StringSlice(dbs.SynchronousStandbys))
 			db.Status.SynchronousStandbys = dbs.SynchronousStandbys
+
+			db.Status.OlderWalFile = dbs.OlderWalFile
 		} else {
 			s.SetDBError(db.UID)
 		}
+
 	}
 
 	// Update dbs' healthy state
@@ -485,6 +511,65 @@ func (s *Sentinel) dbValidity(cd *cluster.ClusterData, dbUID string) dbValidity 
 
 	// db is valid
 	return dbValidityValid
+}
+
+func (s *Sentinel) dbCanSync(cd *cluster.ClusterData, dbUID string) bool {
+	db, ok := cd.DBs[dbUID]
+	if !ok {
+		panic(fmt.Errorf("requested unexisting db uid %q", dbUID))
+	}
+	masterDB := cd.DBs[cd.Cluster.Status.Master]
+
+	// ignore if master doesn't provide the older wal file
+	if masterDB.Status.OlderWalFile == "" {
+		return true
+	}
+
+	// skip current master
+	if dbUID == masterDB.UID {
+		return true
+	}
+
+	// skip the standbys
+	if s.dbType(cd, db.UID) != dbTypeStandby {
+		return true
+	}
+
+	// only check when db isn't initializing
+	if db.Generation == cluster.InitialGeneration {
+		return true
+	}
+
+	// check only if the db isn't healty.
+	if !db.Status.Healthy {
+		return true
+	}
+
+	if db.Status.XLogPos == masterDB.Status.XLogPos {
+		return true
+	}
+
+	// check only if the xlogpos isn't increasing for some time. This can also
+	// happen when no writes are happening on the master but the standby should
+	// be, if syncing at the same xlogpos.
+	if s.isDBIncreasingXLogPos(cd, db) {
+		return true
+	}
+
+	required := postgresql.XlogPosToWalFileNameNoTimeline(db.Status.XLogPos)
+	older, err := postgresql.WalFileNameNoTimeLine(masterDB.Status.OlderWalFile)
+	if err != nil {
+		// warn on wrong file name (shouldn't happen...)
+		log.Warnw("wrong wal file name", "filename", masterDB.Status.OlderWalFile)
+	}
+	log.Debugw("xlog pos isn't advancing on standby, checking if the master has the required wals", "db", db.UID, "keeper", db.Spec.KeeperUID, "requiredWAL", required, "olderMasterWAL", older)
+	// compare the required wal file with the older wal file name ignoring the timelineID
+	if required >= older {
+		return true
+	}
+
+	log.Infow("db won't be able to sync due to missing required wals on master", "db", db.UID, "keeper", db.Spec.KeeperUID, "requiredWAL", required, "olderMasterWAL", older)
+	return false
 }
 
 func (s *Sentinel) dbStatus(cd *cluster.ClusterData, dbUID string) dbStatus {
@@ -1014,7 +1099,7 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 					if s.dbType(newcd, db.UID) != dbTypeMaster {
 						continue
 					}
-					log.Infow("removing old master db", "db", db.UID)
+					log.Infow("removing old master db", "db", db.UID, "keeper", db.Spec.KeeperUID)
 					toRemove = append(toRemove, db)
 				}
 				for _, db := range toRemove {
@@ -1030,7 +1115,20 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 					if s.dbValidity(newcd, db.UID) != dbValidityInvalid {
 						continue
 					}
-					log.Infow("removing invalid db", "db", db.UID)
+					log.Infow("removing invalid db", "db", db.UID, "keeper", db.Spec.KeeperUID)
+					toRemove = append(toRemove, db)
+				}
+				for _, db := range toRemove {
+					delete(newcd.DBs, db.UID)
+				}
+
+				// Remove dbs that won't sync due to missing wals on current master
+				toRemove = []*cluster.DB{}
+				for _, db := range newcd.DBs {
+					if s.dbCanSync(cd, db.UID) {
+						continue
+					}
+					log.Infow("removing db that won't be able to sync due to missing wals on current master", "db", db.UID, "keeper", db.Spec.KeeperUID)
 					toRemove = append(toRemove, db)
 				}
 				for _, db := range toRemove {
@@ -1279,6 +1377,17 @@ func (s *Sentinel) isDBHealthy(cd *cluster.ClusterData, db *cluster.DB) bool {
 	return true
 }
 
+func (s *Sentinel) isDBIncreasingXLogPos(cd *cluster.ClusterData, db *cluster.DB) bool {
+	t, ok := s.dbNotIncreasingXLogPos[db.UID]
+	if !ok {
+		return true
+	}
+	if t > cluster.DefaultDBNotIncreasingXLogPosTimes {
+		return false
+	}
+	return true
+}
+
 func (s *Sentinel) updateDBConvergenceInfos(cd *cluster.ClusterData) {
 	for _, db := range cd.DBs {
 		if db.Status.CurrentGeneration == db.Generation {
@@ -1365,9 +1474,10 @@ type Sentinel struct {
 	// Make RandFn settable to ease testing with reproducible "random" numbers
 	RandFn func(int) int
 
-	keeperErrorTimers  map[string]int64
-	dbErrorTimers      map[string]int64
-	dbConvergenceInfos map[string]*DBConvergenceInfo
+	keeperErrorTimers      map[string]int64
+	dbErrorTimers          map[string]int64
+	dbNotIncreasingXLogPos map[string]int64
+	dbConvergenceInfos     map[string]*DBConvergenceInfo
 
 	keeperInfoHistories KeeperInfoHistories
 }
@@ -1539,6 +1649,7 @@ func (s *Sentinel) clusterSentinelCheck(pctx context.Context) {
 	if firstRun {
 		s.keeperErrorTimers = make(map[string]int64)
 		s.dbErrorTimers = make(map[string]int64)
+		s.dbNotIncreasingXLogPos = make(map[string]int64)
 		s.keeperInfoHistories = make(KeeperInfoHistories)
 		s.dbConvergenceInfos = make(map[string]*DBConvergenceInfo)
 
