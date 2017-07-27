@@ -247,7 +247,7 @@ func (c *ClusterChecker) Check() error {
 		return nil
 	}
 
-	addr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%s", db.Status.ListenAddress, db.Status.Port))
+	addr, err := net.ResolveTCPAddr("tcp", net.JoinHostPort(db.Status.ListenAddress, db.Status.Port))
 	if err != nil {
 		log.Errorw("cannot resolve db address", zap.Error(err))
 		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
