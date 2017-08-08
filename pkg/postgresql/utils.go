@@ -365,7 +365,11 @@ func getConfigFilePGParameters(ctx context.Context, connParams ConnParams) (comm
 	}
 
 	if use_pg_file_settings {
-		rows, err = query(ctx, db, "select name, setting from pg_file_settings")
+		// NOTE If some pg_parameters that cannot be changed without a restart
+		// are removed from the postgresql.conf file the view will contain some
+		// rows with null name and setting and the error field set to the cause.
+		// So we have to filter out these or the Scan will fail.
+		rows, err = query(ctx, db, "select name, setting from pg_file_settings where name IS NOT NULL and setting IS NOT NULL")
 		if err != nil {
 			return nil, err
 		}
