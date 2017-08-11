@@ -205,7 +205,7 @@ type ClusterSpec struct {
 	MaxStandbysPerSender *uint16 `json:"maxStandbysPerSender,omitempty"`
 	// Max lag in bytes that an asynchronous standy can have to be elected in
 	// place of a failed master
-	MaxStandbyLag *uint32 `json:"maxStandbyLage,omitempty"`
+	MaxStandbyLag *uint32 `json:"maxStandbyLag,omitempty"`
 	// Use Synchronous replication between master and its standbys
 	SynchronousReplication *bool `json:"synchronousReplication,omitempty"`
 	// MinSynchronousStandbys is the mininum number if synchronous standbys
