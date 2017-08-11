@@ -148,18 +148,18 @@ func status(cmd *cobra.Command, args []string) {
 		stdout("")
 	} else {
 		kssKeys := cd.Keepers.SortedKeys()
-		fmt.Fprintf(tabOut, "UID\tPG LISTENADDRESS\tHEALTHY\tPGWANTEDGENERATION\tPGCURRENTGENERATION\n")
+		fmt.Fprintf(tabOut, "UID\tHEALTHY\tPG LISTENADDRESS\tPG HEALTHY\tPG WANTEDGENERATION\tPG CURRENTGENERATION\n")
 		for _, kuid := range kssKeys {
 			k := cd.Keepers[kuid]
 			db := cd.FindDB(k)
 			if db != nil {
+				dbListenAddress := "(unknown)"
 				if db.Status.ListenAddress != "" {
-					fmt.Fprintf(tabOut, "%s\t%s:%s\t%t\t%d\t%d\n", k.UID, db.Status.ListenAddress, db.Status.Port, k.Status.Healthy, db.Generation, db.Status.CurrentGeneration)
-				} else {
-					fmt.Fprintf(tabOut, "%s\t(unknown)\t%t\t%d\t%d\n", k.UID, k.Status.Healthy, db.Generation, db.Status.CurrentGeneration)
+					dbListenAddress = fmt.Sprintf("%s:%s", db.Status.ListenAddress, db.Status.Port)
 				}
+				fmt.Fprintf(tabOut, "%s\t%t\t%s\t%t\t%d\t%d\t\n", k.UID, k.Status.Healthy, dbListenAddress, db.Status.Healthy, db.Generation, db.Status.CurrentGeneration)
 			} else {
-				fmt.Fprintf(tabOut, "%s\n", k.UID)
+				fmt.Fprintf(tabOut, "%s\t%t\t(no db assigned)\t\t\t\t\n", k.UID, k.Status.Healthy)
 			}
 		}
 	}
@@ -182,7 +182,7 @@ func status(cmd *cobra.Command, args []string) {
 
 	if master != "" {
 		stdout("")
-		stdout("===== Keepers tree =====")
+		stdout("===== Keepers/DB tree =====")
 		masterDB := cd.DBs[master]
 		stdout("")
 		printTree(masterDB.UID, cd, 0, "", true)
