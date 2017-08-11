@@ -139,6 +139,12 @@ const (
 	DBInitModeResync DBInitMode = "resync"
 )
 
+type NewConfig struct {
+	Locale        string `json:"locale,omitempty"`
+	Encoding      string `json:"encoding,omitempty"`
+	DataChecksums bool   `json:"dataChecksums,omitempty"`
+}
+
 type PITRConfig struct {
 	// DataRestoreCommand defines the command to execute for restoring the db
 	// cluster data). %d is replaced with the full path to the db cluster
@@ -227,6 +233,8 @@ type ClusterSpec struct {
 	MergePgParameters *bool `json:"mergePgParameters,omitempty"`
 	// Role defines the cluster operating role (master or standby of an external database)
 	Role *ClusterRole `json:"role,omitempty"`
+	// Init configuration used when InitMode is "new"
+	NewConfig *NewConfig `json:"newConfig,omitempty"`
 	// Point in time recovery init configuration used when InitMode is "pitr"
 	PITRConfig *PITRConfig `json:"pitrConfig,omitempty"`
 	// Existing init configuration used when InitMode is "existing"
@@ -512,6 +520,8 @@ type DBSpec struct {
 	AdditionalWalSenders uint16 `json:"additionalWalSenders"`
 	// InitMode defines the db initialization mode. Current modes are: none, new
 	InitMode DBInitMode `json:"initMode,omitempty"`
+	// Init configuration used when InitMode is "new"
+	NewConfig *NewConfig `json:"newConfig,omitempty"`
 	// Point in time recovery init configuration used when InitMode is "pitr"
 	PITRConfig *PITRConfig `json:"pitrConfig,omitempty"`
 	// Map of postgres parameters

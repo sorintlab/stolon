@@ -751,6 +751,7 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 					Spec: &cluster.DBSpec{
 						KeeperUID:     k.UID,
 						InitMode:      cluster.DBInitModeNew,
+						NewConfig:     clusterSpec.NewConfig,
 						Role:          common.RoleMaster,
 						Followers:     []string{},
 						IncludeConfig: *clusterSpec.MergePgParameters,

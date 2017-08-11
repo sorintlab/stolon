@@ -66,6 +66,12 @@ type TimelineHistory struct {
 	Reason      string
 }
 
+type InitConfig struct {
+	Locale        string
+	Encoding      string
+	DataChecksums bool
+}
+
 func NewManager(pgBinPath string, dataDir string, parameters common.Parameters, localConnParams, replConnParams ConnParams, suUsername, suPassword, replUsername, replPassword string, requestTimeout time.Duration) *Manager {
 	return &Manager{
 		pgBinPath:       pgBinPath,
@@ -89,7 +95,7 @@ func (p *Manager) GetParameters() common.Parameters {
 	return p.parameters
 }
 
-func (p *Manager) Init() error {
+func (p *Manager) Init(initConfig *InitConfig) error {
 	// ioutil.Tempfile already creates files with 0600 permissions
 	pwfile, err := ioutil.TempFile("", "pwfile")
 	if err != nil {
@@ -103,6 +109,16 @@ func (p *Manager) Init() error {
 	name := filepath.Join(p.pgBinPath, "initdb")
 	cmd := exec.Command(name, "-D", p.dataDir, "-U", p.suUsername, "--pwfile", pwfile.Name())
 	log.Debugw("execing cmd", "cmd", cmd)
+
+	if initConfig.Locale != "" {
+		cmd.Args = append(cmd.Args, "--locale", initConfig.Locale)
+	}
+	if initConfig.Encoding != "" {
+		cmd.Args = append(cmd.Args, "--encoding", initConfig.Encoding)
+	}
+	if initConfig.DataChecksums {
+		cmd.Args = append(cmd.Args, "--data-checksums")
+	}
 
 	//Pipe command's std[err|out] to parent.
 	cmd.Stdout = os.Stdout
