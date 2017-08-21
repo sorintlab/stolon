@@ -368,6 +368,7 @@ func (s *Sentinel) setDBSpecFromClusterSpec(cd *cluster.ClusterData) {
 		db.Spec.SynchronousReplication = s.syncRepl(clusterSpec)
 		db.Spec.UsePgrewind = *clusterSpec.UsePgrewind
 		db.Spec.PGParameters = clusterSpec.PGParameters
+		db.Spec.PGHBA = clusterSpec.PGHBA
 		if db.Spec.FollowConfig != nil && db.Spec.FollowConfig.Type == cluster.FollowTypeExternal {
 			db.Spec.FollowConfig.StandbySettings = clusterSpec.StandbySettings
 		}

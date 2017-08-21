@@ -16,14 +16,13 @@ package cluster
 
 import (
 	"encoding/json"
+	"fmt"
 	"reflect"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/sorintlab/stolon/common"
-
-	"fmt"
-	"sort"
 
 	"github.com/mitchellh/copystructure"
 )
@@ -243,6 +242,9 @@ type ClusterSpec struct {
 	StandbySettings *StandbySettings `json:"standbySettings,omitempty"`
 	// Map of postgres parameters
 	PGParameters PGParameters `json:"pgParameters,omitempty"`
+	// Additional pg_hba.conf entries
+	// we don't set omitempty since we want to distinguish between null or empty slice
+	PGHBA []string `json:"pgHBA"`
 }
 
 type ClusterStatus struct {
@@ -392,6 +394,13 @@ func (os *ClusterSpec) Validate() error {
 	if s.InitMode == nil {
 		return fmt.Errorf("initMode undefined")
 	}
+	// The unique validation we're doing on pgHBA entries is that they don't contain a newline character
+	for _, e := range s.PGHBA {
+		if strings.Contains(e, "\n") {
+			return fmt.Errorf("pgHBA entries cannot contain newline characters")
+		}
+	}
+
 	switch *s.InitMode {
 	case ClusterInitModeNew:
 		if *s.Role == ClusterRoleStandby {
@@ -526,6 +535,9 @@ type DBSpec struct {
 	PITRConfig *PITRConfig `json:"pitrConfig,omitempty"`
 	// Map of postgres parameters
 	PGParameters PGParameters `json:"pgParameters,omitempty"`
+	// Additional pg_hba.conf entries
+	// We don't set omitempty since we want to distinguish between null or empty slice
+	PGHBA []string `json:"pgHBA"`
 	// DB Role (master or standby)
 	Role common.Role `json:"role,omitempty"`
 	// FollowConfig when Role is "standby"
