@@ -808,7 +808,7 @@ func (p *PostgresKeeper) updateReplSlots(dbLocalState *DBLocalState, followersUI
 			log.Infow("dropping replication slot since db not marked as follower", "slot", slotName, "db", common.NameFromStolonName(slotName))
 			if err = p.pgm.DropReplicationSlot(slotName); err != nil {
 				log.Errorw("failed to drop replication slot", "slotName", slotName, "err", err)
-				return err
+				// don't return the error but continue also if drop failed (standby still connected)
 			}
 		}
 	}
