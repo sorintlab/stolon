@@ -35,4 +35,10 @@ When [initializing the cluster](initialization.md), by default, stolon will merg
 * When initMode is new, it'll merge the initdb generated parameters.
 * When initMode is existing it'll merge the parameters of the existing instance.
 
-To disable this behavior just set `mergePgParameters` to false in the cluster spec and manually set all the pgParameters in the cluster specification. 
+To disable this behavior just set `mergePgParameters` to false in the cluster spec and manually set all the pgParameters in the cluster specification.
+
+## postgresql.auto.conf and ALTER SYSTEM commands
+
+Since postgresql.auto.conf overrides postgresql.conf parameters, changing some of them with ALTER SYSTEM could break the cluster (parameters managed by stolon could be overridden) and make pg parameters different between the instances.
+
+To avoid this stolon disables the execution of ALTER SYSTEM commands making postgresql.auto.conf a symlink to /dev/null. When an ALTER SYSTEM command is executed it'll return an error.

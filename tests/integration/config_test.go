@@ -125,3 +125,88 @@ func TestServerParameters(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 }
+
+func TestAlterSystem(t *testing.T) {
+	t.Parallel()
+
+	dir, err := ioutil.TempDir("", "")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer os.RemoveAll(dir)
+
+	tstore, err := NewTestStore(t, dir)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := tstore.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := tstore.WaitUp(10 * time.Second); err != nil {
+		t.Fatalf("error waiting on store up: %v", err)
+	}
+	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
+	defer tstore.Stop()
+
+	clusterName := uuid.NewV4().String()
+
+	storePath := filepath.Join(common.StoreBasePath, clusterName)
+
+	sm := store.NewStore(tstore.store, storePath)
+
+	initialClusterSpec := &cluster.ClusterSpec{
+		InitMode:           cluster.ClusterInitModeP(cluster.ClusterInitModeNew),
+		SleepInterval:      &cluster.Duration{Duration: 2 * time.Second},
+		FailInterval:       &cluster.Duration{Duration: 5 * time.Second},
+		ConvergenceTimeout: &cluster.Duration{Duration: 30 * time.Second},
+	}
+	initialClusterSpecFile, err := writeClusterSpec(dir, initialClusterSpec)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	ts, err := NewTestSentinel(t, dir, clusterName, tstore.storeBackend, storeEndpoints, fmt.Sprintf("--initial-cluster-spec=%s", initialClusterSpecFile))
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := ts.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	tk, err := NewTestKeeper(t, dir, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, tstore.storeBackend, storeEndpoints)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := tk.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	if err := WaitClusterPhase(sm, cluster.ClusterPhaseNormal, 60*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := tk.WaitDBUp(60 * time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	expectedErr := `pq: could not fsync file "postgresql.auto.conf": Invalid argument`
+	if _, err := tk.Exec("alter system set archive_mode to on"); err != nil {
+		if err.Error() != expectedErr {
+			t.Fatalf("expected err: %q, got: %q", expectedErr, err)
+		}
+	} else {
+		t.Fatalf("expected err: %q, got no error", expectedErr)
+	}
+
+	tk.Stop()
+	if err := tk.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := tk.WaitDBUp(60 * time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	pgParameters, err := tk.GetPGParameters()
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if v, ok := pgParameters["archive_mode"]; ok {
+		t.Fatalf("expected archive_mode not defined, got value: %q", v)
+	}
+}

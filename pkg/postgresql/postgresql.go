@@ -37,8 +37,9 @@ import (
 )
 
 const (
-	postgresConf    = "postgresql.conf"
-	tmpPostgresConf = "stolon-temp-postgresql.conf"
+	postgresConf     = "postgresql.conf"
+	postgresAutoConf = "postgresql.auto.conf"
+	tmpPostgresConf  = "stolon-temp-postgresql.conf"
 
 	startTimeout = 60 * time.Second
 )
@@ -265,6 +266,10 @@ func (p *Manager) start(args ...string) error {
 	// A difference between directly calling postgres instead of pg_ctl is that
 	// the instance parent is the keeper instead of the defined system reaper
 	// (since pg_ctl forks and then exits leaving the postmaster orphaned).
+
+	if err := p.createPostgresqlAutoConf(); err != nil {
+		return err
+	}
 
 	log.Infow("starting database")
 	name := filepath.Join(p.pgBinPath, "postgres")
@@ -737,6 +742,19 @@ func (p *Manager) writePgHba() error {
 	if err = os.Rename(f.Name(), filepath.Join(p.dataDir, "pg_hba.conf")); err != nil {
 		os.Remove(f.Name())
 		return err
+	}
+	return nil
+}
+
+// createPostgresqlAutoConf creates postgresql.auto.conf as a symlink to
+// /dev/null to block alter systems commands (they'll return an error)
+func (p *Manager) createPostgresqlAutoConf() error {
+	pgAutoConfPath := filepath.Join(p.dataDir, postgresAutoConf)
+	if err := os.Remove(pgAutoConfPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("error removing postgresql.auto.conf file: %v", err)
+	}
+	if err := os.Symlink("/dev/null", pgAutoConfPath); err != nil {
+		return fmt.Errorf("error symlinking postgresql.auto.conf file to /dev/null: %v", err)
 	}
 	return nil
 }
