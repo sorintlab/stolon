@@ -21,6 +21,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -658,8 +659,7 @@ func (p *PostgresKeeper) Start() {
 
 	// TODO(sgotti) reconfigure the various configurations options
 	// (RequestTimeout) after a changed cluster config
-	pgParameters := make(common.Parameters)
-	pgm := postgresql.NewManager(p.pgBinPath, p.dataDir, pgParameters, p.getLocalConnParams(), p.getLocalReplConnParams(), p.pgSUUsername, p.pgSUPassword, p.pgReplUsername, p.pgReplPassword, p.requestTimeout)
+	pgm := postgresql.NewManager(p.pgBinPath, p.dataDir, p.getLocalConnParams(), p.getLocalReplConnParams(), p.pgSUUsername, p.pgSUPassword, p.pgReplUsername, p.pgReplPassword, p.requestTimeout)
 	p.pgm = pgm
 
 	p.pgm.Stop(true)
@@ -885,7 +885,8 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 
 	followersUIDs := db.Spec.Followers
 
-	prevPGParameters := pgm.GetParameters()
+	pgm.SetHba(db.Spec.PGHBA)
+
 	var pgParameters common.Parameters
 
 	dbls := p.dbLocalState
@@ -1465,7 +1466,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 	pgParameters = p.createPGParameters(db)
 
 	// Log synchronous replication changes
-	prevSyncStandbyNames := prevPGParameters["synchronous_standby_names"]
+	prevSyncStandbyNames := pgm.CurParameters()["synchronous_standby_names"]
 	syncStandbyNames := pgParameters["synchronous_standby_names"]
 	if db.Spec.SynchronousReplication {
 		if prevSyncStandbyNames != syncStandbyNames {
@@ -1477,15 +1478,30 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 		}
 	}
 
-	if !pgParameters.Equals(prevPGParameters) {
+	needsReload := false
+
+	if !pgParameters.Equals(pgm.CurParameters()) {
 		log.Infow("postgres parameters changed, reloading postgres instance")
 		pgm.SetParameters(pgParameters)
-		if err := pgm.Reload(); err != nil {
-			log.Errorw("failed to reload postgres instance", err)
-		}
+		needsReload = true
 	} else {
 		// for tests
 		log.Infow("postgres parameters not changed")
+	}
+
+	if !reflect.DeepEqual(db.Spec.PGHBA, pgm.CurHba()) {
+		log.Infow("postgres hba entries changed, reloading postgres instance")
+		pgm.SetHba(db.Spec.PGHBA)
+		needsReload = true
+	} else {
+		// for tests
+		log.Infow("postgres hba entries not changed")
+	}
+
+	if needsReload {
+		if err := pgm.Reload(); err != nil {
+			log.Errorw("failed to reload postgres instance", err)
+		}
 	}
 
 	// If we are here, then all went well and we can update the db generation and save it locally

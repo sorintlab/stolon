@@ -31,6 +31,7 @@ import (
 	slog "github.com/sorintlab/stolon/pkg/log"
 
 	_ "github.com/lib/pq"
+	"github.com/mitchellh/copystructure"
 	"golang.org/x/net/context"
 )
 
@@ -45,6 +46,9 @@ type Manager struct {
 	pgBinPath       string
 	dataDir         string
 	parameters      common.Parameters
+	hba             []string
+	curParameters   common.Parameters
+	curHba          []string
 	localConnParams ConnParams
 	replConnParams  ConnParams
 	suUsername      string
@@ -72,11 +76,12 @@ type InitConfig struct {
 	DataChecksums bool
 }
 
-func NewManager(pgBinPath string, dataDir string, parameters common.Parameters, localConnParams, replConnParams ConnParams, suUsername, suPassword, replUsername, replPassword string, requestTimeout time.Duration) *Manager {
+func NewManager(pgBinPath string, dataDir string, localConnParams, replConnParams ConnParams, suUsername, suPassword, replUsername, replPassword string, requestTimeout time.Duration) *Manager {
 	return &Manager{
 		pgBinPath:       pgBinPath,
 		dataDir:         filepath.Join(dataDir, "postgres"),
-		parameters:      parameters,
+		parameters:      make(common.Parameters),
+		curParameters:   make(common.Parameters),
 		replConnParams:  replConnParams,
 		localConnParams: localConnParams,
 		suUsername:      suUsername,
@@ -91,8 +96,32 @@ func (p *Manager) SetParameters(parameters common.Parameters) {
 	p.parameters = parameters
 }
 
-func (p *Manager) GetParameters() common.Parameters {
-	return p.parameters
+func (p *Manager) CurParameters() common.Parameters {
+	return p.curParameters
+}
+
+func (p *Manager) SetHba(hba []string) {
+	p.hba = hba
+}
+
+func (p *Manager) CurHba() []string {
+	return p.curHba
+}
+
+func (p *Manager) UpdateCurParameters() {
+	n, err := copystructure.Copy(p.parameters)
+	if err != nil {
+		panic(err)
+	}
+	p.curParameters = n.(common.Parameters)
+}
+
+func (p *Manager) UpdateCurHba() {
+	n, err := copystructure.Copy(p.hba)
+	if err != nil {
+		panic(err)
+	}
+	p.curHba = n.([]string)
 }
 
 func (p *Manager) Init(initConfig *InitConfig) error {
@@ -221,6 +250,9 @@ func (p *Manager) start(args ...string) error {
 		return fmt.Errorf("error: %v", err)
 	}
 
+	p.UpdateCurParameters()
+	p.UpdateCurHba()
+
 	// pg_ctl with -w will exit after the timeout and return 0 also if the
 	// instance isn't accepting connection because already in recovery (usually
 	// waiting for wals during a pitr or a pg_rewind)
@@ -280,6 +312,10 @@ func (p *Manager) Reload() error {
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("error: %v", err)
 	}
+
+	p.UpdateCurParameters()
+	p.UpdateCurHba()
+
 	return nil
 }
 
@@ -608,10 +644,16 @@ func (p *Manager) writePgHba() error {
 	f.WriteString(fmt.Sprintf("host replication %s %s md5\n", p.replUsername, "0.0.0.0/0"))
 	f.WriteString(fmt.Sprintf("host replication %s %s md5\n", p.replUsername, "::0/0"))
 
-	// By default accept connections for all databases and users with md5 auth
-	// TODO(sgotti) Do not set this but let the user provide its pg_hba.conf file/entries
-	f.WriteString("host all all 0.0.0.0/0 md5\n")
-	f.WriteString("host all all ::0/0 md5\n")
+	if p.hba != nil {
+		for _, e := range p.hba {
+			f.WriteString(e + "\n")
+		}
+	} else {
+		// By default, if no custom pg_hba entries are provided, accept
+		// connections for all databases and users with md5 auth
+		f.WriteString("host all all 0.0.0.0/0 md5\n")
+		f.WriteString("host all all ::0/0 md5\n")
+	}
 
 	if err = os.Rename(f.Name(), filepath.Join(p.dataDir, "pg_hba.conf")); err != nil {
 		os.Remove(f.Name())

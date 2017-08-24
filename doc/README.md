@@ -7,6 +7,7 @@ We suggest that you first read the [Stolon Architecture and Requirements](archit
 * [Cluster Specification](cluster_spec.md)
 * [Cluster Initialization](initialization.md)
 * [Setting instance parameters](postgres_parameters.md)
+* [Custom pg_hba.conf entries](custom_pg_hba_entries.md)
 * [Stolon Client](stolonctl.md)
 * Backup/Restore
   * [Point In Time Recovery](pitr.md)
