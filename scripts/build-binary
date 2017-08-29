@@ -37,8 +37,11 @@ function package {
 	if [ -d ${ccdir} ]; then
 		srcdir=${ccdir}
 	fi
+
+	mkdir ${target}/bin
+
 	for bin in stolon-keeper stolon-sentinel stolon-proxy stolonctl; do
-		cp ${srcdir}/${bin} ${target}/${bin}
+		cp ${srcdir}/${bin} ${target}/bin
 	done
 
 	cp stolon/README.md ${target}/README.md
@@ -46,6 +49,7 @@ function package {
 	cp -R stolon/doc ${target}/doc
 	cp -R stolon/examples ${target}/examples
 	rm -rf ${target}/examples/kubernetes/image/docker/bin
+	rm -rf ${target}/examples/docker/bin
 }
 
 function main {
