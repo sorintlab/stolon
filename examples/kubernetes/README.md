@@ -5,7 +5,7 @@ Here you can find some examples on running stolon inside kubernetes
 There're two examples. The difference between them is how the keepers pods are deployed (the definitions of the other components is identical):
 
 * Using a [statefulset](statefulset) (called `petset` in k8s 1.4)
-* Using [replication controllers](rc) (one per keeper).
+* **DEPRECATED** Using [replication controllers](rc) (one per keeper).
 
 ## Docker image
 
