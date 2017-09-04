@@ -725,7 +725,7 @@ func (p *Manager) SyncFromFollowed(followedConnParams ConnParams) error {
 
 	log.Infow("running pg_basebackup")
 	name := filepath.Join(p.pgBinPath, "pg_basebackup")
-	cmd := exec.Command(name, "-R", "-D", p.dataDir, "-d", followedConnString)
+	cmd := exec.Command(name, "-R", "-Xf", "-D", p.dataDir, "-d", followedConnString)
 	cmd.Env = append(os.Environ(), fmt.Sprintf("PGPASSFILE=%s", pgpass.Name()))
 	log.Debugw("execing cmd", "cmd", cmd)
 
