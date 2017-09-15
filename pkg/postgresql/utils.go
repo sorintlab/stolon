@@ -468,3 +468,41 @@ func WalFileNameNoTimeLine(name string) (string, error) {
 	}
 	return name[8:24], nil
 }
+
+func getFollowedPGUserTablespaces(ctx context.Context, followedConnParams ConnParams) (common.UserTablespaces, error) {
+	var pgUserTablespaces = common.UserTablespaces{}
+	db, err := sql.Open("postgres", followedConnParams.ConnString())
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+	rows, err := query(ctx, db, "select spcname as name, pg_catalog.pg_tablespace_location(oid) as location from pg_catalog.pg_tablespace order by 1")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	systemTablespaces := []string{
+		"pg_default",
+		"pg_global",
+	}
+	systemtbs := false
+	for rows.Next() {
+		var name, setting string
+		if err = rows.Scan(&name, &setting); err != nil {
+			return nil, err
+		}
+		systemtbs = false
+		for _, t := range systemTablespaces {
+			if strings.EqualFold(t, name) {
+				systemtbs = true
+				break
+			}
+		}
+		if systemtbs {
+			continue
+		}
+		pgUserTablespaces[name] = setting
+	}
+	return pgUserTablespaces, nil
+}
