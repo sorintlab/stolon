@@ -821,3 +821,53 @@ func (p *Manager) OlderWalFile() (string, error) {
 
 	return "", nil
 }
+
+func (p *Manager) GetFollowedPGUserTablespaces(followedConnParams ConnParams) (common.UserTablespaces, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), p.requestTimeout)
+	defer cancel()
+	return getFollowedPGUserTablespaces(ctx, followedConnParams)
+}
+
+func (p *Manager) MkdirAllUserTablespaces(pgUserTablespaces common.UserTablespaces) error {
+	len := len(pgUserTablespaces)
+	if len == 0 {
+		return nil
+	}
+	var err error
+	for _, userDataDir := range pgUserTablespaces {
+		if err = os.MkdirAll(userDataDir, 0700); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (p *Manager) RemoveAllUserTablespaces(pgUserTablespaces common.UserTablespaces) error {
+	initialized, err := p.IsInitialized()
+	if err != nil {
+		return fmt.Errorf("failed to retrieve instance state: %v", err)
+	}
+	started := false
+	if initialized {
+		var err error
+		started, err = p.IsStarted()
+		if err != nil {
+			return fmt.Errorf("failed to retrieve instance state: %v", err)
+		}
+	}
+	if started {
+		return fmt.Errorf("cannot remove postregsql user tablespaces. Instance is active")
+	}
+	len := len(pgUserTablespaces)
+	if len == 0 {
+		return nil
+	}
+
+	for _, userDataDir := range pgUserTablespaces {
+		err = os.RemoveAll(userDataDir)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
