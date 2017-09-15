@@ -22,14 +22,16 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/sorintlab/stolon/common"
+	slog "github.com/sorintlab/stolon/pkg/log"
 
 	_ "github.com/lib/pq"
-	"github.com/uber-go/zap"
+	"github.com/mitchellh/copystructure"
 	"golang.org/x/net/context"
 )
 
@@ -38,16 +40,15 @@ const (
 	tmpPostgresConf = "stolon-temp-postgresql.conf"
 )
 
-var log = zap.New(zap.NullEncoder())
-
-func SetLogger(l zap.Logger) {
-	log = l
-}
+var log = slog.S()
 
 type Manager struct {
 	pgBinPath       string
 	dataDir         string
 	parameters      common.Parameters
+	hba             []string
+	curParameters   common.Parameters
+	curHba          []string
 	localConnParams ConnParams
 	replConnParams  ConnParams
 	suUsername      string
@@ -69,11 +70,18 @@ type TimelineHistory struct {
 	Reason      string
 }
 
-func NewManager(pgBinPath string, dataDir string, parameters common.Parameters, localConnParams, replConnParams ConnParams, suUsername, suPassword, replUsername, replPassword string, requestTimeout time.Duration) *Manager {
+type InitConfig struct {
+	Locale        string
+	Encoding      string
+	DataChecksums bool
+}
+
+func NewManager(pgBinPath string, dataDir string, localConnParams, replConnParams ConnParams, suUsername, suPassword, replUsername, replPassword string, requestTimeout time.Duration) *Manager {
 	return &Manager{
 		pgBinPath:       pgBinPath,
 		dataDir:         filepath.Join(dataDir, "postgres"),
-		parameters:      parameters,
+		parameters:      make(common.Parameters),
+		curParameters:   make(common.Parameters),
 		replConnParams:  replConnParams,
 		localConnParams: localConnParams,
 		suUsername:      suUsername,
@@ -88,11 +96,35 @@ func (p *Manager) SetParameters(parameters common.Parameters) {
 	p.parameters = parameters
 }
 
-func (p *Manager) GetParameters() common.Parameters {
-	return p.parameters
+func (p *Manager) CurParameters() common.Parameters {
+	return p.curParameters
 }
 
-func (p *Manager) Init() error {
+func (p *Manager) SetHba(hba []string) {
+	p.hba = hba
+}
+
+func (p *Manager) CurHba() []string {
+	return p.curHba
+}
+
+func (p *Manager) UpdateCurParameters() {
+	n, err := copystructure.Copy(p.parameters)
+	if err != nil {
+		panic(err)
+	}
+	p.curParameters = n.(common.Parameters)
+}
+
+func (p *Manager) UpdateCurHba() {
+	n, err := copystructure.Copy(p.hba)
+	if err != nil {
+		panic(err)
+	}
+	p.curHba = n.([]string)
+}
+
+func (p *Manager) Init(initConfig *InitConfig) error {
 	// ioutil.Tempfile already creates files with 0600 permissions
 	pwfile, err := ioutil.TempFile("", "pwfile")
 	if err != nil {
@@ -104,13 +136,26 @@ func (p *Manager) Init() error {
 	pwfile.WriteString(p.suPassword)
 
 	name := filepath.Join(p.pgBinPath, "initdb")
-	out, err := exec.Command(name, "-D", p.dataDir, "-U", p.suUsername, "--pwfile", pwfile.Name()).CombinedOutput()
-	if err != nil {
-		err = fmt.Errorf("error: %v, output: %s", err, out)
-		goto out
+	cmd := exec.Command(name, "-D", p.dataDir, "-U", p.suUsername, "--pwfile", pwfile.Name())
+	log.Debugw("execing cmd", "cmd", cmd)
+
+	if initConfig.Locale != "" {
+		cmd.Args = append(cmd.Args, "--locale", initConfig.Locale)
 	}
-	// On every error remove the dataDir, so we don't end with an half initialized database
-out:
+	if initConfig.Encoding != "" {
+		cmd.Args = append(cmd.Args, "--encoding", initConfig.Encoding)
+	}
+	if initConfig.DataChecksums {
+		cmd.Args = append(cmd.Args, "--data-checksums")
+	}
+
+	//Pipe command's std[err|out] to parent.
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err = cmd.Run(); err != nil {
+		err = fmt.Errorf("error: %v", err)
+	}
+	// remove the dataDir, so we don't end with an half initialized database
 	if err != nil {
 		os.RemoveAll(p.dataDir)
 		return err
@@ -120,7 +165,7 @@ out:
 
 func (p *Manager) Restore(command string) error {
 	var err error
-	var output []byte
+	var cmd *exec.Cmd
 
 	command = expand(command, p.dataDir)
 
@@ -128,9 +173,14 @@ func (p *Manager) Restore(command string) error {
 		err = fmt.Errorf("cannot create data dir: %v", err)
 		goto out
 	}
-	output, err = exec.Command("/bin/sh", "-c", command).CombinedOutput()
-	if err != nil {
-		err = fmt.Errorf("error: %v, output: %s", err, output)
+	cmd = exec.Command("/bin/sh", "-c", command)
+	log.Debugw("execing cmd", "cmd", cmd)
+
+	//Pipe command's std[err|out] to parent.
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err = cmd.Run(); err != nil {
+		err = fmt.Errorf("error: %v", err)
 		goto out
 	}
 	// On every error remove the dataDir, so we don't end with an half initialized database
@@ -188,40 +238,49 @@ func (p *Manager) Start() error {
 }
 
 func (p *Manager) start(args ...string) error {
-	log.Info("starting database")
+	log.Infow("starting database")
 	name := filepath.Join(p.pgBinPath, "pg_ctl")
-	args = append([]string{"start", "-w", "-D", p.dataDir, "-o", "-c unix_socket_directories=/tmp"}, args...)
+	args = append([]string{"start", "-w", "--timeout", "60", "-D", p.dataDir, "-o", "-c unix_socket_directories=" + common.PgUnixSocketDirectories}, args...)
 	cmd := exec.Command(name, args...)
-	log.Debug("execing cmd", zap.Object("cmd", cmd))
-	// TODO(sgotti) attaching a pipe to sdtout/stderr makes the postgres
-	// process executed by pg_ctl inheriting it's file descriptors. So
-	// cmd.Wait() will block and waiting on them to be closed (will happend
-	// only when postgres is stopped). So this functions will never return.
-	// To avoid this no output is captured. If needed there's the need to
-	// find a way to get the output whitout blocking.
+	log.Debugw("execing cmd", "cmd", cmd)
+	//Pipe command's std[err|out] to parent.
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("error: %v", err)
+	}
+
+	p.UpdateCurParameters()
+	p.UpdateCurHba()
+
+	// pg_ctl with -w will exit after the timeout and return 0 also if the
+	// instance isn't accepting connection because already in recovery (usually
+	// waiting for wals during a pitr or a pg_rewind)
+	// so a start doesn't mean the instance is ready.
+	return nil
+}
+
+func (p *Manager) Stop(fast bool) error {
+	log.Infow("stopping database")
+	name := filepath.Join(p.pgBinPath, "pg_ctl")
+	cmd := exec.Command(name, "stop", "-w", "-D", p.dataDir, "-o", "-c unix_socket_directories="+common.PgUnixSocketDirectories)
+	if fast {
+		cmd.Args = append(cmd.Args, "-m", "fast")
+	}
+	log.Debugw("execing cmd", "cmd", cmd)
+
+	//Pipe command's std[err|out] to parent.
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("error: %v", err)
 	}
 	return nil
 }
 
-func (p *Manager) Stop(fast bool) error {
-	log.Info("stopping database")
-	name := filepath.Join(p.pgBinPath, "pg_ctl")
-	cmd := exec.Command(name, "stop", "-w", "-D", p.dataDir, "-o", "-c unix_socket_directories=/tmp")
-	if fast {
-		cmd.Args = append(cmd.Args, "-m", "fast")
-	}
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("error: %v, output: %s", err, string(out))
-	}
-	return nil
-}
-
 func (p *Manager) IsStarted() (bool, error) {
 	name := filepath.Join(p.pgBinPath, "pg_ctl")
-	cmd := exec.Command(name, "status", "-w", "-D", p.dataDir, "-o", "-c unix_socket_directories=/tmp")
+	cmd := exec.Command(name, "status", "-w", "-D", p.dataDir, "-o", "-c unix_socket_directories="+common.PgUnixSocketDirectories)
 	_, err := cmd.CombinedOutput()
 	if err != nil {
 		if _, ok := err.(*exec.ExitError); ok {
@@ -236,7 +295,7 @@ func (p *Manager) IsStarted() (bool, error) {
 }
 
 func (p *Manager) Reload() error {
-	log.Info("reloading database configuration")
+	log.Infow("reloading database configuration")
 	if err := p.WriteConf(); err != nil {
 		return fmt.Errorf("error writing conf file: %v", err)
 	}
@@ -244,15 +303,24 @@ func (p *Manager) Reload() error {
 		return fmt.Errorf("error writing conf file: %v", err)
 	}
 	name := filepath.Join(p.pgBinPath, "pg_ctl")
-	cmd := exec.Command(name, "reload", "-D", p.dataDir, "-o", "-c unix_socket_directories=/tmp")
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("error: %v, output: %s", err, string(out))
+	cmd := exec.Command(name, "reload", "-D", p.dataDir, "-o", "-c unix_socket_directories="+common.PgUnixSocketDirectories)
+	log.Debugw("execing cmd", "cmd", cmd)
+
+	//Pipe command's std[err|out] to parent.
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("error: %v", err)
 	}
+
+	p.UpdateCurParameters()
+	p.UpdateCurHba()
+
 	return nil
 }
 
 func (p *Manager) Restart(fast bool) error {
-	log.Info("restarting database")
+	log.Infow("restarting database")
 	if err := p.Stop(fast); err != nil {
 		return err
 	}
@@ -262,12 +330,28 @@ func (p *Manager) Restart(fast bool) error {
 	return nil
 }
 
+func (p *Manager) WaitReady(timeout time.Duration) error {
+	start := time.Now()
+	for time.Now().Add(-timeout).Before(start) {
+		if err := p.Ping(); err == nil {
+			return nil
+		}
+		time.Sleep(1 * time.Second)
+	}
+	return fmt.Errorf("timeout waiting for db ready")
+}
+
 func (p *Manager) Promote() error {
-	log.Info("promoting database")
+	log.Infow("promoting database")
 	name := filepath.Join(p.pgBinPath, "pg_ctl")
 	cmd := exec.Command(name, "promote", "-w", "-D", p.dataDir)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("error: %v, output: %s", err, string(out))
+	log.Debugw("execing cmd", "cmd", cmd)
+
+	//Pipe command's std[err|out] to parent.
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("error: %v", err)
 	}
 	return nil
 }
@@ -277,31 +361,31 @@ func (p *Manager) SetupRoles() error {
 	defer cancel()
 
 	if p.suUsername == p.replUsername {
-		log.Info("adding replication role to superuser")
+		log.Infow("adding replication role to superuser")
 		if err := alterRole(ctx, p.localConnParams, []string{"replication"}, p.suUsername, p.suPassword); err != nil {
 			return fmt.Errorf("error adding replication role to superuser: %v", err)
 		}
-		log.Info("replication role added to superuser")
+		log.Infow("replication role added to superuser")
 	} else {
 		// Configure superuser role password
 		if p.suPassword != "" {
-			log.Info("setting superuser password")
+			log.Infow("setting superuser password")
 			if err := setPassword(ctx, p.localConnParams, p.suUsername, p.suPassword); err != nil {
 				return fmt.Errorf("error setting superuser password: %v", err)
 			}
-			log.Info("superuser password set")
+			log.Infow("superuser password set")
 		}
 		roles := []string{"login", "replication"}
-		log.Info("creating replication role")
+		log.Infow("creating replication role")
 		if err := createRole(ctx, p.localConnParams, roles, p.replUsername, p.replPassword); err != nil {
 			return fmt.Errorf("error creating replication role: %v", err)
 		}
-		log.Info("replication role created", zap.String("role", p.replUsername))
+		log.Infow("replication role created", "role", p.replUsername)
 	}
 	return nil
 }
 
-func (p *Manager) GetReplicatinSlots() ([]string, error) {
+func (p *Manager) GetReplicationSlots() ([]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), p.requestTimeout)
 	defer cancel()
 	return getReplicatinSlots(ctx, p.localConnParams)
@@ -319,17 +403,55 @@ func (p *Manager) DropReplicationSlot(name string) error {
 	return dropReplicationSlot(ctx, p.localConnParams, name)
 }
 
+func (p *Manager) BinaryVersion() (int, int, error) {
+	name := filepath.Join(p.pgBinPath, "postgres")
+	cmd := exec.Command(name, "-V")
+	log.Debugw("execing cmd", "cmd", cmd)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return 0, 0, fmt.Errorf("error: %v, output: %s", err, string(out))
+	}
+
+	return ParseBinaryVersion(string(out))
+}
+
+func (p *Manager) PGDataVersion() (int, int, error) {
+	fh, err := os.Open(filepath.Join(p.dataDir, "PG_VERSION"))
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to read PG_VERSION: %v", err)
+	}
+	defer fh.Close()
+
+	scanner := bufio.NewScanner(fh)
+	scanner.Split(bufio.ScanLines)
+
+	scanner.Scan()
+
+	version := scanner.Text()
+	return ParseVersion(version)
+}
+
 func (p *Manager) IsInitialized() (bool, error) {
 	// List of required files or directories relative to postgres data dir
 	// From https://www.postgresql.org/docs/9.4/static/storage-file-layout.html
 	// with some additions.
 	// TODO(sgotti) when the code to get the current db version is in place
 	// also add additinal files introduced by releases after 9.4.
+	exists, err := fileExists(filepath.Join(p.dataDir, "PG_VERSION"))
+	if err != nil {
+		return false, err
+	}
+	if !exists {
+		return false, nil
+	}
+	maj, _, err := p.PGDataVersion()
+	if err != nil {
+		return false, err
+	}
 	requiredFiles := []string{
 		"PG_VERSION",
 		"base",
 		"global",
-		"pg_clog",
 		"pg_dynshmem",
 		"pg_logical",
 		"pg_multixact",
@@ -342,8 +464,21 @@ func (p *Manager) IsInitialized() (bool, error) {
 		"pg_subtrans",
 		"pg_tblspc",
 		"pg_twophase",
-		"pg_xlog",
 		"global/pg_control",
+	}
+	// in postgres 10 pc_clog has been renamed to pg_xact and pc_xlog has been
+	// renamed to pg_wal
+	if maj < 10 {
+		requiredFiles = append(requiredFiles, []string{
+			"pg_clog",
+			"pg_xlog",
+		}...)
+	} else {
+		requiredFiles = append(requiredFiles, []string{
+			"pg_xact",
+			"pg_wal",
+		}...)
+
 	}
 	for _, f := range requiredFiles {
 		exists, err := fileExists(filepath.Join(p.dataDir, f))
@@ -375,10 +510,8 @@ func (p *Manager) GetRole() (common.Role, error) {
 }
 
 func (p *Manager) GetPrimaryConninfo() (ConnParams, error) {
-	regex, err := regexp.Compile(`\s*primary_conninfo\s*=\s*'(.*)'$`)
-	if err != nil {
-		return nil, err
-	}
+	regex := regexp.MustCompile(`\s*primary_conninfo\s*=\s*'(.*)'$`)
+
 	fh, err := os.Open(filepath.Join(p.dataDir, "recovery.conf"))
 	if os.IsNotExist(err) {
 		return nil, nil
@@ -397,11 +530,30 @@ func (p *Manager) GetPrimaryConninfo() (ConnParams, error) {
 	return nil, nil
 }
 
-func (p *Manager) HasConnParams() (bool, error) {
-	regex, err := regexp.Compile(`primary_conninfo`)
-	if err != nil {
-		return false, err
+func (p *Manager) GetPrimarySlotName() (string, error) {
+	regex := regexp.MustCompile(`\s*primary_slot_name\s*=\s*'(.*)'$`)
+
+	fh, err := os.Open(filepath.Join(p.dataDir, "recovery.conf"))
+	if os.IsNotExist(err) {
+		return "", nil
 	}
+	defer fh.Close()
+
+	scanner := bufio.NewScanner(fh)
+	scanner.Split(bufio.ScanLines)
+
+	for scanner.Scan() {
+		m := regex.FindStringSubmatch(scanner.Text())
+		if len(m) == 2 {
+			return m[1], nil
+		}
+	}
+	return "", nil
+}
+
+func (p *Manager) HasConnParams() (bool, error) {
+	regex := regexp.MustCompile(`primary_conninfo`)
+
 	fh, err := os.Open(filepath.Join(p.dataDir, "recovery.conf"))
 	if os.IsNotExist(err) {
 		return false, nil
@@ -475,13 +627,33 @@ func (p *Manager) writePgHba() error {
 	}
 	defer f.Close()
 
-	f.WriteString("local all all md5\n")
-	// TODO(sgotti) Do not set this but let the user provide its pg_hba.conf file/entries
-	f.WriteString("host all all 0.0.0.0/0 md5\n")
-	f.WriteString("host all all ::0/0 md5\n")
+	// Minimal entries for local normal and replication connections needed by the stolon keeper
+	// Matched local connections are for postgres database and suUsername user with md5 auth
+	// Matched local replicaton connections are for replUsername user with md5 auth
+	f.WriteString(fmt.Sprintf("local postgres %s md5\n", p.suUsername))
+	f.WriteString(fmt.Sprintf("local replication %s md5\n", p.replUsername))
+
+	// By default accept all connections for the superuser suUsername with md5 auth
+	// Used for pg_rewind resyncronization
+	// TODO(sgotti) Configure this dynamically based on our followers provided by the clusterview
+	f.WriteString(fmt.Sprintf("host all %s %s md5\n", p.suUsername, "0.0.0.0/0"))
+	f.WriteString(fmt.Sprintf("host all %s %s md5\n", p.suUsername, "::0/0"))
+
+	// By default accept all replication connections for the replication user with md5 auth
 	// TODO(sgotti) Configure this dynamically based on our followers provided by the clusterview
 	f.WriteString(fmt.Sprintf("host replication %s %s md5\n", p.replUsername, "0.0.0.0/0"))
 	f.WriteString(fmt.Sprintf("host replication %s %s md5\n", p.replUsername, "::0/0"))
+
+	if p.hba != nil {
+		for _, e := range p.hba {
+			f.WriteString(e + "\n")
+		}
+	} else {
+		// By default, if no custom pg_hba entries are provided, accept
+		// connections for all databases and users with md5 auth
+		f.WriteString("host all all 0.0.0.0/0 md5\n")
+		f.WriteString("host all all ::0/0 md5\n")
+	}
 
 	if err = os.Rename(f.Name(), filepath.Join(p.dataDir, "pg_hba.conf")); err != nil {
 		os.Remove(f.Name())
@@ -510,16 +682,18 @@ func (p *Manager) SyncFromFollowedPGRewind(followedConnParams ConnParams, passwo
 	followedConnParams.Set("options", "-c synchronous_commit=off")
 	followedConnString := followedConnParams.ConnString()
 
-	log.Info("running pg_rewind")
+	log.Infow("running pg_rewind")
 	name := filepath.Join(p.pgBinPath, "pg_rewind")
 	cmd := exec.Command(name, "--debug", "-D", p.dataDir, "--source-server="+followedConnString)
-	cmd.Env = append(cmd.Env, fmt.Sprintf("PGPASSFILE=%s", pgpass.Name()))
-	log.Debug("execing cmd", zap.Object("cmd", cmd))
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("error: %v, output: %s", err, string(out))
+	cmd.Env = append(os.Environ(), fmt.Sprintf("PGPASSFILE=%s", pgpass.Name()))
+	log.Debugw("execing cmd", "cmd", cmd)
+
+	//Pipe command's std[err|out] to parent.
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("error: %v", err)
 	}
-	log.Debug("cmd out", zap.String("out", string(out)))
 	return nil
 }
 
@@ -549,13 +723,17 @@ func (p *Manager) SyncFromFollowed(followedConnParams ConnParams) error {
 	fcp.Set("options", "-c synchronous_commit=off")
 	followedConnString := fcp.ConnString()
 
-	log.Info("running pg_basebackup")
+	log.Infow("running pg_basebackup")
 	name := filepath.Join(p.pgBinPath, "pg_basebackup")
-	cmd := exec.Command(name, "-R", "-D", p.dataDir, "-d", followedConnString)
-	cmd.Env = append(cmd.Env, fmt.Sprintf("PGPASSFILE=%s", pgpass.Name()))
-	log.Debug("execing cmd", zap.Object("cmd", cmd))
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("error: %v, output: %s", err, string(out))
+	cmd := exec.Command(name, "-R", "-Xf", "-D", p.dataDir, "-d", followedConnString)
+	cmd.Env = append(os.Environ(), fmt.Sprintf("PGPASSFILE=%s", pgpass.Name()))
+	log.Debugw("execing cmd", "cmd", cmd)
+
+	//Pipe command's std[err|out] to parent.
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("error: %v", err)
 	}
 	return nil
 }
@@ -595,4 +773,51 @@ func (p *Manager) GetConfigFilePGParameters() (common.Parameters, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), p.requestTimeout)
 	defer cancel()
 	return getConfigFilePGParameters(ctx, p.localConnParams)
+}
+
+func (p *Manager) Ping() error {
+	ctx, cancel := context.WithTimeout(context.Background(), p.requestTimeout)
+	defer cancel()
+	return ping(ctx, p.localConnParams)
+}
+
+func (p *Manager) OlderWalFile() (string, error) {
+	maj, _, err := p.PGDataVersion()
+	if err != nil {
+		return "", err
+	}
+	var walDir string
+	if maj < 10 {
+		walDir = "pg_xlog"
+	} else {
+		walDir = "pg_wal"
+	}
+
+	f, err := os.Open(filepath.Join(p.dataDir, walDir))
+	if err != nil {
+		return "", err
+	}
+	names, err := f.Readdirnames(-1)
+	f.Close()
+	if err != nil {
+		return "", err
+	}
+	sort.Strings(names)
+
+	for _, name := range names {
+		if IsWalFileName(name) {
+			fi, err := os.Stat(filepath.Join(p.dataDir, walDir, name))
+			if err != nil {
+				return "", err
+			}
+			// if the file size is different from the currently supported one
+			// (16Mib) return without checking other possible wal files
+			if fi.Size() != WalSegSize {
+				return "", fmt.Errorf("wal file has unsupported size: %d", fi.Size())
+			}
+			return name, nil
+		}
+	}
+
+	return "", nil
 }

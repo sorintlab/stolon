@@ -5,11 +5,11 @@ Here you can find some examples on running stolon inside kubernetes
 There're two examples. The difference between them is how the keepers pods are deployed (the definitions of the other components is identical):
 
 * Using a [statefulset](statefulset) (called `petset` in k8s 1.4)
-* Using [replication controllers](rc) (one per keeper).
+* **DEPRECATED** Using [replication controllers](rc) (one per keeper).
 
 ## Docker image
 
-Prebuilt images are available on the dockerhub, the images' tags are the stolon release version plus the postgresql version (for example v0.5.0-pg9.6). Additional images are available:
+Prebuilt images are available on the dockerhub, the images' tags are the stolon release version plus the postgresql version (for example v0.6.0-pg9.6). Additional images are available:
 
 * `latest-pg9.6`: latest released image (for stolon versions >= v0.5.0).
 * `master-pg9.6`: automatically built after every commit to the master branch.
@@ -24,4 +24,4 @@ make PGVERSION=9.6 TAG=stolon:master-pg9.6
 
 Once the image is built you should push it to the docker registry used by your kubernetes infrastructure.
 
-The provided example uses `sorintlab/stolon:master-pg9.6` 
+The provided example uses `sorintlab/stolon:master-pg9.6`

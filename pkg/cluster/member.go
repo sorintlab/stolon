@@ -88,13 +88,16 @@ type PostgresState struct {
 	ListenAddress string `json:"listenAddress,omitempty"`
 	Port          string `json:"port,omitempty"`
 
-	Healthy             bool                     `json:"healthy,omitempty"`
-	SystemID            string                   `json:"systemID,omitempty"`
-	TimelineID          uint64                   `json:"timelineID,omitempty"`
-	XLogPos             uint64                   `json:"xLogPos,omitempty"`
-	TimelinesHistory    PostgresTimelinesHistory `json:"timelinesHistory,omitempty"`
-	PGParameters        common.Parameters        `json:"pgParameters,omitempty"`
-	SynchronousStandbys []string                 `json:"synchronousStandbys"`
+	Healthy bool `json:"healthy,omitempty"`
+
+	SystemID         string                   `json:"systemID,omitempty"`
+	TimelineID       uint64                   `json:"timelineID,omitempty"`
+	XLogPos          uint64                   `json:"xLogPos,omitempty"`
+	TimelinesHistory PostgresTimelinesHistory `json:"timelinesHistory,omitempty"`
+
+	PGParameters        common.Parameters `json:"pgParameters,omitempty"`
+	SynchronousStandbys []string          `json:"synchronousStandbys"`
+	OlderWalFile        string            `json:"olderWalFile,omitempty"`
 }
 
 func (p *PostgresState) DeepCopy() *PostgresState {
@@ -128,7 +131,6 @@ func (p ProxiesInfo) Less(i, j int) bool { return p[i].UID < p[j].UID }
 func (p ProxiesInfo) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 
 type ProxyInfo struct {
-	UID             string
-	ProxyUID        string
-	ProxyGeneration int64
+	UID        string
+	Generation int64
 }

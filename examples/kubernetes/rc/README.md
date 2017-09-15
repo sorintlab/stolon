@@ -1,5 +1,7 @@
 # Stolon inside kubernetes
 
+**DEPRECATED EXAMPLE**: Please use the [statefulset](../statefulset/README.md) example. Using persistent volumes with replication controller/replica sets won't guarantee at most once pod existence and can lead to data corruption with some persistent volume kind that can end attached in rw mode to more than one node at a time.
+
 This is a simple example that uses replication controller for all stolon components.
 
 Since the keeper requires a persistent data directory we define a replication controller with replicas=1 for each keeper. The keeper id is fixed inside the pod template definition so it won't be generated as a unique id but will have a more meaningful name (`keeper0`, `keeper1` etc...).

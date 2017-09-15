@@ -24,9 +24,15 @@ import (
 
 	"github.com/sorintlab/stolon/common"
 
+	"os"
+
 	_ "github.com/lib/pq"
 	"golang.org/x/net/context"
-	"os"
+)
+
+const (
+	// TODO(sgotti) for now we assume wal size is the default 16MiB size
+	WalSegSize = (16 * 1024 * 1024) // 16MiB
 )
 
 var (
@@ -75,7 +81,7 @@ func query(ctx context.Context, db *sql.DB, query string, args ...interface{}) (
 	}
 }
 
-func checkDBStatus(ctx context.Context, connParams ConnParams) error {
+func ping(ctx context.Context, connParams ConnParams) error {
 	db, err := sql.Open("postgres", connParams.ConnString())
 	if err != nil {
 		return err
@@ -192,28 +198,6 @@ func getRole(ctx context.Context, connParams ConnParams) (common.Role, error) {
 		return common.RoleMaster, nil
 	}
 	return "", fmt.Errorf("no rows returned")
-}
-
-func getPGMasterLocation(ctx context.Context, connParams ConnParams) (uint64, error) {
-	db, err := sql.Open("postgres", connParams.ConnString())
-	if err != nil {
-		return 0, err
-	}
-	defer db.Close()
-
-	rows, err := query(ctx, db, "select pg_current_xlog_location() - '0/0000000'")
-	if err != nil {
-		return 0, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var location uint64
-		if err := rows.Scan(&location); err != nil {
-			return 0, err
-		}
-		return location, nil
-	}
-	return 0, fmt.Errorf("no rows returned")
 }
 
 func pgLsnToInt(lsn string) (uint64, error) {
@@ -381,7 +365,11 @@ func getConfigFilePGParameters(ctx context.Context, connParams ConnParams) (comm
 	}
 
 	if use_pg_file_settings {
-		rows, err = query(ctx, db, "select name, setting from pg_file_settings")
+		// NOTE If some pg_parameters that cannot be changed without a restart
+		// are removed from the postgresql.conf file the view will contain some
+		// rows with null name and setting and the error field set to the cause.
+		// So we have to filter out these or the Scan will fail.
+		rows, err = query(ctx, db, "select name, setting from pg_file_settings where name IS NOT NULL and setting IS NOT NULL")
 		if err != nil {
 			return nil, err
 		}
@@ -412,4 +400,71 @@ func getConfigFilePGParameters(ctx context.Context, connParams ConnParams) (comm
 		}
 	}
 	return pgParameters, nil
+}
+
+func ParseBinaryVersion(v string) (int, int, error) {
+	// extact version (removing beta*, rc* etc...)
+	regex, err := regexp.Compile(`.* \(PostgreSQL\) ([0-9\.]+).*$`)
+	if err != nil {
+		return 0, 0, err
+	}
+	m := regex.FindStringSubmatch(v)
+	if len(m) != 2 {
+		return 0, 0, fmt.Errorf("failed to parse postgres binary version: %q", v)
+	}
+	return ParseVersion(m[1])
+}
+
+func ParseVersion(v string) (int, int, error) {
+	parts := strings.Split(v, ".")
+	if len(parts) < 1 {
+		return 0, 0, fmt.Errorf("bad version: %q", v)
+	}
+	maj, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to parse major %q: %v", parts[0], err)
+	}
+	min := 0
+	if len(parts) > 1 {
+		min, err = strconv.Atoi(parts[1])
+		if err != nil {
+			return 0, 0, fmt.Errorf("failed to parse minor %q: %v", parts[1], err)
+		}
+	}
+
+	return maj, min, nil
+}
+
+func IsWalFileName(name string) bool {
+	walChars := "0123456789ABCDEF"
+	if len(name) != 24 {
+		return false
+	}
+	for _, c := range name {
+		ok := false
+		for _, v := range walChars {
+			if c == v {
+				ok = true
+			}
+		}
+		if !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func XlogPosToWalFileNameNoTimeline(XLogPos uint64) string {
+	id := uint32(XLogPos >> 32)
+	offset := uint32(XLogPos)
+	// TODO(sgotti) for now we assume wal size is the default 16M size
+	seg := offset / WalSegSize
+	return fmt.Sprintf("%08X%08X", id, seg)
+}
+
+func WalFileNameNoTimeLine(name string) (string, error) {
+	if !IsWalFileName(name) {
+		return "", fmt.Errorf("bad wal file name")
+	}
+	return name[8:24], nil
 }

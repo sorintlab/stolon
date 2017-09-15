@@ -25,6 +25,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"sort"
 	"strconv"
 	"sync"
@@ -35,6 +36,7 @@ import (
 	"github.com/sorintlab/stolon/pkg/cluster"
 	pg "github.com/sorintlab/stolon/pkg/postgresql"
 	"github.com/sorintlab/stolon/pkg/store"
+	"github.com/sorintlab/stolon/pkg/util"
 
 	kvstore "github.com/docker/libkv/store"
 	_ "github.com/lib/pq"
@@ -49,8 +51,47 @@ const (
 	MaxPort = 16384
 )
 
+var (
+	defaultPGParameters = cluster.PGParameters{"log_destination": "stderr", "logging_collector": "false"}
+)
+
 var curPort = MinPort
 var portMutex = sync.Mutex{}
+
+func pgParametersWithDefaults(p cluster.PGParameters) cluster.PGParameters {
+	pd := cluster.PGParameters{}
+	for k, v := range defaultPGParameters {
+		pd[k] = v
+	}
+	for k, v := range p {
+		pd[k] = v
+	}
+	return pd
+}
+
+type Querier interface {
+	Exec(query string, args ...interface{}) (sql.Result, error)
+	Query(query string, args ...interface{}) (*sql.Rows, error)
+}
+
+func GetPGParameters(q Querier) (common.Parameters, error) {
+	var pgParameters = common.Parameters{}
+	rows, err := q.Query("select name, setting, source from pg_settings")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name, setting, source string
+		if err = rows.Scan(&name, &setting, &source); err != nil {
+			return nil, err
+		}
+		if source == "configuration file" {
+			pgParameters[name] = setting
+		}
+	}
+	return pgParameters, nil
+}
 
 type Process struct {
 	t    *testing.T
@@ -228,6 +269,43 @@ func NewTestKeeper(t *testing.T, dir, clusterName, pgSUUsername, pgSUPassword, p
 	return NewTestKeeperWithID(t, dir, uid, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, storeBackend, storeEndpoints, a...)
 }
 
+func (tk *TestKeeper) PGDataVersion() (int, int, error) {
+	fh, err := os.Open(filepath.Join(tk.dataDir, "postgres", "PG_VERSION"))
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to read PG_VERSION: %v", err)
+	}
+	defer fh.Close()
+
+	scanner := bufio.NewScanner(fh)
+	scanner.Split(bufio.ScanLines)
+
+	scanner.Scan()
+
+	version := scanner.Text()
+	return pg.ParseVersion(version)
+}
+
+func (tk *TestKeeper) GetPrimaryConninfo() (pg.ConnParams, error) {
+	regex := regexp.MustCompile(`\s*primary_conninfo\s*=\s*'(.*)'$`)
+
+	fh, err := os.Open(filepath.Join(tk.dataDir, "postgres", "recovery.conf"))
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	defer fh.Close()
+
+	scanner := bufio.NewScanner(fh)
+	scanner.Split(bufio.ScanLines)
+
+	for scanner.Scan() {
+		m := regex.FindStringSubmatch(scanner.Text())
+		if len(m) == 2 {
+			return pg.ParseConnString(m[1])
+		}
+	}
+	return nil, nil
+}
+
 func (tk *TestKeeper) Exec(query string, args ...interface{}) (sql.Result, error) {
 	res, err := tk.db.Exec(query, args...)
 	if err != nil {
@@ -244,6 +322,35 @@ func (tk *TestKeeper) Query(query string, args ...interface{}) (*sql.Rows, error
 	}
 
 	return res, nil
+}
+
+func (tk *TestKeeper) SwitchWals(times int) error {
+	maj, _, err := tk.PGDataVersion()
+	if err != nil {
+		return err
+	}
+	var switchLogFunc string
+	if maj < 10 {
+		switchLogFunc = "select pg_switch_xlog()"
+	} else {
+		switchLogFunc = "select pg_switch_wal()"
+	}
+
+	tk.Exec("DROP TABLE switchwal")
+	if _, err := tk.Exec("CREATE TABLE switchwal(ID INT PRIMARY KEY NOT NULL)"); err != nil {
+		return err
+	}
+	// if times > 1 we have to do some transactions or the wal won't switch
+	for i := 0; i < times; i++ {
+		if _, err := tk.Exec("INSERT INTO switchwal VALUES ($1)", i); err != nil {
+			return err
+		}
+		if _, err := tk.db.Exec(switchLogFunc); err != nil {
+			return err
+		}
+	}
+	tk.Exec("DROP TABLE switchwal")
+	return nil
 }
 
 func (tk *TestKeeper) WaitDBUp(timeout time.Duration) error {
@@ -299,7 +406,7 @@ func (tk *TestKeeper) SignalPG(sig os.Signal) error {
 	return p.Signal(sig)
 }
 
-func (tk *TestKeeper) IsMaster() (bool, error) {
+func (tk *TestKeeper) isInRecovery() (bool, error) {
 	rows, err := tk.Query("SELECT pg_is_in_recovery from pg_is_in_recovery()")
 	if err != nil {
 		return false, err
@@ -310,7 +417,7 @@ func (tk *TestKeeper) IsMaster() (bool, error) {
 		if err := rows.Scan(&isInRecovery); err != nil {
 			return false, err
 		}
-		if !isInRecovery {
+		if isInRecovery {
 			return true, nil
 		}
 		return false, nil
@@ -318,19 +425,48 @@ func (tk *TestKeeper) IsMaster() (bool, error) {
 	return false, fmt.Errorf("no rows returned")
 }
 
-func (tk *TestKeeper) WaitRole(r common.Role, timeout time.Duration) error {
+func (tk *TestKeeper) WaitDBRole(r common.Role, ptk *TestKeeper, timeout time.Duration) error {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
 		time.Sleep(sleepInterval)
-		ok, err := tk.IsMaster()
-		if err != nil {
-			continue
-		}
-		if ok && r == common.RoleMaster {
-			return nil
-		}
-		if !ok && r == common.RoleStandby {
-			return nil
+		// when the cluster is in standby mode also the master db is a standby
+		// so we cannot just check if the keeper is in recovery but have to
+		// check if the primary_conninfo points to the primary db or to the
+		// cluster master
+		if ptk == nil {
+			ok, err := tk.isInRecovery()
+			if err != nil {
+				continue
+			}
+			if !ok && r == common.RoleMaster {
+				return nil
+			}
+			if ok && r == common.RoleStandby {
+				return nil
+			}
+		} else {
+			ok, err := tk.isInRecovery()
+			if err != nil {
+				continue
+			}
+			if !ok {
+				continue
+			}
+			// TODO(sgotti) get this information from the running instance instead than from
+			// recovery.conf to be really sure it's applied
+			conninfo, err := tk.GetPrimaryConninfo()
+			if err != nil {
+				continue
+			}
+			if conninfo["host"] == ptk.pgListenAddress && conninfo["port"] == ptk.pgPort {
+				if r == common.RoleMaster {
+					return nil
+				}
+			} else {
+				if r == common.RoleStandby {
+					return nil
+				}
+			}
 		}
 	}
 
@@ -338,22 +474,7 @@ func (tk *TestKeeper) WaitRole(r common.Role, timeout time.Duration) error {
 }
 
 func (tk *TestKeeper) GetPGParameters() (common.Parameters, error) {
-	var pgParameters = common.Parameters{}
-	rows, err := tk.Query("select name, setting, source from pg_settings")
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var name, setting, source string
-		if err = rows.Scan(&name, &setting, &source); err != nil {
-			return nil, err
-		}
-		if source == "configuration file" {
-			pgParameters[name] = setting
-		}
-	}
-	return pgParameters, nil
+	return GetPGParameters(tk)
 }
 
 type CheckFunc func(time.Duration) error
@@ -418,9 +539,10 @@ type TestProxy struct {
 	Process
 	listenAddress string
 	port          string
+	db            *sql.DB
 }
 
-func NewTestProxy(t *testing.T, dir string, clusterName string, storeBackend store.Backend, storeEndpoints string, a ...string) (*TestProxy, error) {
+func NewTestProxy(t *testing.T, dir string, clusterName, pgSUUsername, pgSUPassword string, storeBackend store.Backend, storeEndpoints string, a ...string) (*TestProxy, error) {
 	u := uuid.NewV4()
 	uid := fmt.Sprintf("%x", u[:4])
 
@@ -440,6 +562,21 @@ func NewTestProxy(t *testing.T, dir string, clusterName string, storeBackend sto
 	}
 	args = append(args, a...)
 
+	connParams := pg.ConnParams{
+		"user":     pgSUUsername,
+		"password": pgSUPassword,
+		"host":     listenAddress,
+		"port":     port,
+		"dbname":   "postgres",
+		"sslmode":  "disable",
+	}
+
+	connString := connParams.ConnString()
+	db, err := sql.Open("postgres", connString)
+	if err != nil {
+		return nil, err
+	}
+
 	bin := os.Getenv("STPROXY_BIN")
 	if bin == "" {
 		return nil, fmt.Errorf("missing STPROXY_BIN env")
@@ -455,6 +592,7 @@ func NewTestProxy(t *testing.T, dir string, clusterName string, storeBackend sto
 		},
 		listenAddress: listenAddress,
 		port:          port,
+		db:            db,
 	}
 	return tp, nil
 }
@@ -472,6 +610,13 @@ func (tp *TestProxy) WaitListening(timeout time.Duration) error {
 	return fmt.Errorf("timeout")
 }
 
+func (tp *TestProxy) CheckListening() bool {
+	_, err := net.Dial("tcp", net.JoinHostPort(tp.listenAddress, tp.port))
+	if err != nil {
+		return false
+	}
+	return true
+}
 func (tp *TestProxy) WaitNotListening(timeout time.Duration) error {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
@@ -480,6 +625,44 @@ func (tp *TestProxy) WaitNotListening(timeout time.Duration) error {
 			return nil
 		}
 		tp.t.Logf("tp: %v, error: %v", tp.uid, err)
+		time.Sleep(sleepInterval)
+	}
+	return fmt.Errorf("timeout")
+}
+
+func (tp *TestProxy) Exec(query string, args ...interface{}) (sql.Result, error) {
+	res, err := tp.db.Exec(query, args...)
+	if err != nil {
+		return nil, err
+	}
+
+	return res, nil
+}
+
+func (tp *TestProxy) Query(query string, args ...interface{}) (*sql.Rows, error) {
+	res, err := tp.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+
+	return res, nil
+}
+
+func (tp *TestProxy) GetPGParameters() (common.Parameters, error) {
+	return GetPGParameters(tp)
+}
+
+func (tp *TestProxy) WaitRightMaster(tk *TestKeeper, timeout time.Duration) error {
+	start := time.Now()
+	for time.Now().Add(-timeout).Before(start) {
+		pgParameters, err := GetPGParameters(tp)
+		if err != nil {
+			goto end
+		}
+		if pgParameters["port"] == tk.pgPort {
+			return nil
+		}
+	end:
 		time.Sleep(sleepInterval)
 	}
 	return fmt.Errorf("timeout")
@@ -524,7 +707,7 @@ func NewTestEtcd(t *testing.T, dir string, a ...string) (*TestStore, error) {
 	u := uuid.NewV4()
 	uid := fmt.Sprintf("%x", u[:4])
 
-	dataDir := filepath.Join(dir, "etcd")
+	dataDir := filepath.Join(dir, fmt.Sprintf("etcd%s", uid))
 
 	listenAddress, port, err := getFreePort(true, false)
 	if err != nil {
@@ -581,7 +764,7 @@ func NewTestConsul(t *testing.T, dir string, a ...string) (*TestStore, error) {
 	u := uuid.NewV4()
 	uid := fmt.Sprintf("%x", u[:4])
 
-	dataDir := filepath.Join(dir, "consul")
+	dataDir := filepath.Join(dir, fmt.Sprintf("consul%s", uid))
 
 	listenAddress, portHTTP, err := getFreePort(true, false)
 	if err != nil {
@@ -749,8 +932,8 @@ func WaitClusterDataKeeperInitialized(keeperUID string, e *store.StoreManager, t
 }
 
 // WaitClusterDataSynchronousStandbys waits for:
-// * synchrnous standby defined in masterdb spec
-// * synchrnous standby reported from masterdb status
+// * synchronous standby defined in masterdb spec
+// * synchronous standby reported from masterdb status
 func WaitClusterDataSynchronousStandbys(synchronousStandbys []string, e *store.StoreManager, timeout time.Duration) error {
 	sort.Sort(sort.StringSlice(synchronousStandbys))
 	start := time.Now()
@@ -848,16 +1031,78 @@ func WaitStandbyKeeper(e *store.StoreManager, keeperUID string, timeout time.Dur
 	return fmt.Errorf("timeout")
 }
 
+func WaitClusterDataKeepers(keepersUIDs []string, e *store.StoreManager, timeout time.Duration) error {
+	start := time.Now()
+	for time.Now().Add(-timeout).Before(start) {
+		cd, _, err := e.GetClusterData()
+		if err != nil || cd == nil {
+			goto end
+		}
+		if len(keepersUIDs) != len(cd.Keepers) {
+			goto end
+		}
+		// Check for db on keeper to be initialized
+		for _, keeper := range cd.Keepers {
+			if !util.StringInSlice(keepersUIDs, keeper.UID) {
+				goto end
+			}
+		}
+		return nil
+	end:
+		time.Sleep(sleepInterval)
+	}
+	return fmt.Errorf("timeout")
+}
+
+// WaitClusterSyncedXLogPos waits for all the specified keepers to have the same
+// reported XLogPos
+func WaitClusterSyncedXLogPos(keepersUIDs []string, e *store.StoreManager, timeout time.Duration) error {
+	start := time.Now()
+	for time.Now().Add(-timeout).Before(start) {
+		c := 0
+		curXLogPos := uint64(0)
+		cd, _, err := e.GetClusterData()
+		if err != nil || cd == nil {
+			goto end
+		}
+		// Check for db on keeper to be initialized
+		for _, keeper := range cd.Keepers {
+			if !util.StringInSlice(keepersUIDs, keeper.UID) {
+				continue
+			}
+			for _, db := range cd.DBs {
+				if db.Spec.KeeperUID == keeper.UID {
+					if c == 0 {
+						curXLogPos = db.Status.XLogPos
+					} else {
+						if db.Status.XLogPos != curXLogPos {
+							goto end
+						}
+					}
+				}
+			}
+			c++
+		}
+		if c == len(keepersUIDs) {
+			return nil
+		}
+	end:
+		time.Sleep(sleepInterval)
+	}
+	return fmt.Errorf("timeout")
+}
+
 func testFreeTCPPort(port int) error {
-	ln, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", curPort))
+	ln, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", port))
 	if err != nil {
 		return err
 	}
 	ln.Close()
 	return nil
 }
+
 func testFreeUDPPort(port int) error {
-	ln, err := net.ListenPacket("udp", fmt.Sprintf("localhost:%d", curPort))
+	ln, err := net.ListenPacket("udp", fmt.Sprintf("localhost:%d", port))
 	if err != nil {
 		return err
 	}

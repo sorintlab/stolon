@@ -12,16 +12,4 @@ stolonctl [cluster options] update --patch '{ "usePgrewind" : true }'
 
 This will also enable the `wal_log_hints` postgresql parameter. If previously `wal_log_hints` wasn't enabled you should restart the postgresql instances (you can do so restarting the `stolon-keeper`)
 
-pg_rewind needs to connect to the master database with a superuser role.
-Currently only password authentication is supported. In future different authentication mechanism will be added.
-
-* It'll use the superuser role provided with `--pg-su-username` (if not specified it'll default to the os user name running the stolon-keeper). This superuser role (if not existing) needs to be created on the master database.
-* The superuser credentials need to be provided to the `stolon-keeper`.
-
-To avoid security problems (superuser credential cannot be globally defined in the cluster specification since currently it can be read by anyone accessing the cluster store) you have to set the superuser name and password when executing the `stolon-keeper`:
-* Providing the `--pg-su-username` and `--pg-su-passwordfile` (preferred) or `--pg-su-password` options (discouraged since every user accessing the system can read the password with a simple `ps`)
-* Exporting the `STKEEPER_PG_SU_USERNAME` and `STKEEPER_PG_SU_PASSWORD` environment variables.
-
-
-
-
+pg_rewind needs to connect to the master database with a superuser role (see the [Stolon Architecture and Requirements](architecture.md)).

@@ -1,9 +1,5 @@
 package: github.com/sorintlab/stolon
 import:
-- package: github.com/coreos/rkt
-  version: v1.16.0
-  subpackages:
-  - pkg/lock
 - package: github.com/davecgh/go-spew
   version: 6d212800a42e8ab5c146b8ace3490ee17e5225f9
   subpackages:
@@ -54,5 +50,5 @@ import:
   - api
 - package: github.com/mitchellh/copystructure
   version: 5af94aef99f597e6a9e1f6ac6be6ce0f3c96b49d
-- package: github.com/uber-go/zap
-  version: 9c9a580ac83fe7208a472eb27262817825ddcd77
+- package: go.uber.org/zap
+  version: v1.4.1

@@ -16,19 +16,21 @@ package cluster
 
 import (
 	"encoding/json"
+	"fmt"
 	"reflect"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/sorintlab/stolon/common"
 
-	"fmt"
-	"sort"
-
 	"github.com/mitchellh/copystructure"
 )
 
 func Uint16P(u uint16) *uint16 {
+	return &u
+}
+func Uint32P(u uint32) *uint32 {
 	return &u
 }
 
@@ -41,22 +43,28 @@ const (
 )
 
 const (
-	DefaultProxyCheckInterval = 5 * time.Second
+	DefaultProxyCheckInterval   = 5 * time.Second
+	DefaultProxyTimeoutInterval = 15 * time.Second
 
-	DefaultSleepInterval                      = 5 * time.Second
-	DefaultRequestTimeout                     = 10 * time.Second
-	DefaultConvergenceTimeout                 = 30 * time.Second
-	DefaultInitTimeout                        = 5 * time.Minute
-	DefaultSyncTimeout                        = 30 * time.Minute
-	DefaultFailInterval                       = 20 * time.Second
-	DefaultMaxStandbys            uint16      = 20
-	DefaultMaxStandbysPerSender   uint16      = 3
-	DefaultSynchronousReplication             = false
-	DefaultMaxSynchronousStandbys uint16      = 1
-	DefaultMinSynchronousStandbys uint16      = 1
-	DefaultUsePgrewind                        = false
-	DefaultMergePGParameter                   = true
-	DefaultRole                   ClusterRole = ClusterRoleMaster
+	DefaultDBNotIncreasingXLogPosTimes = 10
+
+	DefaultSleepInterval                         = 5 * time.Second
+	DefaultRequestTimeout                        = 10 * time.Second
+	DefaultConvergenceTimeout                    = 30 * time.Second
+	DefaultInitTimeout                           = 5 * time.Minute
+	DefaultSyncTimeout                           = 30 * time.Minute
+	DefaultFailInterval                          = 20 * time.Second
+	DefaultDeadKeeperRemovalInterval             = 48 * time.Hour
+	DefaultMaxStandbys               uint16      = 20
+	DefaultMaxStandbysPerSender      uint16      = 3
+	DefaultMaxStandbyLag                         = 1024 * 1204
+	DefaultSynchronousReplication                = false
+	DefaultMinSynchronousStandbys    uint16      = 1
+	DefaultMaxSynchronousStandbys    uint16      = 1
+	DefaultAdditionalWalSenders                  = 5
+	DefaultUsePgrewind                           = false
+	DefaultMergePGParameter                      = true
+	DefaultRole                      ClusterRole = ClusterRoleMaster
 )
 
 const (
@@ -100,15 +108,19 @@ const (
 type ClusterInitMode string
 
 const (
-	// Initialize a cluster starting from a freshly initialized database cluster
+	// Initialize a cluster starting from a freshly initialized database cluster. Valid only when cluster role is master.
 	ClusterInitModeNew ClusterInitMode = "new"
-	// Initialize a cluster doing a point in time recovery on a keeper. The other keepers will sync with it.
+	// Initialize a cluster doing a point in time recovery on a keeper.
 	ClusterInitModePITR ClusterInitMode = "pitr"
-	// Initialize a cluster with an user specified already populated db cluster. The other keepers will sync with it.
+	// Initialize a cluster with an user specified already populated db cluster.
 	ClusterInitModeExisting ClusterInitMode = "existing"
 )
 
 func ClusterInitModeP(s ClusterInitMode) *ClusterInitMode {
+	return &s
+}
+
+func ClusterRoleP(s ClusterRole) *ClusterRole {
 	return &s
 }
 
@@ -125,6 +137,12 @@ const (
 	// Initialize a db doing a resync to a target database cluster
 	DBInitModeResync DBInitMode = "resync"
 )
+
+type NewConfig struct {
+	Locale        string `json:"locale,omitempty"`
+	Encoding      string `json:"encoding,omitempty"`
+	DataChecksums bool   `json:"dataChecksums,omitempty"`
+}
 
 type PITRConfig struct {
 	// DataRestoreCommand defines the command to execute for restoring the db
@@ -143,12 +161,16 @@ type ExistingConfig struct {
 type ArchiveRecoverySettings struct {
 	// value for restore_command
 	RestoreCommand string `json:"restoreCommand,omitempty"`
-	//TODO(sgotti) add missing options
 }
 
 // RecoveryTargetSettings defines the recovery target settings in the recovery.conf file (https://www.postgresql.org/docs/9.6/static/recovery-target-settings.html )
 type RecoveryTargetSettings struct {
-	//TODO(sgotti) add options
+	RecoveryTarget         string `json:"recoveryTarget,omitempty"`
+	RecoveryTargetLsn      string `json:"recoveryTargetLsn,omitempty"`
+	RecoveryTargetName     string `json:"recoveryTargetName,omitempty"`
+	RecoveryTargetTime     string `json:"recoveryTargetTime,omitempty"`
+	RecoveryTargetXid      string `json:"recoveryTargetXid,omitempty"`
+	RecoveryTargetTimeline string `json:"recoveryTargetTimeline,omitempty"`
 }
 
 // StandbySettings defines the standby settings in the recovery.conf file (https://www.postgresql.org/docs/9.6/static/standby-settings.html )
@@ -172,6 +194,8 @@ type ClusterSpec struct {
 	SyncTimeout *Duration `json:"syncTimeout,omitempty"`
 	// Interval after the first fail to declare a keeper or a db as not healthy.
 	FailInterval *Duration `json:"failInterval,omitempty"`
+	// Interval after which a dead keeper will be removed from the cluster data
+	DeadKeeperRemovalInterval *Duration `json:"deadKeeperRemovalInterval,omitempty"`
 	// Max number of standbys. This needs to be greater enough to cover both
 	// standby managed by stolon and additional standbys configured by the
 	// user. Its value affect different postgres parameters like
@@ -184,6 +208,9 @@ type ClusterSpec struct {
 	// Max number of standbys for every sender. A sender can be a master or
 	// another standby (if/when implementing cascading replication).
 	MaxStandbysPerSender *uint16 `json:"maxStandbysPerSender,omitempty"`
+	// Max lag in bytes that an asynchronous standy can have to be elected in
+	// place of a failed master
+	MaxStandbyLag *uint32 `json:"maxStandbyLag,omitempty"`
 	// Use Synchronous replication between master and its standbys
 	SynchronousReplication *bool `json:"synchronousReplication,omitempty"`
 	// MinSynchronousStandbys is the mininum number if synchronous standbys
@@ -192,6 +219,9 @@ type ClusterSpec struct {
 	// MaxSynchronousStandbys is the maximum number if synchronous standbys
 	// to be configured when SynchronousReplication is true
 	MaxSynchronousStandbys *uint16 `json:"maxSynchronousStandbys,omitempty"`
+	// AdditionalWalSenders defines the number of additional wal_senders in
+	// addition to the ones internally defined by stolon
+	AdditionalWalSenders *uint16 `json:"additionalWalSenders"`
 	// Whether to use pg_rewind
 	UsePgrewind *bool `json:"usePgrewind,omitempty"`
 	// InitMode defines the cluster initialization mode. Current modes are: new, existing, pitr
@@ -202,6 +232,8 @@ type ClusterSpec struct {
 	MergePgParameters *bool `json:"mergePgParameters,omitempty"`
 	// Role defines the cluster operating role (master or standby of an external database)
 	Role *ClusterRole `json:"role,omitempty"`
+	// Init configuration used when InitMode is "new"
+	NewConfig *NewConfig `json:"newConfig,omitempty"`
 	// Point in time recovery init configuration used when InitMode is "pitr"
 	PITRConfig *PITRConfig `json:"pitrConfig,omitempty"`
 	// Existing init configuration used when InitMode is "existing"
@@ -210,12 +242,14 @@ type ClusterSpec struct {
 	StandbySettings *StandbySettings `json:"standbySettings,omitempty"`
 	// Map of postgres parameters
 	PGParameters PGParameters `json:"pgParameters,omitempty"`
+	// Additional pg_hba.conf entries
+	// we don't set omitempty since we want to distinguish between null or empty slice
+	PGHBA []string `json:"pgHBA"`
 }
 
 type ClusterStatus struct {
 	CurrentGeneration int64        `json:"currentGeneration,omitempty"`
 	Phase             ClusterPhase `json:"phase,omitempty"`
-	Role              ClusterRole  `json:"mode,omitempty"`
 	// Master DB UID
 	Master string `json:"master,omitempty"`
 }
@@ -281,11 +315,17 @@ func (os *ClusterSpec) WithDefaults() *ClusterSpec {
 	if s.FailInterval == nil {
 		s.FailInterval = &Duration{Duration: DefaultFailInterval}
 	}
+	if s.DeadKeeperRemovalInterval == nil {
+		s.DeadKeeperRemovalInterval = &Duration{Duration: DefaultDeadKeeperRemovalInterval}
+	}
 	if s.MaxStandbys == nil {
 		s.MaxStandbys = Uint16P(DefaultMaxStandbys)
 	}
 	if s.MaxStandbysPerSender == nil {
 		s.MaxStandbysPerSender = Uint16P(DefaultMaxStandbysPerSender)
+	}
+	if s.MaxStandbyLag == nil {
+		s.MaxStandbyLag = Uint32P(DefaultMaxStandbyLag)
 	}
 	if s.SynchronousReplication == nil {
 		s.SynchronousReplication = BoolP(DefaultSynchronousReplication)
@@ -298,6 +338,9 @@ func (os *ClusterSpec) WithDefaults() *ClusterSpec {
 	}
 	if s.MaxSynchronousStandbys == nil {
 		s.MaxSynchronousStandbys = Uint16P(DefaultMaxSynchronousStandbys)
+	}
+	if s.AdditionalWalSenders == nil {
+		s.AdditionalWalSenders = Uint16P(DefaultAdditionalWalSenders)
 	}
 	if s.MergePgParameters == nil {
 		s.MergePgParameters = BoolP(DefaultMergePGParameter)
@@ -327,6 +370,9 @@ func (os *ClusterSpec) Validate() error {
 	if s.SyncTimeout.Duration < 0 {
 		return fmt.Errorf("syncTimeout must be positive")
 	}
+	if s.DeadKeeperRemovalInterval.Duration < 0 {
+		return fmt.Errorf("deadKeeperRemovalInterval must be positive")
+	}
 	if s.FailInterval.Duration < 0 {
 		return fmt.Errorf("failInterval must be positive")
 	}
@@ -348,8 +394,18 @@ func (os *ClusterSpec) Validate() error {
 	if s.InitMode == nil {
 		return fmt.Errorf("initMode undefined")
 	}
+	// The unique validation we're doing on pgHBA entries is that they don't contain a newline character
+	for _, e := range s.PGHBA {
+		if strings.Contains(e, "\n") {
+			return fmt.Errorf("pgHBA entries cannot contain newline characters")
+		}
+	}
+
 	switch *s.InitMode {
 	case ClusterInitModeNew:
+		if *s.Role == ClusterRoleStandby {
+			return fmt.Errorf("invalid cluster role standby when initMode is \"new\"")
+		}
 	case ClusterInitModeExisting:
 		if s.ExistingConfig == nil {
 			return fmt.Errorf("existingConfig undefined. Required when initMode is \"existing\"")
@@ -372,6 +428,12 @@ func (os *ClusterSpec) Validate() error {
 	switch *s.Role {
 	case ClusterRoleMaster:
 	case ClusterRoleStandby:
+		if s.StandbySettings == nil {
+			return fmt.Errorf("standbySettings undefined. Required when cluster role is \"standby\"")
+		}
+		if s.StandbySettings.PrimaryConninfo == "" {
+			return fmt.Errorf("standbySettings primaryConnInfo undefined. Required when cluster role is \"standby\"")
+		}
 	default:
 		return fmt.Errorf("unknown role: %q", *s.InitMode)
 	}
@@ -411,7 +473,8 @@ func NewCluster(uid string, cs *ClusterSpec) *Cluster {
 type KeeperSpec struct{}
 
 type KeeperStatus struct {
-	Healthy bool `json:"healthy,omitempty"`
+	Healthy         bool      `json:"healthy,omitempty"`
+	LastHealthyTime time.Time `json:"lastHealthyTime,omitempty"`
 
 	BootUUID string `json:"bootUUID,omitempty"`
 }
@@ -434,8 +497,9 @@ func NewKeeperFromKeeperInfo(ki *KeeperInfo) *Keeper {
 		ChangeTime: time.Time{},
 		Spec:       &KeeperSpec{},
 		Status: KeeperStatus{
-			Healthy:  true,
-			BootUUID: ki.BootUUID,
+			Healthy:         true,
+			LastHealthyTime: time.Now(),
+			BootUUID:        ki.BootUUID,
 		},
 	}
 }
@@ -460,12 +524,20 @@ type DBSpec struct {
 	SynchronousReplication bool `json:"synchronousReplication,omitempty"`
 	// Whether to use pg_rewind
 	UsePgrewind bool `json:"usePgrewind,omitempty"`
+	// AdditionalWalSenders defines the number of additional wal_senders in
+	// addition to the ones internally defined by stolon
+	AdditionalWalSenders uint16 `json:"additionalWalSenders"`
 	// InitMode defines the db initialization mode. Current modes are: none, new
 	InitMode DBInitMode `json:"initMode,omitempty"`
+	// Init configuration used when InitMode is "new"
+	NewConfig *NewConfig `json:"newConfig,omitempty"`
 	// Point in time recovery init configuration used when InitMode is "pitr"
 	PITRConfig *PITRConfig `json:"pitrConfig,omitempty"`
 	// Map of postgres parameters
 	PGParameters PGParameters `json:"pgParameters,omitempty"`
+	// Additional pg_hba.conf entries
+	// We don't set omitempty since we want to distinguish between null or empty slice
+	PGHBA []string `json:"pgHBA"`
 	// DB Role (master or standby)
 	Role common.Role `json:"role,omitempty"`
 	// FollowConfig when Role is "standby"
@@ -493,6 +565,7 @@ type DBStatus struct {
 
 	PGParameters        PGParameters `json:"pgParameters,omitempty"`
 	SynchronousStandbys []string     `json:"synchronousStandbys"`
+	OlderWalFile        string       `json:"olderWalFile,omitempty"`
 }
 
 type DB struct {
@@ -506,13 +579,11 @@ type DB struct {
 }
 
 type ProxySpec struct {
-	MasterDBUID string `json:"masterDbUid,omitempty"`
+	MasterDBUID    string   `json:"masterDbUid,omitempty"`
+	EnabledProxies []string `json:"enabledProxies,omitempty"`
 }
 
 type ProxyStatus struct {
-	// TODO(sgotti) register current active proxies status. Useful
-	// if in future we want to wait for all proxies having converged
-	// before enabling new master
 }
 
 type Proxy struct {

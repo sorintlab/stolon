@@ -63,10 +63,10 @@ func TestPITR(t *testing.T) {
 		SleepInterval:      &cluster.Duration{Duration: 2 * time.Second},
 		FailInterval:       &cluster.Duration{Duration: 5 * time.Second},
 		ConvergenceTimeout: &cluster.Duration{Duration: 30 * time.Second},
-		PGParameters: cluster.PGParameters{
+		PGParameters: pgParametersWithDefaults(cluster.PGParameters{
 			"archive_mode":    "on",
 			"archive_command": fmt.Sprintf("cp %%p %s/%%f", archiveBackupDir),
-		},
+		}),
 	}
 	initialClusterSpecFile, err := writeClusterSpec(dir, initialClusterSpec)
 	if err != nil {
@@ -98,7 +98,7 @@ func TestPITR(t *testing.T) {
 	if err := tk.WaitDBUp(60 * time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	if err := tk.WaitRole(common.RoleMaster, 30*time.Second); err != nil {
+	if err := tk.WaitDBRole(common.RoleMaster, nil, 30*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	if err := populate(t, tk); err != nil {
@@ -117,13 +117,13 @@ func TestPITR(t *testing.T) {
 	// Don't save the wal during the basebackup (-x). This to test that archive_command and restore command correctly work.
 	cmd := exec.Command("pg_basebackup", "-F", "tar", "-D", baseBackupDir, "-h", tk.pgListenAddress, "-p", tk.pgPort, "-U", tk.pgReplUsername)
 	cmd.Env = append(cmd.Env, fmt.Sprintf("PGPASSFILE=%s", pgpass.Name()))
-	t.Logf("execing cmd: %s", cmd)
+	t.Logf("execing cmd: %v", cmd)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("error: %v, output: %s", err, string(out))
 	}
 
 	// Switch wal so they will be archived
-	if _, err := tk.db.Exec("select pg_switch_xlog()"); err != nil {
+	if err := tk.SwitchWals(1); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
@@ -150,6 +150,9 @@ func TestPITR(t *testing.T) {
 				RestoreCommand: fmt.Sprintf("cp %s/%%f %%p", archiveBackupDir),
 			},
 		},
+		PGParameters: pgParametersWithDefaults(cluster.PGParameters{
+			"max_prepared_transactions": "100",
+		}),
 	}
 	initialClusterSpecFile, err = writeClusterSpec(dir, initialClusterSpec)
 	if err != nil {
@@ -175,7 +178,7 @@ func TestPITR(t *testing.T) {
 	if err := tk.WaitDBUp(60 * time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	if err := tk.WaitRole(common.RoleMaster, 30*time.Second); err != nil {
+	if err := tk.WaitDBRole(common.RoleMaster, nil, 30*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
@@ -190,4 +193,11 @@ func TestPITR(t *testing.T) {
 		t.Fatalf("wrong number of lines, want: %d, got: %d", 2, c)
 	}
 
+	pgParameters, err := tk.GetPGParameters()
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if v := pgParameters["max_prepared_transactions"]; v != "100" {
+		t.Fatalf("expected max_prepared_transactions == 100 got %q", v)
+	}
 }
