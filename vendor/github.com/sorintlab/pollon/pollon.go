@@ -19,6 +19,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"time"
 )
 
 type ConfData struct {
@@ -34,6 +35,11 @@ type Proxy struct {
 	stop       chan struct{}
 	endCh      chan error
 	connMutex  sync.Mutex
+
+	keepAlive         bool
+	keepAliveIdle     time.Duration
+	keepAliveCount    int
+	keepAliveInterval time.Duration
 }
 
 func NewProxy(listener *net.TCPListener) (*Proxy, error) {
@@ -134,6 +140,12 @@ func (p *Proxy) accepter() {
 			p.endCh <- fmt.Errorf("accept error: %v", err)
 			return
 		}
+		if p.keepAlive {
+			if err := p.SetupKeepAlive(conn); err != nil {
+				p.endCh <- fmt.Errorf("setKeepAlive error: %v", err)
+				return
+			}
+		}
 		go p.proxyConn(conn)
 	}
 }
@@ -151,4 +163,20 @@ func (p *Proxy) Start() error {
 		return fmt.Errorf("proxy error: %v", err)
 	}
 	return nil
+}
+
+func (p *Proxy) SetKeepAlive(keepalive bool) {
+	p.keepAlive = keepalive
+}
+
+func (p *Proxy) SetKeepAliveIdle(d time.Duration) {
+	p.keepAliveIdle = d
+}
+
+func (p *Proxy) SetKeepAliveCount(n int) {
+	p.keepAliveCount = n
+}
+
+func (p *Proxy) SetKeepAliveInterval(d time.Duration) {
+	p.keepAliveInterval = d
 }

@@ -1,5 +1,5 @@
-hash: b41517a5f41d92e8eef396e212e6a04c3ffb3218cdb4b8d393394fac8603e7ae
-updated: 2017-07-04T17:29:30.314317672+02:00
+hash: 4fd509083e97727c4b09d5e4082f82bdb8e7dcdc607d7c49e019ee967c5802b4
+updated: 2017-09-21T17:59:18.467613065+02:00
 imports:
 - name: github.com/coreos/etcd
   version: bc9ddf260115d2680191c46977ae72b837785472
@@ -50,13 +50,15 @@ imports:
 - name: github.com/mitchellh/copystructure
   version: 5af94aef99f597e6a9e1f6ac6be6ce0f3c96b49d
 - name: github.com/mitchellh/reflectwalk
-  version: 8d802ff4ae93611b807597f639c19f76074df5c6
+  version: 63d60e9d0dbc60cf9164e6510889b0db6683d98c
 - name: github.com/satori/go.uuid
   version: 879c5887cd475cd7864858769793b2ceb0d44feb
 - name: github.com/sgotti/gexpect
   version: 0afc6c19f50a08b5f97f8c75f4b417f496d92377
 - name: github.com/sorintlab/pollon
-  version: 279eb94a1432a0656f6da72d36f133dc68c2e064
+  version: 1213dda9f770439e1f0dc2dc30635de368d55619
+- name: github.com/sorintlab/tcpkeepalive
+  version: 320015f34cc6453bd18f5a23b003a88fd88359a2
 - name: github.com/spf13/cobra
   version: 9c28e4bbd74e5c3ed7aacbc552b2cab7cfdfe744
 - name: github.com/spf13/pflag

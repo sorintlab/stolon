@@ -56,6 +56,10 @@ type config struct {
 	stopListening      bool
 	logLevel           string
 	debug              bool
+
+	keepAliveIdle     int
+	keepAliveCount    int
+	keepAliveInterval int
 }
 
 var cfg config
@@ -73,6 +77,9 @@ func init() {
 	cmdProxy.PersistentFlags().BoolVar(&cfg.stopListening, "stop-listening", true, "stop listening on store error")
 	cmdProxy.PersistentFlags().StringVar(&cfg.logLevel, "log-level", "info", "debug, info (default), warn or error")
 	cmdProxy.PersistentFlags().BoolVar(&cfg.debug, "debug", false, "enable debug logging")
+	cmdProxy.PersistentFlags().IntVar(&cfg.keepAliveIdle, "tcp-keepalive-idle", 0, "set tcp keepalive idle (seconds)")
+	cmdProxy.PersistentFlags().IntVar(&cfg.keepAliveCount, "tcp-keepalive-count", 0, "set tcp keepalive probe count number")
+	cmdProxy.PersistentFlags().IntVar(&cfg.keepAliveInterval, "tcp-keepalive-interval", 0, "set tcp keepalive interval (seconds)")
 
 	cmdProxy.PersistentFlags().MarkDeprecated("debug", "use --log-level=debug instead")
 }
@@ -155,6 +162,11 @@ func (c *ClusterChecker) startPollonProxy() error {
 	if err != nil {
 		return fmt.Errorf("error creating pollon proxy: %v", err)
 	}
+	pp.SetKeepAlive(true)
+	pp.SetKeepAliveIdle(time.Duration(cfg.keepAliveIdle) * time.Second)
+	pp.SetKeepAliveCount(cfg.keepAliveCount)
+	pp.SetKeepAliveInterval(time.Duration(cfg.keepAliveInterval) * time.Second)
+
 	c.pp = pp
 	c.listener = listener
 
@@ -365,6 +377,15 @@ func proxy(cmd *cobra.Command, args []string) {
 	}
 	if cfg.storeBackend == "" {
 		die("store backend type required")
+	}
+	if cfg.keepAliveIdle < 0 {
+		die("tcp keepalive idle value must be greater or equal to 0")
+	}
+	if cfg.keepAliveCount < 0 {
+		die("tcp keepalive idle value must be greater or equal to 0")
+	}
+	if cfg.keepAliveInterval < 0 {
+		die("tcp keepalive idle value must be greater or equal to 0")
 	}
 
 	uid := common.UID()
