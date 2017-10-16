@@ -162,5 +162,9 @@ kubectl scale --replicas=3 rc stolon-proxy
 
 ### Update image
 
-TODO
+For PostgreSQL major version upgrade, see [PostgreSQL upgrade](postgresql_upgrade.md)
+
+For any PostgreSQL upgrade, check PostgreSQL release note for any additional upgrade note.
+
+For stolon upgrade: TODO
 
