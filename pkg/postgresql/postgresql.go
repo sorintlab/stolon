@@ -341,6 +341,21 @@ func (p *Manager) WaitReady(timeout time.Duration) error {
 	return fmt.Errorf("timeout waiting for db ready")
 }
 
+func (p *Manager) WaitRecoveryDone(timeout time.Duration) error {
+	start := time.Now()
+	for time.Now().Add(-timeout).Before(start) {
+		_, err := os.Stat(filepath.Join(p.dataDir, "recovery.done"))
+		if err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		if !os.IsNotExist(err) {
+			return nil
+		}
+		time.Sleep(1 * time.Second)
+	}
+	return fmt.Errorf("timeout waiting for db recovery")
+}
+
 func (p *Manager) Promote() error {
 	log.Infow("promoting database")
 	name := filepath.Join(p.pgBinPath, "pg_ctl")
