@@ -68,11 +68,14 @@ func (p *Proxy) proxyConn(conn *net.TCPConn) {
 		return
 	}
 
-	destConn, err := net.DialTCP("tcp", nil, p.destAddr)
+	var d net.Dialer
+	d.Cancel = closeConns
+	destConnInterface, err := d.Dial("tcp", destAddr.String())
 	if err != nil {
 		conn.Close()
 		return
 	}
+	destConn := destConnInterface.(*net.TCPConn)
 	defer func() {
 		log.Printf("closing destination connection: %v", destConn)
 		destConn.Close()

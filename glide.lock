@@ -1,5 +1,5 @@
-hash: 4fd509083e97727c4b09d5e4082f82bdb8e7dcdc607d7c49e019ee967c5802b4
-updated: 2017-09-21T17:59:18.467613065+02:00
+hash: 65066aa06af019a116ae79b13a0758b881c0158c8a4c341d7ffc021de3a4ff7a
+updated: 2017-10-12T18:04:47.972619241+02:00
 imports:
 - name: github.com/coreos/etcd
   version: bc9ddf260115d2680191c46977ae72b837785472
@@ -56,9 +56,9 @@ imports:
 - name: github.com/sgotti/gexpect
   version: 0afc6c19f50a08b5f97f8c75f4b417f496d92377
 - name: github.com/sorintlab/pollon
-  version: 1213dda9f770439e1f0dc2dc30635de368d55619
+  version: 1475a2b4526829d0116cfd537cc8e9d9375035a9
 - name: github.com/sorintlab/tcpkeepalive
-  version: 320015f34cc6453bd18f5a23b003a88fd88359a2
+  version: 8716b4a83184cc5801cfb46aab5cdfaa87a51dae
 - name: github.com/spf13/cobra
   version: 9c28e4bbd74e5c3ed7aacbc552b2cab7cfdfe744
 - name: github.com/spf13/pflag
