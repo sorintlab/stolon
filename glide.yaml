@@ -23,7 +23,7 @@ import:
 - package: github.com/sgotti/gexpect
   version: 0afc6c19f50a08b5f97f8c75f4b417f496d92377
 - package: github.com/sorintlab/pollon
-  version: 1213dda9f770439e1f0dc2dc30635de368d55619
+  version: 1475a2b4526829d0116cfd537cc8e9d9375035a9
 - package: github.com/spf13/cobra
   version: 9c28e4bbd74e5c3ed7aacbc552b2cab7cfdfe744
 - package: github.com/spf13/pflag
