@@ -1435,6 +1435,109 @@ func TestKeeperRemoval(t *testing.T) {
 	}
 }
 
+func testKeeperRemovalStolonCtl(t *testing.T, syncRepl bool) {
+	dir, err := ioutil.TempDir("", "stolon")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer os.RemoveAll(dir)
+
+	clusterName := uuid.NewV4().String()
+
+	initialClusterSpec := &cluster.ClusterSpec{
+		InitMode:               cluster.ClusterInitModeP(cluster.ClusterInitModeNew),
+		SleepInterval:          &cluster.Duration{Duration: 2 * time.Second},
+		FailInterval:           &cluster.Duration{Duration: 5 * time.Second},
+		ConvergenceTimeout:     &cluster.Duration{Duration: 30 * time.Second},
+		SynchronousReplication: cluster.BoolP(syncRepl),
+		MaxSynchronousStandbys: cluster.Uint16P(3),
+		PGParameters:           defaultPGParameters,
+	}
+
+	// Create 3 keepers
+	tks, tss, tp, tstore := setupServersCustom(t, clusterName, dir, 3, 1, initialClusterSpec)
+	defer shutdown(tks, tss, tp, tstore)
+
+	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
+	storePath := filepath.Join(common.StoreBasePath, clusterName)
+	sm := store.NewStoreManager(tstore.store, storePath)
+
+	master, standbys := waitMasterStandbysReady(t, sm, tks)
+
+	if syncRepl {
+		if err := WaitClusterDataSynchronousStandbys([]string{standbys[0].uid, standbys[1].uid}, sm, 30*time.Second); err != nil {
+			t.Fatalf("expected synchronous standbys")
+		}
+	}
+
+	if err := populate(t, master); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := write(t, master, 1, 1); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	c, err := getLines(t, master)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if c != 1 {
+		t.Fatalf("wrong number of lines, want: %d, got: %d", 1, c)
+	}
+	if err := waitLines(t, standbys[0], 1, 30*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// remove master from the cluster data, must fail
+	err = StolonCtl(clusterName, tstore.storeBackend, storeEndpoints, "removekeeper", master.uid)
+	t.Logf("received err: %v", err)
+	if err == nil {
+		t.Fatalf("expected err")
+	}
+
+	// stop standbys[0]
+	t.Logf("Stopping standbys[0] keeper: %s", standbys[0].uid)
+	standbys[0].Stop()
+
+	// remove standby[0] from the cluster data
+	err = StolonCtl(clusterName, tstore.storeBackend, storeEndpoints, "removekeeper", standbys[0].uid)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// get current stanbdys[0] db uid
+	cd, _, err := sm.GetClusterData()
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// check that the number of keepers and dbs is 1
+	if len(cd.Keepers) != 2 {
+		t.Fatalf("expected 2 keeper in cluster data, got: %d", len(cd.Keepers))
+	}
+	if len(cd.DBs) != 2 {
+		t.Fatalf("expected 2 db in cluster data, got: %d", len(cd.DBs))
+	}
+
+	// restart standbys[0]
+	t.Logf("Starting standbys[0] keeper: %s", standbys[0].uid)
+	standbys[0].Start()
+
+	// it should reenter the cluster with the same uid but a new assigned db uid
+	if err := waitLines(t, standbys[0], 1, 30*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+}
+
+func TestKeeperRemovalStolonCtl(t *testing.T) {
+	t.Parallel()
+	testKeeperRemovalStolonCtl(t, false)
+}
+
+func TestKeeperRemovalStolonCtlSyncRepl(t *testing.T) {
+	t.Parallel()
+	testKeeperRemovalStolonCtl(t, true)
+}
+
 func TestStandbyCantSync(t *testing.T) {
 	t.Parallel()
 
