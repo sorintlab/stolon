@@ -36,6 +36,12 @@ func init() {
 }
 
 func printTree(dbuid string, cd *cluster.ClusterData, level int, prefix string, tail bool) {
+	// skip not existing db: specified as a follower but not available in the
+	// clister spec (this should happen only when doing a stolonctl
+	// removekeeper)
+	if _, ok := cd.DBs[dbuid]; !ok {
+		return
+	}
 	out := prefix
 	if level > 0 {
 		if tail {
