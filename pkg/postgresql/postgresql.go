@@ -51,8 +51,10 @@ type Manager struct {
 	curHba          []string
 	localConnParams ConnParams
 	replConnParams  ConnParams
+	suAuthMethod    string
 	suUsername      string
 	suPassword      string
+	replAuthMethod  string
 	replUsername    string
 	replPassword    string
 	requestTimeout  time.Duration
@@ -76,7 +78,7 @@ type InitConfig struct {
 	DataChecksums bool
 }
 
-func NewManager(pgBinPath string, dataDir string, localConnParams, replConnParams ConnParams, suUsername, suPassword, replUsername, replPassword string, requestTimeout time.Duration) *Manager {
+func NewManager(pgBinPath string, dataDir string, localConnParams, replConnParams ConnParams, suAuthMethod, suUsername, suPassword, replAuthMethod, replUsername, replPassword string, requestTimeout time.Duration) *Manager {
 	return &Manager{
 		pgBinPath:       pgBinPath,
 		dataDir:         filepath.Join(dataDir, "postgres"),
@@ -84,8 +86,10 @@ func NewManager(pgBinPath string, dataDir string, localConnParams, replConnParam
 		curParameters:   make(common.Parameters),
 		replConnParams:  replConnParams,
 		localConnParams: localConnParams,
+		suAuthMethod:    suAuthMethod,
 		suUsername:      suUsername,
 		suPassword:      suPassword,
+		replAuthMethod:  replAuthMethod,
 		replUsername:    replUsername,
 		replPassword:    replPassword,
 		requestTimeout:  requestTimeout,
@@ -136,7 +140,10 @@ func (p *Manager) Init(initConfig *InitConfig) error {
 	pwfile.WriteString(p.suPassword)
 
 	name := filepath.Join(p.pgBinPath, "initdb")
-	cmd := exec.Command(name, "-D", p.dataDir, "-U", p.suUsername, "--pwfile", pwfile.Name())
+	cmd := exec.Command(name, "-D", p.dataDir, "-U", p.suUsername)
+	if p.suAuthMethod == "md5" {
+		cmd.Args = append(cmd.Args, "--pwfile", pwfile.Name())
+	}
 	log.Debugw("execing cmd", "cmd", cmd)
 
 	if initConfig.Locale != "" {
@@ -362,13 +369,19 @@ func (p *Manager) SetupRoles() error {
 
 	if p.suUsername == p.replUsername {
 		log.Infow("adding replication role to superuser")
-		if err := alterRole(ctx, p.localConnParams, []string{"replication"}, p.suUsername, p.suPassword); err != nil {
-			return fmt.Errorf("error adding replication role to superuser: %v", err)
+		if p.suAuthMethod == "trust" {
+			if err := alterPasswordlessRole(ctx, p.localConnParams, []string{"replication"}, p.suUsername); err != nil {
+				return fmt.Errorf("error adding replication role to superuser: %v", err)
+			}
+		} else {
+			if err := alterRole(ctx, p.localConnParams, []string{"replication"}, p.suUsername, p.suPassword); err != nil {
+				return fmt.Errorf("error adding replication role to superuser: %v", err)
+			}
 		}
 		log.Infow("replication role added to superuser")
 	} else {
-		// Configure superuser role password
-		if p.suPassword != "" {
+		// Configure superuser role password if auth method is not trust
+		if p.suAuthMethod != "trust" && p.suPassword != "" {
 			log.Infow("setting superuser password")
 			if err := setPassword(ctx, p.localConnParams, p.suUsername, p.suPassword); err != nil {
 				return fmt.Errorf("error setting superuser password: %v", err)
@@ -377,8 +390,14 @@ func (p *Manager) SetupRoles() error {
 		}
 		roles := []string{"login", "replication"}
 		log.Infow("creating replication role")
-		if err := createRole(ctx, p.localConnParams, roles, p.replUsername, p.replPassword); err != nil {
-			return fmt.Errorf("error creating replication role: %v", err)
+		if p.replAuthMethod != "trust" {
+			if err := createRole(ctx, p.localConnParams, roles, p.replUsername, p.replPassword); err != nil {
+				return fmt.Errorf("error creating replication role: %v", err)
+			}
+		} else {
+			if err := createPasswordlessRole(ctx, p.localConnParams, roles, p.replUsername); err != nil {
+				return fmt.Errorf("error creating replication role: %v", err)
+			}
 		}
 		log.Infow("replication role created", "role", p.replUsername)
 	}
@@ -630,19 +649,19 @@ func (p *Manager) writePgHba() error {
 	// Minimal entries for local normal and replication connections needed by the stolon keeper
 	// Matched local connections are for postgres database and suUsername user with md5 auth
 	// Matched local replicaton connections are for replUsername user with md5 auth
-	f.WriteString(fmt.Sprintf("local postgres %s md5\n", p.suUsername))
-	f.WriteString(fmt.Sprintf("local replication %s md5\n", p.replUsername))
+	f.WriteString(fmt.Sprintf("local postgres %s %s\n", p.suUsername, p.suAuthMethod))
+	f.WriteString(fmt.Sprintf("local replication %s %s\n", p.replUsername, p.replAuthMethod))
 
 	// By default accept all connections for the superuser suUsername with md5 auth
 	// Used for pg_rewind resyncronization
 	// TODO(sgotti) Configure this dynamically based on our followers provided by the clusterview
-	f.WriteString(fmt.Sprintf("host all %s %s md5\n", p.suUsername, "0.0.0.0/0"))
-	f.WriteString(fmt.Sprintf("host all %s %s md5\n", p.suUsername, "::0/0"))
+	f.WriteString(fmt.Sprintf("host all %s %s %s\n", p.suUsername, "0.0.0.0/0", p.suAuthMethod))
+	f.WriteString(fmt.Sprintf("host all %s %s %s\n", p.suUsername, "::0/0", p.suAuthMethod))
 
 	// By default accept all replication connections for the replication user with md5 auth
 	// TODO(sgotti) Configure this dynamically based on our followers provided by the clusterview
-	f.WriteString(fmt.Sprintf("host replication %s %s md5\n", p.replUsername, "0.0.0.0/0"))
-	f.WriteString(fmt.Sprintf("host replication %s %s md5\n", p.replUsername, "::0/0"))
+	f.WriteString(fmt.Sprintf("host replication %s %s %s\n", p.replUsername, "0.0.0.0/0", p.replAuthMethod))
+	f.WriteString(fmt.Sprintf("host replication %s %s %s\n", p.replUsername, "::0/0", p.replAuthMethod))
 
 	if p.hba != nil {
 		for _, e := range p.hba {

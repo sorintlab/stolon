@@ -60,9 +60,11 @@ The replication user is used for:
 * managing/querying the keepers' controlled instances
 * replication between postgres instances
 
-Currently only md5 password based authentication is supported. In future different authentication mechanism will be added.
+Currently trust (password-less) and md5 password based authentication are supported. In the future, different authentication mechanisms will be added.
 
 To avoid security problems (user credentials cannot be globally defined in the cluster specification since if not correctly secured it could be read by anyone accessing the cluster store) these users and their related passwords must be provided as options to the stolon keepers and their values MUST be the same for all the keepers (or different things will break). These options are `--pg-su-username`, `--pg-su-password/--pg-su-passwordfile`, `--pg-repl-username` and `--pg-repl-password/--pg-repl-passwordfile`
+
+Utilizing `--pg-su-auth-method/--pg-repl-auth-method` trust is not recommended in production environments, but they may be used in place of password authentication. If the same user is utilized as superuser and replication user, the passwords and auth methods must match.
 
 When a keeper initializes a new pg db cluster, the provided superuser and replication user will be created.
 
