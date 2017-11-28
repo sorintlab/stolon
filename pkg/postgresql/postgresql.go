@@ -284,6 +284,14 @@ func (p *Manager) start(args ...string) error {
 		return err
 	}
 
+	log.Debugw("checking postgres version")
+	maj, min, err := p.BinaryVersion()
+	if err != nil {
+		return fmt.Errorf("error: %v", err)
+	}
+	if maj <= 9 && min < 4 {
+		return fmt.Errorf("postgres must be at least version 9.4")
+	}
 	log.Infow("starting database")
 	name := filepath.Join(p.pgBinPath, "postgres")
 	args = append([]string{"-D", p.dataDir, "-c", "unix_socket_directories=" + common.PgUnixSocketDirectories}, args...)
