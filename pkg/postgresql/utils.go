@@ -117,6 +117,17 @@ func createRole(ctx context.Context, connParams ConnParams, roles []string, user
 	return err
 }
 
+func createPasswordlessRole(ctx context.Context, connParams ConnParams, roles []string, username string) error {
+	db, err := sql.Open("postgres", connParams.ConnString())
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	_, err = dbExec(ctx, db, fmt.Sprintf(`create role "%s" with login replication;`, username))
+	return err
+}
+
 func alterRole(ctx context.Context, connParams ConnParams, roles []string, username, password string) error {
 	db, err := sql.Open("postgres", connParams.ConnString())
 	if err != nil {
@@ -125,6 +136,17 @@ func alterRole(ctx context.Context, connParams ConnParams, roles []string, usern
 	defer db.Close()
 
 	_, err = dbExec(ctx, db, fmt.Sprintf(`alter role "%s" with login replication encrypted password '%s';`, username, password))
+	return err
+}
+
+func alterPasswordlessRole(ctx context.Context, connParams ConnParams, roles []string, username string) error {
+	db, err := sql.Open("postgres", connParams.ConnString())
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	_, err = dbExec(ctx, db, fmt.Sprintf(`alter role "%s" with login replication;`, username))
 	return err
 }
 

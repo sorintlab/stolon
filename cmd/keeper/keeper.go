@@ -81,9 +81,11 @@ type config struct {
 	pgListenAddress         string
 	pgPort                  string
 	pgBinPath               string
+	pgReplAuthMethod        string
 	pgReplUsername          string
 	pgReplPassword          string
 	pgReplPasswordFile      string
+	pgSUAuthMethod          string
 	pgSUUsername            string
 	pgSUPassword            string
 	pgSUPasswordFile        string
@@ -112,9 +114,11 @@ func init() {
 	cmdKeeper.PersistentFlags().StringVar(&cfg.pgListenAddress, "pg-listen-address", "localhost", "postgresql instance listening address")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.pgPort, "pg-port", "5432", "postgresql instance listening port")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.pgBinPath, "pg-bin-path", "", "absolute path to postgresql binaries. If empty they will be searched in the current PATH")
+	cmdKeeper.PersistentFlags().StringVar(&cfg.pgReplAuthMethod, "pg-repl-auth-method", "md5", "postgres replication user auth method. Default is md5.")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.pgReplUsername, "pg-repl-username", "", "postgres replication user name. Required. It'll be created on db initialization. Must be the same for all keepers.")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.pgReplPassword, "pg-repl-password", "", "postgres replication user password. Only one of --pg-repl-password or --pg-repl-passwordfile must be provided. Must be the same for all keepers.")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.pgReplPasswordFile, "pg-repl-passwordfile", "", "postgres replication user password file. Only one of --pg-repl-password or --pg-repl-passwordfile must be provided. Must be the same for all keepers.")
+	cmdKeeper.PersistentFlags().StringVar(&cfg.pgSUAuthMethod, "pg-su-auth-method", "md5", "postgres superuser auth method. Default is md5.")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.pgSUUsername, "pg-su-username", user, "postgres superuser user name. Used for keeper managed instance access and pg_rewind based synchronization. It'll be created on db initialization. Defaults to the name of the effective user running stolon-keeper. Must be the same for all keepers.")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.pgSUPassword, "pg-su-password", "", "postgres superuser password. Only one of --pg-su-password or --pg-su-passwordfile must be provided. Must be the same for all keepers.")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.pgSUPasswordFile, "pg-su-passwordfile", "", "postgres superuser password file. Only one of --pg-su-password or --pg-su-passwordfile must be provided. Must be the same for all keepers)")
@@ -183,46 +187,58 @@ func (p *PostgresKeeper) mandatoryPGParameters() common.Parameters {
 func (p *PostgresKeeper) getSUConnParams(db, followedDB *cluster.DB) pg.ConnParams {
 	cp := pg.ConnParams{
 		"user":             p.pgSUUsername,
-		"password":         p.pgSUPassword,
 		"host":             followedDB.Status.ListenAddress,
 		"port":             followedDB.Status.Port,
 		"application_name": common.StolonName(db.UID),
 		"dbname":           "postgres",
 		"sslmode":          "disable",
 	}
+	if p.pgSUAuthMethod != "trust" {
+		cp.Set("password", p.pgSUPassword)
+	}
 	return cp
 }
 
 func (p *PostgresKeeper) getReplConnParams(db, followedDB *cluster.DB) pg.ConnParams {
-	return pg.ConnParams{
+	cp := pg.ConnParams{
 		"user":             p.pgReplUsername,
-		"password":         p.pgReplPassword,
 		"host":             followedDB.Status.ListenAddress,
 		"port":             followedDB.Status.Port,
 		"application_name": common.StolonName(db.UID),
 		"sslmode":          "disable",
 	}
+	if p.pgReplAuthMethod != "trust" {
+		cp.Set("password", p.pgReplPassword)
+	}
+	return cp
 }
 
 func (p *PostgresKeeper) getLocalConnParams() pg.ConnParams {
-	return pg.ConnParams{
-		"user":     p.pgSUUsername,
-		"password": p.pgSUPassword,
-		"host":     common.PgUnixSocketDirectories,
-		"port":     p.pgPort,
-		"dbname":   "postgres",
-		"sslmode":  "disable",
+	cp := pg.ConnParams{
+		"user":    p.pgSUUsername,
+		"host":    common.PgUnixSocketDirectories,
+		"port":    p.pgPort,
+		"dbname":  "postgres",
+		"sslmode": "disable",
 	}
+	if p.pgSUAuthMethod != "trust" {
+		cp.Set("password", p.pgSUPassword)
+	}
+	return cp
 }
 
 func (p *PostgresKeeper) getLocalReplConnParams() pg.ConnParams {
-	return pg.ConnParams{
+	cp := pg.ConnParams{
 		"user":     p.pgReplUsername,
 		"password": p.pgReplPassword,
 		"host":     common.PgUnixSocketDirectories,
 		"port":     p.pgPort,
 		"sslmode":  "disable",
 	}
+	if p.pgReplAuthMethod != "trust" {
+		cp.Set("password", p.pgReplPassword)
+	}
+	return cp
 }
 
 func (p *PostgresKeeper) createPGParameters(db *cluster.DB) common.Parameters {
@@ -347,8 +363,10 @@ type PostgresKeeper struct {
 	pgListenAddress     string
 	pgPort              string
 	pgBinPath           string
+	pgReplAuthMethod    string
 	pgReplUsername      string
 	pgReplPassword      string
+	pgSUAuthMethod      string
 	pgSUUsername        string
 	pgSUPassword        string
 	pgInitialSUUsername string
@@ -404,8 +422,10 @@ func NewPostgresKeeper(cfg *config, stop chan bool, end chan error) (*PostgresKe
 		pgListenAddress:     cfg.pgListenAddress,
 		pgPort:              cfg.pgPort,
 		pgBinPath:           cfg.pgBinPath,
+		pgReplAuthMethod:    cfg.pgReplAuthMethod,
 		pgReplUsername:      cfg.pgReplUsername,
 		pgReplPassword:      cfg.pgReplPassword,
+		pgSUAuthMethod:      cfg.pgSUAuthMethod,
 		pgSUUsername:        cfg.pgSUUsername,
 		pgSUPassword:        cfg.pgSUPassword,
 		pgInitialSUUsername: cfg.pgInitialSUUsername,
@@ -659,7 +679,7 @@ func (p *PostgresKeeper) Start() {
 
 	// TODO(sgotti) reconfigure the various configurations options
 	// (RequestTimeout) after a changed cluster config
-	pgm := postgresql.NewManager(p.pgBinPath, p.dataDir, p.getLocalConnParams(), p.getLocalReplConnParams(), p.pgSUUsername, p.pgSUPassword, p.pgReplUsername, p.pgReplPassword, p.requestTimeout)
+	pgm := postgresql.NewManager(p.pgBinPath, p.dataDir, p.getLocalConnParams(), p.getLocalReplConnParams(), p.pgSUAuthMethod, p.pgSUUsername, p.pgSUPassword, p.pgReplAuthMethod, p.pgReplUsername, p.pgReplPassword, p.requestTimeout)
 	p.pgm = pgm
 
 	p.pgm.Stop(true)
@@ -1579,6 +1599,9 @@ func main() {
 
 func keeper(cmd *cobra.Command, args []string) {
 	var err error
+	validAuthMethods := make(map[string]struct{})
+	validAuthMethods["trust"] = struct{}{}
+	validAuthMethods["md5"] = struct{}{}
 	switch cfg.logLevel {
 	case "error":
 		slog.SetLevel(zap.ErrorLevel)
@@ -1610,26 +1633,46 @@ func keeper(cmd *cobra.Command, args []string) {
 		die("cannot create data dir: %v", err)
 	}
 
+	if _, ok := validAuthMethods[cfg.pgReplAuthMethod]; !ok {
+		die("--pg-repl-auth-method must be one of: md5, trust")
+	}
 	if cfg.pgReplUsername == "" {
 		die("--pg-repl-username is required")
 	}
-
-	if cfg.pgReplPassword == "" && cfg.pgReplPasswordFile == "" {
+	if cfg.pgReplAuthMethod == "trust" {
+		stdout("warning: not utilizing a password for replication between hosts is extremely dangerous")
+		if cfg.pgReplPassword != "" || cfg.pgReplPasswordFile != "" {
+			die("can not utilize --pg-repl-auth-method trust together with --pg-repl-password or --pg-repl-passwordfile")
+		}
+	}
+	if cfg.pgSUAuthMethod == "trust" {
+		stdout("warning: not utilizing a password for superuser is extremely dangerous")
+		if cfg.pgSUPassword != "" || cfg.pgSUPasswordFile != "" {
+			die("can not utilize --pg-su-auth-method trust together with --pg-su-password or --pg-su-passwordfile")
+		}
+	}
+	if cfg.pgReplAuthMethod != "trust" && cfg.pgReplPassword == "" && cfg.pgReplPasswordFile == "" {
 		die("one of --pg-repl-password or --pg-repl-passwordfile is required")
 	}
-	if cfg.pgReplPassword != "" && cfg.pgReplPasswordFile != "" {
+	if cfg.pgReplAuthMethod != "trust" && cfg.pgReplPassword != "" && cfg.pgReplPasswordFile != "" {
 		die("only one of --pg-repl-password or --pg-repl-passwordfile must be provided")
 	}
-	if cfg.pgSUPassword == "" && cfg.pgSUPasswordFile == "" {
+	if _, ok := validAuthMethods[cfg.pgSUAuthMethod]; !ok {
+		die("--pg-su-auth-method must be one of: md5, password, trust")
+	}
+	if cfg.pgSUAuthMethod != "trust" && cfg.pgSUPassword == "" && cfg.pgSUPasswordFile == "" {
 		die("one of --pg-su-password or --pg-su-passwordfile is required")
 	}
-	if cfg.pgSUPassword != "" && cfg.pgSUPasswordFile != "" {
+	if cfg.pgSUAuthMethod != "trust" && cfg.pgSUPassword != "" && cfg.pgSUPasswordFile != "" {
 		die("only one of --pg-su-password or --pg-su-passwordfile must be provided")
 	}
 
 	if cfg.pgSUUsername == cfg.pgReplUsername {
 		stdout("warning: superuser name and replication user name are the same. Different users are suggested.")
-		if cfg.pgSUPassword != cfg.pgReplPassword {
+		if cfg.pgReplAuthMethod != cfg.pgSUAuthMethod {
+			die("do not support different auth methods when utilizing superuser for replication.")
+		}
+		if cfg.pgSUPassword != cfg.pgReplPassword && cfg.pgSUAuthMethod != "trust" && cfg.pgReplAuthMethod != "trust" {
 			die("provided superuser name and replication user name are the same but provided passwords are different")
 		}
 	}
