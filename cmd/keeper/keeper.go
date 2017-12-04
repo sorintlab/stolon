@@ -28,6 +28,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/sorintlab/stolon/cmd"
 	"github.com/sorintlab/stolon/common"
 	"github.com/sorintlab/stolon/pkg/cluster"
 	"github.com/sorintlab/stolon/pkg/flagutil"
@@ -46,8 +47,9 @@ import (
 var log = slog.S()
 
 var cmdKeeper = &cobra.Command{
-	Use: "stolon-keeper",
-	Run: keeper,
+	Use:     "stolon-keeper",
+	Run:     keeper,
+	Version: cmd.Version,
 }
 
 type KeeperLocalState struct {

@@ -23,6 +23,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sorintlab/stolon/cmd"
 	"github.com/sorintlab/stolon/common"
 	"github.com/sorintlab/stolon/pkg/cluster"
 	"github.com/sorintlab/stolon/pkg/flagutil"
@@ -39,8 +40,9 @@ import (
 var log = slog.S()
 
 var cmdProxy = &cobra.Command{
-	Use: "stolon-proxy",
-	Run: proxy,
+	Use:     "stolon-proxy",
+	Run:     proxy,
+	Version: cmd.Version,
 }
 
 type config struct {

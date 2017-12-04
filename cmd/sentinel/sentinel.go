@@ -29,6 +29,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/sorintlab/stolon/cmd"
 	"github.com/sorintlab/stolon/common"
 	"github.com/sorintlab/stolon/pkg/cluster"
 	"github.com/sorintlab/stolon/pkg/flagutil"
@@ -53,8 +54,9 @@ const (
 )
 
 var cmdSentinel = &cobra.Command{
-	Use: "stolon-sentinel",
-	Run: sentinel,
+	Use:     "stolon-sentinel",
+	Run:     sentinel,
+	Version: cmd.Version,
 }
 
 type config struct {
