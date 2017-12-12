@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/sorintlab/stolon/cmd"
 	"github.com/sorintlab/stolon/common"
 	"github.com/sorintlab/stolon/pkg/cluster"
 	"github.com/sorintlab/stolon/pkg/flagutil"
@@ -35,16 +36,21 @@ const (
 )
 
 var cmdStolonCtl = &cobra.Command{
-	Use:   "stolonctl",
-	Short: "stolon command line client",
+	Use:     "stolonctl",
+	Short:   "stolon command line client",
+	Version: cmd.Version,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		if cfg.clusterName == "" {
-			die("cluster name required")
-		}
-		if cfg.storeBackend == "" {
-			die("store backend type required")
+		if cmd.Name() != "stolonctl" && cmd.Name() != "version" {
+			if cfg.clusterName == "" {
+				die("cluster name required")
+			}
+			if cfg.storeBackend == "" {
+				die("store backend type required")
+			}
 		}
 	},
+	// just defined to make --version work
+	Run: func(c *cobra.Command, args []string) { c.Help() },
 }
 
 type config struct {
@@ -67,6 +73,20 @@ func init() {
 	cmdStolonCtl.PersistentFlags().StringVar(&cfg.storeCAFile, "store-ca-file", "", "verify certificates of HTTPS-enabled store servers using this CA bundle")
 	cmdStolonCtl.PersistentFlags().BoolVar(&cfg.storeSkipTlsVerify, "store-skip-tls-verify", false, "skip store certificate verification (insecure!!!)")
 	cmdStolonCtl.PersistentFlags().StringVar(&cfg.clusterName, "cluster-name", "", "cluster name")
+}
+
+var cmdVersion = &cobra.Command{
+	Use:   "version",
+	Run:   versionCommand,
+	Short: "Display the version",
+}
+
+func init() {
+	cmdStolonCtl.AddCommand(cmdVersion)
+}
+
+func versionCommand(c *cobra.Command, args []string) {
+	stdout("stolonctl version %s", cmd.Version)
 }
 
 func main() {

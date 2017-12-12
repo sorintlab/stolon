@@ -43,6 +43,9 @@ mkdir -p ${BINDIR}
 
 export GO15VENDOREXPERIMENT=1
 
+VERSION=$(${BASEDIR}/scripts/git-version.sh)
+LD_FLAGS="-s -X ${REPO_PATH}/cmd.Version=$VERSION"
+
 # for static compilation we need to compile with cgo disabled (CGO_ENABLED=0),
 # this will trigger a rebuild of all the packages and also the go std library
 # (using a different install suffix called `cgo`, will use this since it's the
@@ -73,23 +76,23 @@ if [ -z $use_go_install ]; then
 	echo "or manually rebuild stdlib executing the command 'CGO_ENABLED=0 go install -a -installsuffix cgo std' from a user with write access to ${go_root_dir}/pkg"
 
 	for cmd in sentinel proxy; do
-		CGO_ENABLED=0 go build -a -installsuffix cgo -ldflags '-s' -o ${BINDIR}/stolon-${cmd} ${REPO_PATH}/cmd/${cmd}
+		CGO_ENABLED=0 go build -a -installsuffix cgo -ldflags "$LD_FLAGS" -o ${BINDIR}/stolon-${cmd} ${REPO_PATH}/cmd/${cmd}
 	done
-	CGO_ENABLED=0 go build -a -installsuffix cgo -ldflags '-s' -o ${BINDIR}/stolonctl ${REPO_PATH}/cmd/stolonctl
+	CGO_ENABLED=0 go build -a -installsuffix cgo -ldflags "$LD_FLAGS" -o ${BINDIR}/stolonctl ${REPO_PATH}/cmd/stolonctl
 else
 	for cmd in sentinel proxy; do
-		CGO_ENABLED=0 go install -installsuffix cgo -ldflags '-s' ${REPO_PATH}/cmd/${cmd}
+		CGO_ENABLED=0 go install -installsuffix cgo -ldflags "$LD_FLAGS" ${REPO_PATH}/cmd/${cmd}
 		rm -f ${BINDIR}/stolon-${cmd}
 		cp ${GOPATH}/bin/${cmd} ${BINDIR}/stolon-${cmd}
 	done
-	CGO_ENABLED=0 go install -installsuffix cgo -ldflags '-s' ${REPO_PATH}/cmd/stolonctl
+	CGO_ENABLED=0 go install -installsuffix cgo -ldflags "$LD_FLAGS" ${REPO_PATH}/cmd/stolonctl
 	rm -f ${BINDIR}/stolonctl
 	cp ${GOPATH}/bin/stolonctl ${BINDIR}/
 fi
 
 # stolon-keeper cannot be statically built since it needs to get its current
 # running user and this is not available with cgo disabled
-go install ${REPO_PATH}/cmd/keeper
+go install -ldflags "$LD_FLAGS" ${REPO_PATH}/cmd/keeper
 rm -f ${BINDIR}/stolon-keeper
 cp ${GOPATH}/bin/keeper ${BINDIR}/stolon-keeper
 

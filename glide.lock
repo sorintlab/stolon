@@ -1,5 +1,5 @@
-hash: 65066aa06af019a116ae79b13a0758b881c0158c8a4c341d7ffc021de3a4ff7a
-updated: 2017-10-12T18:04:47.972619241+02:00
+hash: 0a7b748b1a31f1cde3d58690bc8fa5967854faf943d1328abbc76f5019e15a42
+updated: 2017-12-04T17:09:23.161749846+01:00
 imports:
 - name: github.com/coreos/etcd
   version: bc9ddf260115d2680191c46977ae72b837785472
@@ -60,15 +60,15 @@ imports:
 - name: github.com/sorintlab/tcpkeepalive
   version: 8716b4a83184cc5801cfb46aab5cdfaa87a51dae
 - name: github.com/spf13/cobra
-  version: 9c28e4bbd74e5c3ed7aacbc552b2cab7cfdfe744
+  version: de2d9c4eca8f3c1de17d48b096b6504e0296f003
 - name: github.com/spf13/pflag
-  version: 6fd2ff4ff8dfcdf5556fbdc0ac0284408274b1a7
+  version: e57e3eeb33f795204c1ca35f56c44f83227c6e66
 - name: github.com/ugorji/go
   version: f1f1a805ed361a0e078bb537e4ea78cd37dcf065
   subpackages:
   - codec
 - name: go.uber.org/atomic
-  version: 4e336646b2ef9fc6e47be8e21594178f98e5ebcf
+  version: 8474b86a5a6f79c443ce4b2992817ff32cf208b8
 - name: go.uber.org/zap
   version: 9cabc84638b70e564c3dab2766efcb1ded2aac9f
   subpackages:

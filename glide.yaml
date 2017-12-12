@@ -25,9 +25,9 @@ import:
 - package: github.com/sorintlab/pollon
   version: 1475a2b4526829d0116cfd537cc8e9d9375035a9
 - package: github.com/spf13/cobra
-  version: 9c28e4bbd74e5c3ed7aacbc552b2cab7cfdfe744
+  version: de2d9c4eca8f3c1de17d48b096b6504e0296f003
 - package: github.com/spf13/pflag
-  version: 6fd2ff4ff8dfcdf5556fbdc0ac0284408274b1a7
+  version: v1.0.0
 - package: golang.org/x/net
   version: 9313baa13d9262e49d07b20ed57dceafcd7240cc
   subpackages:
