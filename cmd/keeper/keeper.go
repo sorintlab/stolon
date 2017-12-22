@@ -69,15 +69,10 @@ type DBLocalState struct {
 }
 
 type config struct {
+	cmd.CommonConfig
+
 	uid                     string
-	storeBackend            string
-	storeEndpoints          string
-	storeCertFile           string
-	storeKeyFile            string
-	storeCAFile             string
-	storeSkipTlsVerify      bool
 	dataDir                 string
-	clusterName             string
 	logLevel                string
 	debug                   bool
 	pgListenAddress         string
@@ -103,16 +98,11 @@ func init() {
 		die("cannot get current user: %v", err)
 	}
 
+	cmd.AddCommonFlags(cmdKeeper, &cfg.CommonConfig)
+
 	cmdKeeper.PersistentFlags().StringVar(&cfg.uid, "id", "", "keeper uid (must be unique in the cluster and can contain only lower-case letters, numbers and the underscore character). If not provided a random uid will be generated.")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.uid, "uid", "", "keeper uid (must be unique in the cluster and can contain only lower-case letters, numbers and the underscore character). If not provided a random uid will be generated.")
-	cmdKeeper.PersistentFlags().StringVar(&cfg.storeBackend, "store-backend", "", "store backend type (etcd or consul)")
-	cmdKeeper.PersistentFlags().StringVar(&cfg.storeEndpoints, "store-endpoints", "", "a comma-delimited list of store endpoints (use https scheme for tls communication) (defaults: http://127.0.0.1:2379 for etcd, http://127.0.0.1:8500 for consul)")
-	cmdKeeper.PersistentFlags().StringVar(&cfg.storeCertFile, "store-cert-file", "", "certificate file for client identification to the store")
-	cmdKeeper.PersistentFlags().StringVar(&cfg.storeKeyFile, "store-key", "", "private key file for client identification to the store")
-	cmdKeeper.PersistentFlags().StringVar(&cfg.storeCAFile, "store-ca-file", "", "verify certificates of HTTPS-enabled store servers using this CA bundle")
-	cmdKeeper.PersistentFlags().BoolVar(&cfg.storeSkipTlsVerify, "store-skip-tls-verify", false, "skip store certificate verification (insecure!!!)")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.dataDir, "data-dir", "", "data directory")
-	cmdKeeper.PersistentFlags().StringVar(&cfg.clusterName, "cluster-name", "", "cluster name")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.pgListenAddress, "pg-listen-address", "localhost", "postgresql instance listening address")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.pgPort, "pg-port", "5432", "postgresql instance listening port")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.pgBinPath, "pg-bin-path", "", "absolute path to postgresql binaries. If empty they will be searched in the current PATH")
@@ -358,8 +348,6 @@ type PostgresKeeper struct {
 	bootUUID string
 
 	dataDir             string
-	storeBackend        string
-	storeEndpoints      string
 	listenAddress       string
 	port                string
 	pgListenAddress     string
@@ -391,15 +379,15 @@ type PostgresKeeper struct {
 }
 
 func NewPostgresKeeper(cfg *config, stop chan bool, end chan error) (*PostgresKeeper, error) {
-	storePath := filepath.Join(common.StoreBasePath, cfg.clusterName)
+	storePath := filepath.Join(common.StoreBasePath, cfg.ClusterName)
 
 	kvstore, err := store.NewStore(store.Config{
-		Backend:       store.Backend(cfg.storeBackend),
-		Endpoints:     cfg.storeEndpoints,
-		CertFile:      cfg.storeCertFile,
-		KeyFile:       cfg.storeKeyFile,
-		CAFile:        cfg.storeCAFile,
-		SkipTLSVerify: cfg.storeSkipTlsVerify,
+		Backend:       store.Backend(cfg.StoreBackend),
+		Endpoints:     cfg.StoreEndpoints,
+		CertFile:      cfg.StoreCertFile,
+		KeyFile:       cfg.StoreKeyFile,
+		CAFile:        cfg.StoreCAFile,
+		SkipTLSVerify: cfg.StoreSkipTlsVerify,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("cannot create store: %v", err)
@@ -417,9 +405,7 @@ func NewPostgresKeeper(cfg *config, stop chan bool, end chan error) (*PostgresKe
 
 		bootUUID: common.UUID(),
 
-		dataDir:        dataDir,
-		storeBackend:   cfg.storeBackend,
-		storeEndpoints: cfg.storeEndpoints,
+		dataDir: dataDir,
 
 		pgListenAddress:     cfg.pgListenAddress,
 		pgPort:              cfg.pgPort,
@@ -1599,7 +1585,7 @@ func main() {
 	cmdKeeper.Execute()
 }
 
-func keeper(cmd *cobra.Command, args []string) {
+func keeper(c *cobra.Command, args []string) {
 	var err error
 	validAuthMethods := make(map[string]struct{})
 	validAuthMethods["trust"] = struct{}{}
@@ -1624,11 +1610,8 @@ func keeper(cmd *cobra.Command, args []string) {
 		die("data dir required")
 	}
 
-	if cfg.clusterName == "" {
-		die("cluster name required")
-	}
-	if cfg.storeBackend == "" {
-		die("store backend type required")
+	if err = cmd.CheckCommonConfig(&cfg.CommonConfig); err != nil {
+		die(err.Error())
 	}
 
 	if err = os.MkdirAll(cfg.dataDir, 0700); err != nil {

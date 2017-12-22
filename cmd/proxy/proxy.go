@@ -46,18 +46,13 @@ var cmdProxy = &cobra.Command{
 }
 
 type config struct {
-	storeBackend       string
-	storeEndpoints     string
-	storeCertFile      string
-	storeKeyFile       string
-	storeCAFile        string
-	storeSkipTlsVerify bool
-	clusterName        string
-	listenAddress      string
-	port               string
-	stopListening      bool
-	logLevel           string
-	debug              bool
+	cmd.CommonConfig
+
+	listenAddress string
+	port          string
+	stopListening bool
+	logLevel      string
+	debug         bool
 
 	keepAliveIdle     int
 	keepAliveCount    int
@@ -67,13 +62,8 @@ type config struct {
 var cfg config
 
 func init() {
-	cmdProxy.PersistentFlags().StringVar(&cfg.storeBackend, "store-backend", "", "store backend type (etcd or consul)")
-	cmdProxy.PersistentFlags().StringVar(&cfg.storeEndpoints, "store-endpoints", "", "a comma-delimited list of store endpoints (use https scheme for tls communication) (defaults: http://127.0.0.1:2379 for etcd, http://127.0.0.1:8500 for consul)")
-	cmdProxy.PersistentFlags().StringVar(&cfg.storeCertFile, "store-cert-file", "", "certificate file for client identification to the store")
-	cmdProxy.PersistentFlags().StringVar(&cfg.storeKeyFile, "store-key", "", "private key file for client identification to the store")
-	cmdProxy.PersistentFlags().StringVar(&cfg.storeCAFile, "store-ca-file", "", "verify certificates of HTTPS-enabled store servers using this CA bundle")
-	cmdProxy.PersistentFlags().BoolVar(&cfg.storeSkipTlsVerify, "store-skip-tls-verify", false, "skip store certificate verification (insecure!!!)")
-	cmdProxy.PersistentFlags().StringVar(&cfg.clusterName, "cluster-name", "", "cluster name")
+	cmd.AddCommonFlags(cmdProxy, &cfg.CommonConfig)
+
 	cmdProxy.PersistentFlags().StringVar(&cfg.listenAddress, "listen-address", "127.0.0.1", "proxy listening address")
 	cmdProxy.PersistentFlags().StringVar(&cfg.port, "port", "5432", "proxy listening port")
 	cmdProxy.PersistentFlags().BoolVar(&cfg.stopListening, "stop-listening", true, "stop listening on store error")
@@ -117,15 +107,15 @@ type ClusterChecker struct {
 }
 
 func NewClusterChecker(uid string, cfg config) (*ClusterChecker, error) {
-	storePath := filepath.Join(common.StoreBasePath, cfg.clusterName)
+	storePath := filepath.Join(common.StoreBasePath, cfg.ClusterName)
 
 	kvstore, err := store.NewStore(store.Config{
-		Backend:       store.Backend(cfg.storeBackend),
-		Endpoints:     cfg.storeEndpoints,
-		CertFile:      cfg.storeCertFile,
-		KeyFile:       cfg.storeKeyFile,
-		CAFile:        cfg.storeCAFile,
-		SkipTLSVerify: cfg.storeSkipTlsVerify,
+		Backend:       store.Backend(cfg.StoreBackend),
+		Endpoints:     cfg.StoreEndpoints,
+		CertFile:      cfg.StoreCertFile,
+		KeyFile:       cfg.StoreKeyFile,
+		CAFile:        cfg.StoreCAFile,
+		SkipTLSVerify: cfg.StoreSkipTlsVerify,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("cannot create store: %v", err)
@@ -353,7 +343,7 @@ func main() {
 	cmdProxy.Execute()
 }
 
-func proxy(cmd *cobra.Command, args []string) {
+func proxy(c *cobra.Command, args []string) {
 	switch cfg.logLevel {
 	case "error":
 		slog.SetLevel(zap.ErrorLevel)
@@ -374,12 +364,10 @@ func proxy(cmd *cobra.Command, args []string) {
 		pollon.SetLogger(stdlog)
 	}
 
-	if cfg.clusterName == "" {
-		die("cluster name required")
+	if err := cmd.CheckCommonConfig(&cfg.CommonConfig); err != nil {
+		die(err.Error())
 	}
-	if cfg.storeBackend == "" {
-		die("store backend type required")
-	}
+
 	if cfg.keepAliveIdle < 0 {
 		die("tcp keepalive idle value must be greater or equal to 0")
 	}
