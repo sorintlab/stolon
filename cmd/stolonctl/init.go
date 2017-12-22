@@ -15,6 +15,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"io/ioutil"
 	"os"
@@ -70,12 +71,14 @@ func initCluster(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	e, err := NewStore()
+	kvStore, err := NewKVStore()
 	if err != nil {
 		die("cannot create store: %v", err)
 	}
 
-	cd, _, err := e.GetClusterData()
+	e := NewStore(kvStore)
+
+	cd, _, err := e.GetClusterData(context.TODO())
 	if err != nil {
 		die("cannot get cluster data: %v", err)
 	}
@@ -96,7 +99,7 @@ func initCluster(cmd *cobra.Command, args []string) {
 		os.Exit(0)
 	}
 
-	cd, _, err = e.GetClusterData()
+	cd, _, err = e.GetClusterData(context.TODO())
 	if err != nil {
 		die("cannot get cluster data: %v", err)
 	}
@@ -120,7 +123,7 @@ func initCluster(cmd *cobra.Command, args []string) {
 	cd = cluster.NewClusterData(c)
 
 	// We ignore if cd has been modified between reading and writing
-	if err := e.PutClusterData(cd); err != nil {
+	if err := e.PutClusterData(context.TODO(), cd); err != nil {
 		die("cannot update cluster data: %v", err)
 	}
 }

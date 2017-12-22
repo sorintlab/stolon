@@ -16,6 +16,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -27,7 +28,6 @@ import (
 	"github.com/sorintlab/stolon/pkg/flagutil"
 	"github.com/sorintlab/stolon/pkg/store"
 
-	kvstore "github.com/docker/libkv/store"
 	"github.com/spf13/cobra"
 )
 
@@ -95,10 +95,8 @@ func die(format string, a ...interface{}) {
 	os.Exit(1)
 }
 
-func NewStore() (*store.StoreManager, error) {
-	storePath := filepath.Join(common.StoreBasePath, cfg.ClusterName)
-
-	kvstore, err := store.NewStore(store.Config{
+func NewKVStore() (store.KVStore, error) {
+	return store.NewKVStore(store.Config{
 		Backend:       store.Backend(cfg.StoreBackend),
 		Endpoints:     cfg.StoreEndpoints,
 		CertFile:      cfg.StoreCertFile,
@@ -106,14 +104,20 @@ func NewStore() (*store.StoreManager, error) {
 		CAFile:        cfg.StoreCAFile,
 		SkipTLSVerify: cfg.StoreSkipTlsVerify,
 	})
-	if err != nil {
-		return nil, fmt.Errorf("cannot create store: %v", err)
-	}
-	return store.NewStoreManager(kvstore, storePath), nil
 }
 
-func getClusterData(e *store.StoreManager) (*cluster.ClusterData, *kvstore.KVPair, error) {
-	cd, pair, err := e.GetClusterData()
+func NewStore(kvStore store.KVStore) *store.Store {
+	storePath := filepath.Join(common.StoreBasePath, cfg.ClusterName)
+	return store.NewStore(kvStore, storePath)
+}
+
+func NewElection(kvStore store.KVStore) store.Election {
+	storePath := filepath.Join(common.StoreBasePath, cfg.ClusterName)
+	return store.NewElection(kvStore, filepath.Join(storePath, common.SentinelLeaderKey), "")
+}
+
+func getClusterData(e *store.Store) (*cluster.ClusterData, *store.KVPair, error) {
+	cd, pair, err := e.GetClusterData(context.TODO())
 	if err != nil {
 		return nil, nil, fmt.Errorf("cannot get cluster data: %v", err)
 	}

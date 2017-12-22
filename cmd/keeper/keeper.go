@@ -364,7 +364,7 @@ type PostgresKeeper struct {
 	sleepInterval  time.Duration
 	requestTimeout time.Duration
 
-	e    *store.StoreManager
+	e    *store.Store
 	pgm  *postgresql.Manager
 	stop chan bool
 	end  chan error
@@ -381,7 +381,7 @@ type PostgresKeeper struct {
 func NewPostgresKeeper(cfg *config, stop chan bool, end chan error) (*PostgresKeeper, error) {
 	storePath := filepath.Join(common.StoreBasePath, cfg.ClusterName)
 
-	kvstore, err := store.NewStore(store.Config{
+	kvstore, err := store.NewKVStore(store.Config{
 		Backend:       store.Backend(cfg.StoreBackend),
 		Endpoints:     cfg.StoreEndpoints,
 		CertFile:      cfg.StoreCertFile,
@@ -392,7 +392,7 @@ func NewPostgresKeeper(cfg *config, stop chan bool, end chan error) (*PostgresKe
 	if err != nil {
 		return nil, fmt.Errorf("cannot create store: %v", err)
 	}
-	e := store.NewStoreManager(kvstore, storePath)
+	e := store.NewStore(kvstore, storePath)
 
 	// Clean and get absolute datadir path
 	dataDir, err := filepath.Abs(cfg.dataDir)
@@ -480,7 +480,7 @@ func (p *PostgresKeeper) updateKeeperInfo() error {
 
 	// The time to live is just to automatically remove old entries, it's
 	// not used to determine if the keeper info has been updated.
-	if err := p.e.SetKeeperInfo(keeperUID, keeperInfo, p.sleepInterval); err != nil {
+	if err := p.e.SetKeeperInfo(context.TODO(), keeperUID, keeperInfo, p.sleepInterval); err != nil {
 		return err
 	}
 	return nil
@@ -651,7 +651,7 @@ func (p *PostgresKeeper) Start() {
 
 	var err error
 	var cd *cluster.ClusterData
-	cd, _, err = p.e.GetClusterData()
+	cd, _, err = p.e.GetClusterData(context.TODO())
 	if err != nil {
 		log.Errorw("error retrieving cluster data", zap.Error(err))
 	} else if cd != nil {
@@ -841,7 +841,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 	e := p.e
 	pgm := p.pgm
 
-	cd, _, err := e.GetClusterData()
+	cd, _, err := e.GetClusterData(pctx)
 	if err != nil {
 		log.Errorw("error retrieving cluster data", zap.Error(err))
 		return

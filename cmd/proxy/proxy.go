@@ -15,6 +15,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"os"
@@ -100,7 +101,7 @@ type ClusterChecker struct {
 
 	listener         *net.TCPListener
 	pp               *pollon.Proxy
-	e                *store.StoreManager
+	e                *store.Store
 	endPollonProxyCh chan error
 
 	pollonMutex sync.Mutex
@@ -109,7 +110,7 @@ type ClusterChecker struct {
 func NewClusterChecker(uid string, cfg config) (*ClusterChecker, error) {
 	storePath := filepath.Join(common.StoreBasePath, cfg.ClusterName)
 
-	kvstore, err := store.NewStore(store.Config{
+	kvstore, err := store.NewKVStore(store.Config{
 		Backend:       store.Backend(cfg.StoreBackend),
 		Endpoints:     cfg.StoreEndpoints,
 		CertFile:      cfg.StoreCertFile,
@@ -120,7 +121,7 @@ func NewClusterChecker(uid string, cfg config) (*ClusterChecker, error) {
 	if err != nil {
 		return nil, fmt.Errorf("cannot create store: %v", err)
 	}
-	e := store.NewStoreManager(kvstore, storePath)
+	e := store.NewStore(kvstore, storePath)
 
 	return &ClusterChecker{
 		uid:              uid,
@@ -189,14 +190,14 @@ func (c *ClusterChecker) sendPollonConfData(confData pollon.ConfData) {
 	}
 }
 
-func (c *ClusterChecker) SetProxyInfo(e *store.StoreManager, generation int64, ttl time.Duration) error {
+func (c *ClusterChecker) SetProxyInfo(e *store.Store, generation int64, ttl time.Duration) error {
 	proxyInfo := &cluster.ProxyInfo{
 		UID:        c.uid,
 		Generation: generation,
 	}
 	log.Debugf("proxyInfo dump: %s", spew.Sdump(proxyInfo))
 
-	if err := c.e.SetProxyInfo(proxyInfo, ttl); err != nil {
+	if err := c.e.SetProxyInfo(context.TODO(), proxyInfo, ttl); err != nil {
 		return err
 	}
 	return nil
@@ -204,7 +205,7 @@ func (c *ClusterChecker) SetProxyInfo(e *store.StoreManager, generation int64, t
 
 // Check reads the cluster data and applies the right pollon configuration.
 func (c *ClusterChecker) Check() error {
-	cd, _, err := c.e.GetClusterData()
+	cd, _, err := c.e.GetClusterData(context.TODO())
 	if err != nil {
 		return fmt.Errorf("cannot get cluster data: %v", err)
 	}
@@ -311,6 +312,10 @@ func (c *ClusterChecker) Start() error {
 	checkCh := make(chan error)
 	timerCh := time.NewTimer(0).C
 
+	// TODO(sgotti) TimeoutCecker is needed to forcefully close connection also
+	// if the Check method is blocked somewhere.
+	// The idomatic/cleaner solution will be to use a context instead of this
+	// TimeoutChecker but we have to change the libkv stores to support contexts.
 	go c.TimeoutChecker(checkOkCh)
 
 	for true {

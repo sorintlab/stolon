@@ -55,7 +55,7 @@ func TestServerParameters(t *testing.T) {
 
 	storePath := filepath.Join(common.StoreBasePath, clusterName)
 
-	sm := store.NewStoreManager(tstore.store, storePath)
+	sm := store.NewStore(tstore.store, storePath)
 
 	initialClusterSpec := &cluster.ClusterSpec{
 		InitMode:           cluster.ClusterInitModeP(cluster.ClusterInitModeNew),

@@ -15,8 +15,10 @@
 package store
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"path/filepath"
@@ -27,23 +29,19 @@ import (
 	"github.com/sorintlab/stolon/common"
 	"github.com/sorintlab/stolon/pkg/cluster"
 
+	etcdclientv3 "github.com/coreos/etcd/clientv3"
+	"github.com/docker/leadership"
 	"github.com/docker/libkv"
-	kvstore "github.com/docker/libkv/store"
-	"github.com/docker/libkv/store/consul"
-	"github.com/docker/libkv/store/etcd"
+	libkvstore "github.com/docker/libkv/store"
 )
-
-func init() {
-	etcd.Register()
-	consul.Register()
-}
 
 // Backend represents a KV Store Backend
 type Backend string
 
 const (
 	CONSUL Backend = "consul"
-	ETCD   Backend = "etcd"
+	ETCDV2 Backend = "etcdv2"
+	ETCDV3 Backend = "etcdv3"
 )
 
 const (
@@ -59,6 +57,13 @@ const (
 const (
 	DefaultEtcdEndpoints   = "http://127.0.0.1:2379"
 	DefaultConsulEndpoints = "http://127.0.0.1:8500"
+)
+
+var (
+	// ErrKeyNotFound is thrown when the key is not found in the store during a Get operation
+	ErrKeyNotFound      = errors.New("Key not found in store")
+	ErrKeyModified      = errors.New("Unable to complete atomic operation, key modified")
+	ErrElectionNoLeader = errors.New("election: no leader")
 )
 
 const (
@@ -78,18 +83,45 @@ type Config struct {
 	SkipTLSVerify bool
 }
 
-type StoreManager struct {
-	clusterPath string
-	store       kvstore.Store
+// KVPair represents {Key, Value, Lastindex} tuple
+type KVPair struct {
+	Key       string
+	Value     []byte
+	LastIndex uint64
 }
 
-func NewStore(cfg Config) (kvstore.Store, error) {
-	var kvBackend kvstore.Backend
+type WriteOptions struct {
+	TTL time.Duration
+}
+
+type KVStore interface {
+	// Put a value at the specified key
+	Put(ctx context.Context, key string, value []byte, options *WriteOptions) error
+
+	// Get a value given its key
+	Get(ctx context.Context, key string) (*KVPair, error)
+
+	// List the content of a given prefix
+	List(ctx context.Context, directory string) ([]*KVPair, error)
+
+	// Atomic CAS operation on a single value.
+	// Pass previous = nil to create a new key.
+	AtomicPut(ctx context.Context, key string, value []byte, previous *KVPair, options *WriteOptions) (*KVPair, error)
+
+	Delete(ctx context.Context, key string) error
+
+	// Close the store connection
+	Close() error
+}
+
+func NewKVStore(cfg Config) (KVStore, error) {
+	var kvBackend libkvstore.Backend
 	switch cfg.Backend {
 	case CONSUL:
-		kvBackend = kvstore.CONSUL
-	case ETCD:
-		kvBackend = kvstore.ETCD
+		kvBackend = libkvstore.CONSUL
+	case ETCDV2:
+		kvBackend = libkvstore.ETCD
+	case ETCDV3:
 	default:
 		return nil, fmt.Errorf("Unknown store backend: %q", cfg.Backend)
 	}
@@ -99,7 +131,7 @@ func NewStore(cfg Config) (kvstore.Store, error) {
 		switch cfg.Backend {
 		case CONSUL:
 			endpointsStr = DefaultConsulEndpoints
-		case ETCD:
+		case ETCDV2, ETCDV3:
 			endpointsStr = DefaultEtcdEndpoints
 		}
 	}
@@ -147,59 +179,108 @@ func NewStore(cfg Config) (kvstore.Store, error) {
 		}
 	}
 
-	config := &kvstore.Config{
-		TLS:               tlsConfig,
-		ConnectionTimeout: 10 * time.Second,
-	}
+	switch cfg.Backend {
+	case CONSUL, ETCDV2:
+		config := &libkvstore.Config{
+			TLS:               tlsConfig,
+			ConnectionTimeout: cluster.DefaultStoreTimeout,
+		}
 
-	store, err := libkv.NewStore(kvBackend, addrs, config)
-	if err != nil {
-		return nil, err
+		store, err := libkv.NewStore(kvBackend, addrs, config)
+		if err != nil {
+			return nil, err
+		}
+		return &libKVStore{store: store}, nil
+	case ETCDV3:
+		config := etcdclientv3.Config{
+			Endpoints: addrs,
+			TLS:       tlsConfig,
+		}
+
+		c, err := etcdclientv3.New(config)
+		if err != nil {
+			return nil, err
+		}
+		return &etcdV3Store{c: c, requestTimeout: cluster.DefaultStoreTimeout}, nil
+	default:
+		return nil, fmt.Errorf("Unknown store backend: %q", cfg.Backend)
 	}
-	return store, nil
 }
 
-func NewStoreManager(kvStore kvstore.Store, path string) *StoreManager {
-	return &StoreManager{
+type Election interface {
+	// TODO(sgotti) this mimics the current docker/leadership API and the etcdv3
+	// implementations adapt to it. In future it could be replaced with a better
+	// api like the current one implemented by etcdclientv3/concurrency.
+	RunForElection() (<-chan bool, <-chan error)
+	Leader() (string, error)
+	Stop()
+}
+
+func NewElection(kvStore KVStore, path, candidateUID string) Election {
+	switch kvStore.(type) {
+	case *libKVStore:
+		s := kvStore.(*libKVStore)
+		electionPath := filepath.Join(path, common.SentinelLeaderKey)
+		candidate := leadership.NewCandidate(s.store, electionPath, candidateUID, MinTTL)
+		return &libkvElection{store: s, path: electionPath, candidate: candidate}
+	case *etcdV3Store:
+		etcdV3Store := kvStore.(*etcdV3Store)
+		return &etcdv3Election{
+			c:            etcdV3Store.c,
+			path:         path,
+			candidateUID: candidateUID,
+			ttl:          MinTTL,
+		}
+	default:
+		panic("unknown kvstore")
+	}
+}
+
+type Store struct {
+	clusterPath string
+	store       KVStore
+}
+
+func NewStore(kvStore KVStore, path string) *Store {
+	return &Store{
 		clusterPath: path,
 		store:       kvStore,
 	}
 }
 
-func (e *StoreManager) AtomicPutClusterData(cd *cluster.ClusterData, previous *kvstore.KVPair) (*kvstore.KVPair, error) {
+func (s *Store) AtomicPutClusterData(ctx context.Context, cd *cluster.ClusterData, previous *KVPair) (*KVPair, error) {
 	cdj, err := json.Marshal(cd)
 	if err != nil {
 		return nil, err
 	}
-	path := filepath.Join(e.clusterPath, clusterDataFile)
+	path := filepath.Join(s.clusterPath, clusterDataFile)
 	// Skip prev Value since LastIndex is enough for a CAS and it gives
 	// problem with etcd v2 api with big prev values.
-	var prev *kvstore.KVPair
+	var prev *KVPair
 	if previous != nil {
-		prev = &kvstore.KVPair{
+		prev = &KVPair{
 			Key:       previous.Key,
 			LastIndex: previous.LastIndex,
 		}
 	}
-	_, pair, err := e.store.AtomicPut(path, cdj, prev, nil)
-	return pair, err
+	return s.store.AtomicPut(ctx, path, cdj, prev, nil)
 }
 
-func (e *StoreManager) PutClusterData(cd *cluster.ClusterData) error {
+func (s *Store) PutClusterData(ctx context.Context, cd *cluster.ClusterData) error {
 	cdj, err := json.Marshal(cd)
 	if err != nil {
 		return err
 	}
-	path := filepath.Join(e.clusterPath, clusterDataFile)
-	return e.store.Put(path, cdj, nil)
+	path := filepath.Join(s.clusterPath, clusterDataFile)
+	return s.store.Put(ctx, path, cdj, nil)
 }
 
-func (e *StoreManager) GetClusterData() (*cluster.ClusterData, *kvstore.KVPair, error) {
+func (s *Store) GetClusterData(ctx context.Context) (*cluster.ClusterData, *KVPair, error) {
 	var cd *cluster.ClusterData
-	path := filepath.Join(e.clusterPath, clusterDataFile)
-	pair, err := e.store.Get(path)
+	path := filepath.Join(s.clusterPath, clusterDataFile)
+	pair, err := s.store.Get(ctx, path)
 	if err != nil {
-		if err != kvstore.ErrKeyNotFound {
+		if err != ErrKeyNotFound {
 			return nil, nil, err
 		}
 		return nil, nil, nil
@@ -210,7 +291,7 @@ func (e *StoreManager) GetClusterData() (*cluster.ClusterData, *kvstore.KVPair, 
 	return cd, pair, nil
 }
 
-func (e *StoreManager) SetKeeperInfo(id string, ms *cluster.KeeperInfo, ttl time.Duration) error {
+func (s *Store) SetKeeperInfo(ctx context.Context, id string, ms *cluster.KeeperInfo, ttl time.Duration) error {
 	msj, err := json.Marshal(ms)
 	if err != nil {
 		return err
@@ -218,17 +299,17 @@ func (e *StoreManager) SetKeeperInfo(id string, ms *cluster.KeeperInfo, ttl time
 	if ttl < MinTTL {
 		ttl = MinTTL
 	}
-	return e.store.Put(filepath.Join(e.clusterPath, keepersInfoDir, id), msj, &kvstore.WriteOptions{TTL: ttl})
+	return s.store.Put(ctx, filepath.Join(s.clusterPath, keepersInfoDir, id), msj, &WriteOptions{TTL: ttl})
 }
 
-func (e *StoreManager) GetKeeperInfo(id string) (*cluster.KeeperInfo, bool, error) {
+func (s *Store) GetKeeperInfo(ctx context.Context, id string) (*cluster.KeeperInfo, bool, error) {
 	if id == "" {
 		return nil, false, fmt.Errorf("empty keeper id")
 	}
 	var keeper cluster.KeeperInfo
-	pair, err := e.store.Get(filepath.Join(e.clusterPath, keepersInfoDir, id))
+	pair, err := s.store.Get(ctx, filepath.Join(s.clusterPath, keepersInfoDir, id))
 	if err != nil {
-		if err != kvstore.ErrKeyNotFound {
+		if err != ErrKeyNotFound {
 			return nil, false, err
 		}
 		return nil, false, nil
@@ -239,11 +320,11 @@ func (e *StoreManager) GetKeeperInfo(id string) (*cluster.KeeperInfo, bool, erro
 	return &keeper, true, nil
 }
 
-func (e *StoreManager) GetKeepersInfo() (cluster.KeepersInfo, error) {
+func (s *Store) GetKeepersInfo(ctx context.Context) (cluster.KeepersInfo, error) {
 	keepers := cluster.KeepersInfo{}
-	pairs, err := e.store.List(filepath.Join(e.clusterPath, keepersInfoDir))
+	pairs, err := s.store.List(ctx, filepath.Join(s.clusterPath, keepersInfoDir))
 	if err != nil {
-		if err != kvstore.ErrKeyNotFound {
+		if err != ErrKeyNotFound {
 			return nil, err
 		}
 		return keepers, nil
@@ -259,7 +340,7 @@ func (e *StoreManager) GetKeepersInfo() (cluster.KeepersInfo, error) {
 	return keepers, nil
 }
 
-func (e *StoreManager) SetSentinelInfo(si *cluster.SentinelInfo, ttl time.Duration) error {
+func (s *Store) SetSentinelInfo(ctx context.Context, si *cluster.SentinelInfo, ttl time.Duration) error {
 	sij, err := json.Marshal(si)
 	if err != nil {
 		return err
@@ -267,17 +348,17 @@ func (e *StoreManager) SetSentinelInfo(si *cluster.SentinelInfo, ttl time.Durati
 	if ttl < MinTTL {
 		ttl = MinTTL
 	}
-	return e.store.Put(filepath.Join(e.clusterPath, sentinelsInfoDir, si.UID), sij, &kvstore.WriteOptions{TTL: ttl})
+	return s.store.Put(ctx, filepath.Join(s.clusterPath, sentinelsInfoDir, si.UID), sij, &WriteOptions{TTL: ttl})
 }
 
-func (e *StoreManager) GetSentinelInfo(id string) (*cluster.SentinelInfo, bool, error) {
+func (s *Store) GetSentinelInfo(ctx context.Context, id string) (*cluster.SentinelInfo, bool, error) {
 	if id == "" {
 		return nil, false, fmt.Errorf("empty sentinel id")
 	}
 	var si cluster.SentinelInfo
-	pair, err := e.store.Get(filepath.Join(e.clusterPath, sentinelsInfoDir, id))
+	pair, err := s.store.Get(ctx, filepath.Join(s.clusterPath, sentinelsInfoDir, id))
 	if err != nil {
-		if err != kvstore.ErrKeyNotFound {
+		if err != ErrKeyNotFound {
 			return nil, false, err
 		}
 		return nil, false, nil
@@ -289,11 +370,11 @@ func (e *StoreManager) GetSentinelInfo(id string) (*cluster.SentinelInfo, bool, 
 	return &si, true, nil
 }
 
-func (e *StoreManager) GetSentinelsInfo() (cluster.SentinelsInfo, error) {
+func (s *Store) GetSentinelsInfo(ctx context.Context) (cluster.SentinelsInfo, error) {
 	ssi := cluster.SentinelsInfo{}
-	pairs, err := e.store.List(filepath.Join(e.clusterPath, sentinelsInfoDir))
+	pairs, err := s.store.List(ctx, filepath.Join(s.clusterPath, sentinelsInfoDir))
 	if err != nil {
-		if err != kvstore.ErrKeyNotFound {
+		if err != ErrKeyNotFound {
 			return nil, err
 		}
 		return ssi, nil
@@ -309,10 +390,10 @@ func (e *StoreManager) GetSentinelsInfo() (cluster.SentinelsInfo, error) {
 	return ssi, nil
 }
 
-func (e *StoreManager) GetLeaderSentinelId() (string, error) {
-	pair, err := e.store.Get(filepath.Join(e.clusterPath, sentinelLeaderKey))
+func (s *Store) GetLeaderSentinelId(ctx context.Context) (string, error) {
+	pair, err := s.store.Get(ctx, filepath.Join(s.clusterPath, sentinelLeaderKey))
 	if err != nil {
-		if err != kvstore.ErrKeyNotFound {
+		if err != ErrKeyNotFound {
 			return "", err
 		}
 		return "", nil
@@ -320,7 +401,7 @@ func (e *StoreManager) GetLeaderSentinelId() (string, error) {
 	return string(pair.Value), nil
 }
 
-func (e *StoreManager) SetProxyInfo(pi *cluster.ProxyInfo, ttl time.Duration) error {
+func (s *Store) SetProxyInfo(ctx context.Context, pi *cluster.ProxyInfo, ttl time.Duration) error {
 	pij, err := json.Marshal(pi)
 	if err != nil {
 		return err
@@ -328,17 +409,17 @@ func (e *StoreManager) SetProxyInfo(pi *cluster.ProxyInfo, ttl time.Duration) er
 	if ttl < MinTTL {
 		ttl = MinTTL
 	}
-	return e.store.Put(filepath.Join(e.clusterPath, proxiesInfoDir, pi.UID), pij, &kvstore.WriteOptions{TTL: ttl})
+	return s.store.Put(ctx, filepath.Join(s.clusterPath, proxiesInfoDir, pi.UID), pij, &WriteOptions{TTL: ttl})
 }
 
-func (e *StoreManager) GetProxyInfo(id string) (*cluster.ProxyInfo, bool, error) {
+func (s *Store) GetProxyInfo(ctx context.Context, id string) (*cluster.ProxyInfo, bool, error) {
 	if id == "" {
 		return nil, false, fmt.Errorf("empty proxy id")
 	}
 	var pi cluster.ProxyInfo
-	pair, err := e.store.Get(filepath.Join(e.clusterPath, proxiesInfoDir, id))
+	pair, err := s.store.Get(ctx, filepath.Join(s.clusterPath, proxiesInfoDir, id))
 	if err != nil {
-		if err != kvstore.ErrKeyNotFound {
+		if err != ErrKeyNotFound {
 			return nil, false, err
 		}
 		return nil, false, nil
@@ -350,11 +431,11 @@ func (e *StoreManager) GetProxyInfo(id string) (*cluster.ProxyInfo, bool, error)
 	return &pi, true, nil
 }
 
-func (e *StoreManager) GetProxiesInfo() (cluster.ProxiesInfo, error) {
+func (s *Store) GetProxiesInfo(ctx context.Context) (cluster.ProxiesInfo, error) {
 	psi := cluster.ProxiesInfo{}
-	pairs, err := e.store.List(filepath.Join(e.clusterPath, proxiesInfoDir))
+	pairs, err := s.store.List(ctx, filepath.Join(s.clusterPath, proxiesInfoDir))
 	if err != nil {
-		if err != kvstore.ErrKeyNotFound {
+		if err != ErrKeyNotFound {
 			return nil, err
 		}
 		return psi, nil

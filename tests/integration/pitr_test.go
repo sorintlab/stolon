@@ -15,6 +15,7 @@
 package integration
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -56,7 +57,7 @@ func TestPITR(t *testing.T) {
 
 	storePath := filepath.Join(common.StoreBasePath, clusterName)
 
-	sm := store.NewStoreManager(tstore.store, storePath)
+	sm := store.NewStore(tstore.store, storePath)
 
 	initialClusterSpec := &cluster.ClusterSpec{
 		InitMode:           cluster.ClusterInitModeP(cluster.ClusterInitModeNew),
@@ -130,11 +131,11 @@ func TestPITR(t *testing.T) {
 	ts.Stop()
 
 	// Delete the current cluster data
-	if err := tstore.store.Delete(filepath.Join(storePath, "clusterdata")); err != nil {
+	if err := tstore.store.Delete(context.TODO(), filepath.Join(storePath, "clusterdata")); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	// Delete sentinel leader key to just speedup new election
-	if err := tstore.store.Delete(filepath.Join(storePath, common.SentinelLeaderKey)); err != nil {
+	if err := tstore.store.Delete(context.TODO(), filepath.Join(storePath, common.SentinelLeaderKey)); err != nil && err != store.ErrKeyNotFound {
 		t.Fatalf("unexpected err: %v", err)
 	}
 

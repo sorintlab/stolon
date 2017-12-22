@@ -34,7 +34,7 @@ type CommonConfig struct {
 }
 
 func AddCommonFlags(cmd *cobra.Command, cfg *CommonConfig) {
-	cmd.PersistentFlags().StringVar(&cfg.StoreBackend, "store-backend", "", "store backend type (etcd or consul)")
+	cmd.PersistentFlags().StringVar(&cfg.StoreBackend, "store-backend", "", "store backend type (etcdv2/etcd, etcdv3 or consul)")
 	cmd.PersistentFlags().StringVar(&cfg.StoreEndpoints, "store-endpoints", "", "a comma-delimited list of store endpoints (use https scheme for tls communication) (defaults: http://127.0.0.1:2379 for etcd, http://127.0.0.1:8500 for consul)")
 	cmd.PersistentFlags().StringVar(&cfg.StoreCertFile, "store-cert-file", "", "certificate file for client identification to the store")
 	cmd.PersistentFlags().StringVar(&cfg.StoreKeyFile, "store-key", "", "private key file for client identification to the store")
@@ -54,6 +54,10 @@ func CheckCommonConfig(cfg *CommonConfig) error {
 	switch cfg.StoreBackend {
 	case "consul":
 	case "etcd":
+		// etcd is old alias for etcdv2
+		cfg.StoreBackend = "etcdv2"
+	case "etcdv2":
+	case "etcdv3":
 	default:
 		return fmt.Errorf("Unknown store backend: %q", cfg.StoreBackend)
 	}

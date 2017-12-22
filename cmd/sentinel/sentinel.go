@@ -40,7 +40,6 @@ import (
 	"github.com/sorintlab/stolon/pkg/util"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/docker/leadership"
 	"github.com/mitchellh/copystructure"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -96,7 +95,7 @@ func die(format string, a ...interface{}) {
 func (s *Sentinel) electionLoop() {
 	for {
 		log.Infow("Trying to acquire sentinels leadership")
-		electedCh, errCh := s.candidate.RunForElection()
+		electedCh, errCh := s.election.RunForElection()
 		for {
 			select {
 			case elected := <-electedCh:
@@ -120,6 +119,7 @@ func (s *Sentinel) electionLoop() {
 				goto end
 			case <-s.stop:
 				log.Debugw("stopping election loop")
+				s.election.Stop()
 				return
 			}
 		}
@@ -136,20 +136,16 @@ func (s *Sentinel) syncRepl(spec *cluster.ClusterSpec) bool {
 	return *spec.SynchronousReplication && *spec.Role == cluster.ClusterRoleMaster
 }
 
-func (s *Sentinel) setSentinelInfo(ttl time.Duration) error {
+func (s *Sentinel) setSentinelInfo(ctx context.Context, ttl time.Duration) error {
 	sentinelInfo := &cluster.SentinelInfo{
 		UID: s.uid,
 	}
 	log.Debugw("sentinelInfo dump", "sentinelInfo", sentinelInfo)
 
-	if err := s.e.SetSentinelInfo(sentinelInfo, ttl); err != nil {
+	if err := s.e.SetSentinelInfo(ctx, sentinelInfo, ttl); err != nil {
 		return err
 	}
 	return nil
-}
-
-func (s *Sentinel) getKeepersInfo(ctx context.Context) (cluster.KeepersInfo, error) {
-	return s.e.GetKeepersInfo()
 }
 
 func (s *Sentinel) SetKeeperError(uid string) {
@@ -1443,11 +1439,11 @@ type DBConvergenceInfo struct {
 type Sentinel struct {
 	uid string
 	cfg *config
-	e   *store.StoreManager
+	e   *store.Store
 
-	candidate *leadership.Candidate
-	stop      chan bool
-	end       chan bool
+	election store.Election
+	stop     chan bool
+	end      chan bool
 
 	lastLeadershipCount uint
 
@@ -1493,7 +1489,7 @@ func NewSentinel(uid string, cfg *config, stop chan bool, end chan bool) (*Senti
 
 	storePath := filepath.Join(common.StoreBasePath, cfg.ClusterName)
 
-	kvstore, err := store.NewStore(store.Config{
+	kvstore, err := store.NewKVStore(store.Config{
 		Backend:       store.Backend(cfg.StoreBackend),
 		Endpoints:     cfg.StoreEndpoints,
 		CertFile:      cfg.StoreCertFile,
@@ -1504,15 +1500,15 @@ func NewSentinel(uid string, cfg *config, stop chan bool, end chan bool) (*Senti
 	if err != nil {
 		return nil, fmt.Errorf("cannot create store: %v", err)
 	}
-	e := store.NewStoreManager(kvstore, storePath)
+	e := store.NewStore(kvstore, storePath)
 
-	candidate := leadership.NewCandidate(kvstore, filepath.Join(storePath, common.SentinelLeaderKey), uid, store.MinTTL)
+	election := store.NewElection(kvstore, filepath.Join(storePath, common.SentinelLeaderKey), uid)
 
 	return &Sentinel{
 		uid:                uid,
 		cfg:                cfg,
 		e:                  e,
-		candidate:          candidate,
+		election:           election,
 		leader:             false,
 		initialClusterSpec: initialClusterSpec,
 		stop:               stop,
@@ -1539,9 +1535,8 @@ func (s *Sentinel) Start() {
 	for true {
 		select {
 		case <-s.stop:
-			log.Debugw("stopping stolon sentinel")
+			log.Infow("stopping stolon sentinel")
 			cancel()
-			s.candidate.Stop()
 			s.end <- true
 			return
 		case <-timerCh:
@@ -1566,7 +1561,7 @@ func (s *Sentinel) clusterSentinelCheck(pctx context.Context) {
 	defer s.updateMutex.Unlock()
 	e := s.e
 
-	cd, prevCDPair, err := e.GetClusterData()
+	cd, prevCDPair, err := e.GetClusterData(pctx)
 	if err != nil {
 		log.Errorw("error retrieving cluster data", zap.Error(err))
 		return
@@ -1599,27 +1594,25 @@ func (s *Sentinel) clusterSentinelCheck(pctx context.Context) {
 		log.Infow("writing initial cluster data")
 		newcd := cluster.NewClusterData(c)
 		log.Debugf("newcd dump: %s", spew.Sdump(newcd))
-		if _, err = e.AtomicPutClusterData(newcd, nil); err != nil {
+		if _, err = e.AtomicPutClusterData(pctx, newcd, nil); err != nil {
 			log.Errorw("error saving cluster data", zap.Error(err))
 		}
 		return
 	}
 
-	if err = s.setSentinelInfo(2 * s.sleepInterval); err != nil {
+	if err = s.setSentinelInfo(pctx, 2*s.sleepInterval); err != nil {
 		log.Errorw("cannot update sentinel info", zap.Error(err))
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(pctx, s.requestTimeout)
-	keepersInfo, err := s.getKeepersInfo(ctx)
-	cancel()
+	keepersInfo, err := s.e.GetKeepersInfo(pctx)
 	if err != nil {
 		log.Errorw("cannot get keepers info", zap.Error(err))
 		return
 	}
 	log.Debugf("keepersInfo dump: %s", spew.Sdump(keepersInfo))
 
-	proxiesInfo, err := s.e.GetProxiesInfo()
+	proxiesInfo, err := s.e.GetProxiesInfo(pctx)
 	if err != nil {
 		log.Errorw("failed to get proxies info", zap.Error(err))
 		return
@@ -1661,7 +1654,7 @@ func (s *Sentinel) clusterSentinelCheck(pctx context.Context) {
 	log.Debugf("newcd dump after updateCluster: %s", spew.Sdump(newcd))
 
 	if newcd != nil {
-		if _, err := e.AtomicPutClusterData(newcd, prevCDPair); err != nil {
+		if _, err := e.AtomicPutClusterData(pctx, newcd, prevCDPair); err != nil {
 			log.Errorw("error saving clusterdata", zap.Error(err))
 		}
 	}

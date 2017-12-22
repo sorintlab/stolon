@@ -15,6 +15,7 @@
 package integration
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -106,7 +107,7 @@ func testInitNew(t *testing.T, merge bool) {
 	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
 	storePath := filepath.Join(common.StoreBasePath, clusterName)
 
-	sm := store.NewStoreManager(tstore.store, storePath)
+	sm := store.NewStore(tstore.store, storePath)
 
 	initialClusterSpec := &cluster.ClusterSpec{
 		InitMode:           cluster.ClusterInitModeP(cluster.ClusterInitModeNew),
@@ -144,7 +145,7 @@ func testInitNew(t *testing.T, merge bool) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	cd, _, err := sm.GetClusterData()
+	cd, _, err := sm.GetClusterData(context.TODO())
 	// max_connection should be set by initdb
 	_, ok := cd.Cluster.Spec.PGParameters["max_connections"]
 	if merge && !ok {
@@ -182,7 +183,7 @@ func testInitExisting(t *testing.T, merge bool) {
 	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
 	storePath := filepath.Join(common.StoreBasePath, clusterName)
 
-	sm := store.NewStoreManager(tstore.store, storePath)
+	sm := store.NewStore(tstore.store, storePath)
 
 	initialClusterSpec := &cluster.ClusterSpec{
 		InitMode:           cluster.ClusterInitModeP(cluster.ClusterInitModeNew),
@@ -283,7 +284,7 @@ func testInitExisting(t *testing.T, merge bool) {
 		t.Fatalf("expected archive_mode empty")
 	}
 
-	cd, _, err := sm.GetClusterData()
+	cd, _, err := sm.GetClusterData(context.TODO())
 	// max_connection should be set by initdb
 	v, ok = cd.Cluster.Spec.PGParameters["archive_mode"]
 	if merge && v != "on" {
@@ -328,7 +329,7 @@ func TestInitUsers(t *testing.T) {
 	clusterName = uuid.NewV4().String()
 	storePath := filepath.Join(common.StoreBasePath, clusterName)
 
-	sm := store.NewStoreManager(tstore.store, storePath)
+	sm := store.NewStore(tstore.store, storePath)
 
 	initialClusterSpec := &cluster.ClusterSpec{
 		InitMode:           cluster.ClusterInitModeP(cluster.ClusterInitModeNew),
@@ -371,7 +372,7 @@ func TestInitUsers(t *testing.T) {
 	clusterName = uuid.NewV4().String()
 	storePath = filepath.Join(common.StoreBasePath, clusterName)
 
-	sm = store.NewStoreManager(tstore.store, storePath)
+	sm = store.NewStore(tstore.store, storePath)
 
 	ts2, err := NewTestSentinel(t, dir, clusterName, tstore.storeBackend, storeEndpoints, fmt.Sprintf("--initial-cluster-spec=%s", initialClusterSpecFile))
 	if err != nil {
@@ -419,7 +420,7 @@ func TestInitialClusterSpec(t *testing.T) {
 	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
 	storePath := filepath.Join(common.StoreBasePath, clusterName)
 
-	sm := store.NewStoreManager(tstore.store, storePath)
+	sm := store.NewStore(tstore.store, storePath)
 
 	initialClusterSpec := &cluster.ClusterSpec{
 		InitMode:               cluster.ClusterInitModeP(cluster.ClusterInitModeNew),
@@ -447,7 +448,7 @@ func TestInitialClusterSpec(t *testing.T) {
 		t.Fatal("expected cluster in initializing phase")
 	}
 
-	cd, _, err := sm.GetClusterData()
+	cd, _, err := sm.GetClusterData(context.TODO())
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}

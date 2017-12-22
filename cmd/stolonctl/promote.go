@@ -15,6 +15,7 @@
 package main
 
 import (
+	"context"
 	"os"
 
 	"github.com/sorintlab/stolon/pkg/cluster"
@@ -40,10 +41,12 @@ func promote(cmd *cobra.Command, args []string) {
 		die("too many arguments")
 	}
 
-	e, err := NewStore()
+	kvStore, err := NewKVStore()
 	if err != nil {
 		die("cannot create store: %v", err)
 	}
+
+	e := NewStore(kvStore)
 
 	accepted := true
 	if !initOpts.forceYes {
@@ -82,7 +85,7 @@ func promote(cmd *cobra.Command, args []string) {
 		}
 
 		// retry if cd has been modified between reading and writing
-		_, err = e.AtomicPutClusterData(cd, pair)
+		_, err = e.AtomicPutClusterData(context.TODO(), cd, pair)
 		if err != nil {
 			if err == libkvstore.ErrKeyModified {
 				retry++
