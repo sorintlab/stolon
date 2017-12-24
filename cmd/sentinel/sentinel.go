@@ -60,13 +60,7 @@ var cmdSentinel = &cobra.Command{
 }
 
 type config struct {
-	storeBackend           string
-	storeEndpoints         string
-	storeCertFile          string
-	storeKeyFile           string
-	storeCAFile            string
-	storeSkipTlsVerify     bool
-	clusterName            string
+	cmd.CommonConfig
 	initialClusterSpecFile string
 	logLevel               string
 	debug                  bool
@@ -75,13 +69,8 @@ type config struct {
 var cfg config
 
 func init() {
-	cmdSentinel.PersistentFlags().StringVar(&cfg.storeBackend, "store-backend", "", "store backend type (etcd or consul)")
-	cmdSentinel.PersistentFlags().StringVar(&cfg.storeEndpoints, "store-endpoints", "", "a comma-delimited list of store endpoints (use https scheme for tls communication) (defaults: http://127.0.0.1:2379 for etcd, http://127.0.0.1:8500 for consul)")
-	cmdSentinel.PersistentFlags().StringVar(&cfg.storeCertFile, "store-cert-file", "", "certificate file for client identification to the store")
-	cmdSentinel.PersistentFlags().StringVar(&cfg.storeKeyFile, "store-key", "", "private key file for client identification to the store")
-	cmdSentinel.PersistentFlags().BoolVar(&cfg.storeSkipTlsVerify, "store-skip-tls-verify", false, "skip store certificate verification (insecure!!!)")
-	cmdSentinel.PersistentFlags().StringVar(&cfg.storeCAFile, "store-ca-file", "", "verify certificates of HTTPS-enabled store servers using this CA bundle")
-	cmdSentinel.PersistentFlags().StringVar(&cfg.clusterName, "cluster-name", "", "cluster name")
+	cmd.AddCommonFlags(cmdSentinel, &cfg.CommonConfig)
+
 	cmdSentinel.PersistentFlags().StringVar(&cfg.initialClusterSpecFile, "initial-cluster-spec", "", "a file providing the initial cluster specification, used only at cluster initialization, ignored if cluster is already initialized")
 	cmdSentinel.PersistentFlags().StringVar(&cfg.logLevel, "log-level", "info", "debug, info(default), warn or error")
 	cmdSentinel.PersistentFlags().BoolVar(&cfg.debug, "debug", false, "enable debug logging (deprecated, use log-level instead)")
@@ -1502,15 +1491,15 @@ func NewSentinel(uid string, cfg *config, stop chan bool, end chan bool) (*Senti
 		}
 	}
 
-	storePath := filepath.Join(common.StoreBasePath, cfg.clusterName)
+	storePath := filepath.Join(common.StoreBasePath, cfg.ClusterName)
 
 	kvstore, err := store.NewStore(store.Config{
-		Backend:       store.Backend(cfg.storeBackend),
-		Endpoints:     cfg.storeEndpoints,
-		CertFile:      cfg.storeCertFile,
-		KeyFile:       cfg.storeKeyFile,
-		CAFile:        cfg.storeCAFile,
-		SkipTLSVerify: cfg.storeSkipTlsVerify,
+		Backend:       store.Backend(cfg.StoreBackend),
+		Endpoints:     cfg.StoreEndpoints,
+		CertFile:      cfg.StoreCertFile,
+		KeyFile:       cfg.StoreKeyFile,
+		CAFile:        cfg.StoreCAFile,
+		SkipTLSVerify: cfg.StoreSkipTlsVerify,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("cannot create store: %v", err)
@@ -1698,7 +1687,7 @@ func main() {
 	cmdSentinel.Execute()
 }
 
-func sentinel(cmd *cobra.Command, args []string) {
+func sentinel(c *cobra.Command, args []string) {
 	switch cfg.logLevel {
 	case "error":
 		slog.SetLevel(zap.ErrorLevel)
@@ -1715,11 +1704,8 @@ func sentinel(cmd *cobra.Command, args []string) {
 		slog.SetDebug()
 	}
 
-	if cfg.clusterName == "" {
-		die("cluster name required")
-	}
-	if cfg.storeBackend == "" {
-		die("store backend type required")
+	if err := cmd.CheckCommonConfig(&cfg.CommonConfig); err != nil {
+		die(err.Error())
 	}
 
 	uid := common.UID()

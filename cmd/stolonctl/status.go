@@ -84,10 +84,6 @@ func status(cmd *cobra.Command, args []string) {
 	tabOut := new(tabwriter.Writer)
 	tabOut.Init(os.Stdout, 0, 8, 1, '\t', 0)
 
-	if cfg.clusterName == "" {
-		die("cluster name required")
-	}
-
 	e, err := NewStore()
 	if err != nil {
 		die("cannot create store: %v", err)

@@ -39,13 +39,10 @@ var cmdStolonCtl = &cobra.Command{
 	Use:     "stolonctl",
 	Short:   "stolon command line client",
 	Version: cmd.Version,
-	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		if cmd.Name() != "stolonctl" && cmd.Name() != "version" {
-			if cfg.clusterName == "" {
-				die("cluster name required")
-			}
-			if cfg.storeBackend == "" {
-				die("store backend type required")
+	PersistentPreRun: func(c *cobra.Command, args []string) {
+		if c.Name() != "stolonctl" && c.Name() != "version" {
+			if err := cmd.CheckCommonConfig(&cfg.CommonConfig); err != nil {
+				die(err.Error())
 			}
 		}
 	},
@@ -54,25 +51,13 @@ var cmdStolonCtl = &cobra.Command{
 }
 
 type config struct {
-	storeBackend       string
-	storeEndpoints     string
-	storeCertFile      string
-	storeKeyFile       string
-	storeCAFile        string
-	storeSkipTlsVerify bool
-	clusterName        string
+	cmd.CommonConfig
 }
 
 var cfg config
 
 func init() {
-	cmdStolonCtl.PersistentFlags().StringVar(&cfg.storeBackend, "store-backend", "", "store backend type (etcd or consul)")
-	cmdStolonCtl.PersistentFlags().StringVar(&cfg.storeEndpoints, "store-endpoints", "", "a comma-delimited list of store endpoints (use https scheme for tls communication) (defaults: http://127.0.0.1:2379 for etcd, http://127.0.0.1:8500 for consul)")
-	cmdStolonCtl.PersistentFlags().StringVar(&cfg.storeCertFile, "store-cert-file", "", "certificate file for client identification to the store")
-	cmdStolonCtl.PersistentFlags().StringVar(&cfg.storeKeyFile, "store-key", "", "private key file for client identification to the store")
-	cmdStolonCtl.PersistentFlags().StringVar(&cfg.storeCAFile, "store-ca-file", "", "verify certificates of HTTPS-enabled store servers using this CA bundle")
-	cmdStolonCtl.PersistentFlags().BoolVar(&cfg.storeSkipTlsVerify, "store-skip-tls-verify", false, "skip store certificate verification (insecure!!!)")
-	cmdStolonCtl.PersistentFlags().StringVar(&cfg.clusterName, "cluster-name", "", "cluster name")
+	cmd.AddCommonFlags(cmdStolonCtl, &cfg.CommonConfig)
 }
 
 var cmdVersion = &cobra.Command{
@@ -111,15 +96,15 @@ func die(format string, a ...interface{}) {
 }
 
 func NewStore() (*store.StoreManager, error) {
-	storePath := filepath.Join(common.StoreBasePath, cfg.clusterName)
+	storePath := filepath.Join(common.StoreBasePath, cfg.ClusterName)
 
 	kvstore, err := store.NewStore(store.Config{
-		Backend:       store.Backend(cfg.storeBackend),
-		Endpoints:     cfg.storeEndpoints,
-		CertFile:      cfg.storeCertFile,
-		KeyFile:       cfg.storeKeyFile,
-		CAFile:        cfg.storeCAFile,
-		SkipTLSVerify: cfg.storeSkipTlsVerify,
+		Backend:       store.Backend(cfg.StoreBackend),
+		Endpoints:     cfg.StoreEndpoints,
+		CertFile:      cfg.StoreCertFile,
+		KeyFile:       cfg.StoreKeyFile,
+		CAFile:        cfg.StoreCAFile,
+		SkipTLSVerify: cfg.StoreSkipTlsVerify,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("cannot create store: %v", err)
