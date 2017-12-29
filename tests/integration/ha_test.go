@@ -1523,7 +1523,7 @@ func testKeeperRemovalStolonCtl(t *testing.T, syncRepl bool) {
 	standbys[0].Start()
 
 	// it should reenter the cluster with the same uid but a new assigned db uid
-	if err := waitLines(t, standbys[0], 1, 30*time.Second); err != nil {
+	if err := waitLines(t, standbys[0], 1, 60*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 }
@@ -1549,7 +1549,20 @@ func TestStandbyCantSync(t *testing.T) {
 
 	clusterName := uuid.NewV4().String()
 
-	tks, tss, tp, tstore := setupServers(t, clusterName, dir, 3, 1, false, false, nil)
+	initialClusterSpec := &cluster.ClusterSpec{
+		InitMode:           cluster.ClusterInitModeP(cluster.ClusterInitModeNew),
+		SleepInterval:      &cluster.Duration{Duration: 2 * time.Second},
+		FailInterval:       &cluster.Duration{Duration: 5 * time.Second},
+		ConvergenceTimeout: &cluster.Duration{Duration: 30 * time.Second},
+		PGParameters: pgParametersWithDefaults(cluster.PGParameters{
+			// Set max_wal_size, min_wal_size to a lower value so triggering a
+			// checkpoint will remove uneeded wals
+			"max_wal_size": "40MB",
+			"min_wal_size": "40MB",
+		}),
+	}
+
+	tks, tss, tp, tstore := setupServersCustom(t, clusterName, dir, 3, 1, initialClusterSpec)
 	defer shutdown(tks, tss, tp, tstore)
 
 	storePath := filepath.Join(common.StoreBasePath, clusterName)
@@ -1581,8 +1594,13 @@ func TestStandbyCantSync(t *testing.T) {
 	t.Logf("Stopping standbys[0] keeper: %s", standbys[0].uid)
 	standbys[0].Stop()
 
-	// switch wals a lot of times to ensure wals on standbys aren't enough for syncing standbys[0] from it
-	if err := master.SwitchWals(100); err != nil {
+	// switch wals multiple times (> wal_keep_segments) to ensure wals on
+	// standbys aren't enough for syncing standbys[0] from it.
+	// Also do checkpoint to delete unused wal and free disk space
+	if err := master.SwitchWals(10); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := standbys[1].CheckPoint(); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 

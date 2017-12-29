@@ -353,6 +353,11 @@ func (tk *TestKeeper) SwitchWals(times int) error {
 	return nil
 }
 
+func (tk *TestKeeper) CheckPoint() error {
+	_, err := tk.Exec("CHECKPOINT")
+	return err
+}
+
 func (tk *TestKeeper) WaitDBUp(timeout time.Duration) error {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
