@@ -18,11 +18,13 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/sorintlab/stolon/common"
 	"github.com/sorintlab/stolon/pkg/cluster"
+	"github.com/sorintlab/stolon/pkg/store"
 
 	"github.com/satori/go.uuid"
 )
@@ -37,9 +39,14 @@ func TestInitStandbyCluster(t *testing.T) {
 	defer os.RemoveAll(dir)
 
 	// Setup a remote stolon cluster (with just one keeper and one sentinel)
+	primaryClusterName := uuid.NewV4().String()
+
 	ptstore := setupStore(t, dir)
 	defer ptstore.Stop()
+
 	primaryStoreEndpoints := fmt.Sprintf("%s:%s", ptstore.listenAddress, ptstore.port)
+	pStorePath := filepath.Join(common.StoreBasePath, primaryClusterName)
+	psm := store.NewStoreManager(ptstore.store, pStorePath)
 
 	initialClusterSpec := &cluster.ClusterSpec{
 		InitMode:           cluster.ClusterInitModeP(cluster.ClusterInitModeNew),
@@ -52,7 +59,6 @@ func TestInitStandbyCluster(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	primaryClusterName := uuid.NewV4().String()
 	pts, err := NewTestSentinel(t, dir, primaryClusterName, ptstore.storeBackend, primaryStoreEndpoints, fmt.Sprintf("--initial-cluster-spec=%s", initialClusterSpecFile))
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -71,9 +77,7 @@ func TestInitStandbyCluster(t *testing.T) {
 	}
 	defer ptk.Stop()
 
-	if err := ptk.WaitDBUp(60 * time.Second); err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
+	waitKeeperReady(t, psm, ptk)
 	t.Logf("primary database is up")
 
 	if err := populate(t, ptk); err != nil {
@@ -84,12 +88,14 @@ func TestInitStandbyCluster(t *testing.T) {
 	}
 
 	// setup a standby cluster
+	clusterName := uuid.NewV4().String()
+
 	tstore := setupStore(t, dir)
 	defer tstore.Stop()
 
 	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
-
-	clusterName := uuid.NewV4().String()
+	storePath := filepath.Join(common.StoreBasePath, clusterName)
+	sm := store.NewStoreManager(tstore.store, storePath)
 
 	pgpass, err := ioutil.TempFile(dir, "pgpass")
 	if err != nil {
@@ -136,9 +142,7 @@ func TestInitStandbyCluster(t *testing.T) {
 	}
 	defer tk.Stop()
 
-	if err := tk.WaitDBUp(60 * time.Second); err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
+	waitKeeperReady(t, sm, tk)
 	t.Logf("standby cluster master database is up")
 
 	if err := waitLines(t, tk, 1, 10*time.Second); err != nil {
@@ -164,9 +168,14 @@ func TestPromoteStandbyCluster(t *testing.T) {
 	defer os.RemoveAll(dir)
 
 	// Setup a remote stolon cluster (with just one keeper and one sentinel)
+	primaryClusterName := uuid.NewV4().String()
+
 	ptstore := setupStore(t, dir)
 	defer ptstore.Stop()
+
 	primaryStoreEndpoints := fmt.Sprintf("%s:%s", ptstore.listenAddress, ptstore.port)
+	pStorePath := filepath.Join(common.StoreBasePath, primaryClusterName)
+	psm := store.NewStoreManager(ptstore.store, pStorePath)
 
 	initialClusterSpec := &cluster.ClusterSpec{
 		InitMode:           cluster.ClusterInitModeP(cluster.ClusterInitModeNew),
@@ -179,7 +188,6 @@ func TestPromoteStandbyCluster(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	primaryClusterName := uuid.NewV4().String()
 	pts, err := NewTestSentinel(t, dir, primaryClusterName, ptstore.storeBackend, primaryStoreEndpoints, fmt.Sprintf("--initial-cluster-spec=%s", initialClusterSpecFile))
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -198,9 +206,7 @@ func TestPromoteStandbyCluster(t *testing.T) {
 	}
 	defer ptk.Stop()
 
-	if err := ptk.WaitDBUp(60 * time.Second); err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
+	waitKeeperReady(t, psm, ptk)
 	t.Logf("primary database is up")
 
 	if err := populate(t, ptk); err != nil {
@@ -211,12 +217,14 @@ func TestPromoteStandbyCluster(t *testing.T) {
 	}
 
 	// setup a standby cluster
+	clusterName := uuid.NewV4().String()
+
 	tstore := setupStore(t, dir)
 	defer tstore.Stop()
 
 	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
-
-	clusterName := uuid.NewV4().String()
+	storePath := filepath.Join(common.StoreBasePath, clusterName)
+	sm := store.NewStoreManager(tstore.store, storePath)
 
 	pgpass, err := ioutil.TempFile(dir, "pgpass")
 	if err != nil {
@@ -263,9 +271,7 @@ func TestPromoteStandbyCluster(t *testing.T) {
 	}
 	defer tk.Stop()
 
-	if err := tk.WaitDBUp(60 * time.Second); err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
+	waitKeeperReady(t, sm, tk)
 	t.Logf("standby cluster master database is up")
 
 	if err := waitLines(t, tk, 1, 10*time.Second); err != nil {
