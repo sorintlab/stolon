@@ -47,7 +47,7 @@ import:
   - client
   - clientv3
 - package: github.com/hashicorp/consul
-  version: daacc4be8bee214e3fc4b32a6dd385f5ef1b4c36
+  version: v1.0.2
   subpackages:
   - api
 - package: github.com/mitchellh/copystructure

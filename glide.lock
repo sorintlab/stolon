@@ -1,5 +1,5 @@
-hash: a36361cf374fb1590f3a6638662f74ff320a9e09cefc1376be3453b08ed6160d
-updated: 2017-12-21T14:12:59.484592297+01:00
+hash: 3b2ef680619a1b6fbadbbc280befced0f6f0d6399bde2b4ceb9b7f9b473d2b4c
+updated: 2018-01-03T13:56:39.620998578+01:00
 imports:
 - name: github.com/coreos/etcd
   version: 1e1dbb23924672c6cd72c62ee0db2b45f778da71
@@ -45,11 +45,13 @@ imports:
 - name: github.com/gorilla/mux
   version: 0eeaf8392f5b04950925b8a69fe70f110fa7cbfc
 - name: github.com/hashicorp/consul
-  version: daacc4be8bee214e3fc4b32a6dd385f5ef1b4c36
+  version: b55059fc3d0327c92c41431e57dfd2df3f956b03
   subpackages:
   - api
 - name: github.com/hashicorp/go-cleanhttp
   version: 875fb671b3ddc66f8e2f0acc33829c8cb989a38d
+- name: github.com/hashicorp/go-rootcerts
+  version: 6bb64b370b90e7ef1fa532be9e591a81c3493e00
 - name: github.com/hashicorp/serf
   version: e4ec8cc423bbe20d26584b96efbeb9102e16d05f
   subpackages:
@@ -68,6 +70,8 @@ imports:
   - oid
 - name: github.com/mitchellh/copystructure
   version: 5af94aef99f597e6a9e1f6ac6be6ce0f3c96b49d
+- name: github.com/mitchellh/go-homedir
+  version: b8bc1bf767474819792c23f32d8286a45736f1c6
 - name: github.com/mitchellh/reflectwalk
   version: 63d60e9d0dbc60cf9164e6510889b0db6683d98c
 - name: github.com/satori/go.uuid
