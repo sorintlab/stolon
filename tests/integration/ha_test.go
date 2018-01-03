@@ -406,7 +406,7 @@ func testFailover(t *testing.T, syncRepl bool, standbyCluster bool) {
 	WaitClusterSyncedXLogPos([]string{master.uid, standby.uid}, sm, 20*time.Second)
 
 	// the proxy should connect to the right master
-	if err := tp.WaitRightMaster(master, 2*cluster.DefaultProxyCheckInterval); err != nil {
+	if err := tp.WaitRightMaster(master, 3*cluster.DefaultProxyCheckInterval); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
@@ -434,7 +434,7 @@ func testFailover(t *testing.T, syncRepl bool, standbyCluster bool) {
 	}
 
 	// the proxy should connect to the right master
-	if err := tp.WaitRightMaster(standby, 2*cluster.DefaultProxyCheckInterval); err != nil {
+	if err := tp.WaitRightMaster(standby, 3*cluster.DefaultProxyCheckInterval); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 }
@@ -863,7 +863,7 @@ func testPartition1(t *testing.T, syncRepl, usePgrewind bool, standbyCluster boo
 	}
 
 	// the proxy should connect to the right master
-	if err := tp.WaitRightMaster(standbys[0], 2*cluster.DefaultProxyCheckInterval); err != nil {
+	if err := tp.WaitRightMaster(standbys[0], 3*cluster.DefaultProxyCheckInterval); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
