@@ -25,7 +25,7 @@ spec:
           - name: STSENTINEL_CLUSTER_NAME
             value: "kube-stolon"
           - name: STSENTINEL_STORE_BACKEND
-            value: "etcd" # Or consul
+            value: "etcdv3" # Or: etcdv2, consul
           - name: STSENTINEL_STORE_ENDPOINTS
             value: "http://192.168.122.1:2379"
           ## Uncomment this to enable debug logs

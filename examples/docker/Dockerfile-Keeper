@@ -1,7 +1,7 @@
 FROM postgres:9.6.1
 
 ENV STKEEPER_CLUSTER_NAME=stolon-cluster \
-    STKEEPER_STORE_BACKEND=etcd \
+    STKEEPER_STORE_BACKEND=etcdv3 \
     STKEEPER_STORE_ENDPOINTS=http://localhost:2379 \
     STKEEPER_DATA_DIR=/data/postgres
 

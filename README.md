@@ -53,7 +53,7 @@ Anyway it's quite easy to reset a cluster from scratch keeping the current maste
 ## Requirements
 
 * PostgreSQL 10 or 9 (9.4, 9.5, 9.6)
-* etcd >= 2.0 or consul >=0.6
+* etcd >= 2.0 or consul >= 0.6
 
 
 ## build
