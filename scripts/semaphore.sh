@@ -12,8 +12,8 @@ fi
 # Install etcd
 mkdir etcd
 pushd etcd
-curl -L https://github.com/coreos/etcd/releases/download/v3.1.8/etcd-v3.1.8-linux-amd64.tar.gz -o etcd-v3.1.8-linux-amd64.tar.gz
-tar xzvf etcd-v3.1.8-linux-amd64.tar.gz
+curl -L https://github.com/coreos/etcd/releases/download/v3.2.11/etcd-v3.2.11-linux-amd64.tar.gz -o etcd-v3.2.11-linux-amd64.tar.gz
+tar xzvf etcd-v3.2.11-linux-amd64.tar.gz
 popd
 
 # Install consul
@@ -34,7 +34,7 @@ sudo apt-get -y install postgresql-9.5 postgresql-9.6 postgresql-10
 sudo -E CGO_ENABLED=0 go install -a -installsuffix cgo std
 
 # Run tests
-export ETCD_BIN="${PWD}/etcd/etcd-v3.1.8-linux-amd64/etcd"
+export ETCD_BIN="${PWD}/etcd/etcd-v3.2.11-linux-amd64/etcd"
 export CONSUL_BIN="${PWD}/consul/consul"
 
 OLDPATH=$PATH

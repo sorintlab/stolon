@@ -16,6 +16,7 @@ package integration
 
 import (
 	"bufio"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -38,7 +39,6 @@ import (
 	"github.com/sorintlab/stolon/pkg/store"
 	"github.com/sorintlab/stolon/pkg/util"
 
-	kvstore "github.com/docker/libkv/store"
 	_ "github.com/lib/pq"
 	"github.com/satori/go.uuid"
 	"github.com/sgotti/gexpect"
@@ -693,22 +693,25 @@ type TestStore struct {
 	Process
 	listenAddress string
 	port          string
-	store         kvstore.Store
+	store         store.KVStore
 	storeBackend  store.Backend
 }
 
 func NewTestStore(t *testing.T, dir string, a ...string) (*TestStore, error) {
 	storeBackend := store.Backend(os.Getenv("STOLON_TEST_STORE_BACKEND"))
 	switch storeBackend {
-	case store.CONSUL:
+	case "consul":
 		return NewTestConsul(t, dir, a...)
-	case store.ETCD:
-		return NewTestEtcd(t, dir, a...)
+	case "etcd":
+		storeBackend = "etcdv2"
+		fallthrough
+	case "etcdv2", "etcdv3":
+		return NewTestEtcd(t, dir, storeBackend, a...)
 	}
 	return nil, fmt.Errorf("wrong store backend")
 }
 
-func NewTestEtcd(t *testing.T, dir string, a ...string) (*TestStore, error) {
+func NewTestEtcd(t *testing.T, dir string, backend store.Backend, a ...string) (*TestStore, error) {
 	u := uuid.NewV4()
 	uid := fmt.Sprintf("%x", u[:4])
 
@@ -736,10 +739,10 @@ func NewTestEtcd(t *testing.T, dir string, a ...string) (*TestStore, error) {
 	storeEndpoints := fmt.Sprintf("%s:%s", listenAddress, port)
 
 	storeConfig := store.Config{
-		Backend:   store.ETCD,
+		Backend:   store.Backend(backend),
 		Endpoints: storeEndpoints,
 	}
-	kvstore, err := store.NewStore(storeConfig)
+	kvstore, err := store.NewKVStore(storeConfig)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create store: %v", err)
 	}
@@ -760,7 +763,7 @@ func NewTestEtcd(t *testing.T, dir string, a ...string) (*TestStore, error) {
 		listenAddress: listenAddress,
 		port:          port,
 		store:         kvstore,
-		storeBackend:  store.ETCD,
+		storeBackend:  backend,
 	}
 	return tstore, nil
 }
@@ -825,7 +828,7 @@ func NewTestConsul(t *testing.T, dir string, a ...string) (*TestStore, error) {
 		Backend:   store.CONSUL,
 		Endpoints: storeEndpoints,
 	}
-	kvstore, err := store.NewStore(storeConfig)
+	kvstore, err := store.NewKVStore(storeConfig)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create store: %v", err)
 	}
@@ -854,9 +857,9 @@ func NewTestConsul(t *testing.T, dir string, a ...string) (*TestStore, error) {
 func (ts *TestStore) WaitUp(timeout time.Duration) error {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
-		_, err := ts.store.Get("anykey")
+		_, err := ts.store.Get(context.TODO(), "anykey")
 		ts.t.Logf("err: %v", err)
-		if err != nil && err == kvstore.ErrKeyNotFound {
+		if err != nil && err == store.ErrKeyNotFound {
 			return nil
 		}
 		if err == nil {
@@ -871,8 +874,8 @@ func (ts *TestStore) WaitUp(timeout time.Duration) error {
 func (ts *TestStore) WaitDown(timeout time.Duration) error {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
-		_, err := ts.store.Get("anykey")
-		if err != nil && err != kvstore.ErrKeyNotFound {
+		_, err := ts.store.Get(context.TODO(), "anykey")
+		if err != nil && err != store.ErrKeyNotFound {
 			return nil
 		}
 		time.Sleep(sleepInterval)
@@ -881,10 +884,10 @@ func (ts *TestStore) WaitDown(timeout time.Duration) error {
 	return fmt.Errorf("timeout")
 }
 
-func WaitClusterDataWithMaster(e *store.StoreManager, timeout time.Duration) (string, error) {
+func WaitClusterDataWithMaster(e *store.Store, timeout time.Duration) (string, error) {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
-		cd, _, err := e.GetClusterData()
+		cd, _, err := e.GetClusterData(context.TODO())
 		if err != nil || cd == nil {
 			goto end
 		}
@@ -897,10 +900,10 @@ func WaitClusterDataWithMaster(e *store.StoreManager, timeout time.Duration) (st
 	return "", fmt.Errorf("timeout")
 }
 
-func WaitClusterDataMaster(master string, e *store.StoreManager, timeout time.Duration) error {
+func WaitClusterDataMaster(master string, e *store.Store, timeout time.Duration) error {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
-		cd, _, err := e.GetClusterData()
+		cd, _, err := e.GetClusterData(context.TODO())
 		if err != nil || cd == nil {
 			goto end
 		}
@@ -915,10 +918,10 @@ func WaitClusterDataMaster(master string, e *store.StoreManager, timeout time.Du
 	return fmt.Errorf("timeout")
 }
 
-func WaitClusterDataKeeperInitialized(keeperUID string, e *store.StoreManager, timeout time.Duration) error {
+func WaitClusterDataKeeperInitialized(keeperUID string, e *store.Store, timeout time.Duration) error {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
-		cd, _, err := e.GetClusterData()
+		cd, _, err := e.GetClusterData(context.TODO())
 		if err != nil || cd == nil {
 			goto end
 		}
@@ -939,11 +942,11 @@ func WaitClusterDataKeeperInitialized(keeperUID string, e *store.StoreManager, t
 // WaitClusterDataSynchronousStandbys waits for:
 // * synchronous standby defined in masterdb spec
 // * synchronous standby reported from masterdb status
-func WaitClusterDataSynchronousStandbys(synchronousStandbys []string, e *store.StoreManager, timeout time.Duration) error {
+func WaitClusterDataSynchronousStandbys(synchronousStandbys []string, e *store.Store, timeout time.Duration) error {
 	sort.Sort(sort.StringSlice(synchronousStandbys))
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
-		cd, _, err := e.GetClusterData()
+		cd, _, err := e.GetClusterData(context.TODO())
 		if err != nil || cd == nil {
 			goto end
 		}
@@ -982,10 +985,10 @@ func WaitClusterDataSynchronousStandbys(synchronousStandbys []string, e *store.S
 	return fmt.Errorf("timeout")
 }
 
-func WaitClusterPhase(e *store.StoreManager, phase cluster.ClusterPhase, timeout time.Duration) error {
+func WaitClusterPhase(e *store.Store, phase cluster.ClusterPhase, timeout time.Duration) error {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
-		cd, _, err := e.GetClusterData()
+		cd, _, err := e.GetClusterData(context.TODO())
 		if err != nil || cd == nil {
 			goto end
 		}
@@ -998,10 +1001,10 @@ func WaitClusterPhase(e *store.StoreManager, phase cluster.ClusterPhase, timeout
 	return fmt.Errorf("timeout")
 }
 
-func WaitNumDBs(e *store.StoreManager, n int, timeout time.Duration) error {
+func WaitNumDBs(e *store.Store, n int, timeout time.Duration) error {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
-		cd, _, err := e.GetClusterData()
+		cd, _, err := e.GetClusterData(context.TODO())
 		if err != nil || cd == nil {
 			goto end
 		}
@@ -1014,10 +1017,10 @@ func WaitNumDBs(e *store.StoreManager, n int, timeout time.Duration) error {
 	return fmt.Errorf("timeout")
 }
 
-func WaitStandbyKeeper(e *store.StoreManager, keeperUID string, timeout time.Duration) error {
+func WaitStandbyKeeper(e *store.Store, keeperUID string, timeout time.Duration) error {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
-		cd, _, err := e.GetClusterData()
+		cd, _, err := e.GetClusterData(context.TODO())
 		if err != nil || cd == nil {
 			goto end
 		}
@@ -1036,10 +1039,10 @@ func WaitStandbyKeeper(e *store.StoreManager, keeperUID string, timeout time.Dur
 	return fmt.Errorf("timeout")
 }
 
-func WaitClusterDataKeepers(keepersUIDs []string, e *store.StoreManager, timeout time.Duration) error {
+func WaitClusterDataKeepers(keepersUIDs []string, e *store.Store, timeout time.Duration) error {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
-		cd, _, err := e.GetClusterData()
+		cd, _, err := e.GetClusterData(context.TODO())
 		if err != nil || cd == nil {
 			goto end
 		}
@@ -1061,12 +1064,12 @@ func WaitClusterDataKeepers(keepersUIDs []string, e *store.StoreManager, timeout
 
 // WaitClusterSyncedXLogPos waits for all the specified keepers to have the same
 // reported XLogPos
-func WaitClusterSyncedXLogPos(keepersUIDs []string, e *store.StoreManager, timeout time.Duration) error {
+func WaitClusterSyncedXLogPos(keepersUIDs []string, e *store.Store, timeout time.Duration) error {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
 		c := 0
 		curXLogPos := uint64(0)
-		cd, _, err := e.GetClusterData()
+		cd, _, err := e.GetClusterData(context.TODO())
 		if err != nil || cd == nil {
 			goto end
 		}

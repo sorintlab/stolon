@@ -29,9 +29,10 @@ import:
 - package: github.com/spf13/pflag
   version: v1.0.0
 - package: golang.org/x/net
-  version: 9313baa13d9262e49d07b20ed57dceafcd7240cc
+  version: 66aacef3dd8a676686c7ae3716979581e8b03c47
   subpackages:
   - context
+  - http2
 - package: k8s.io/kubernetes
   version: 1.3.0
   subpackages:
@@ -41,9 +42,10 @@ import:
   subpackages:
   - codec
 - package: github.com/coreos/etcd
-  version: v2.2.5
+  version: v3.2.11
   subpackages:
   - client
+  - clientv3
 - package: github.com/hashicorp/consul
   version: daacc4be8bee214e3fc4b32a6dd385f5ef1b4c36
   subpackages:
@@ -52,3 +54,7 @@ import:
   version: 5af94aef99f597e6a9e1f6ac6be6ce0f3c96b49d
 - package: go.uber.org/zap
   version: v1.4.1
+- package: google.golang.org/grpc
+  version: 5b3c4e850e90a4cf6a20ebd46c8b32a0a3afcb9e
+- package: github.com/golang/protobuf
+  version: 1e59b77b52bf8e4b449a57e6f79f21226d571845

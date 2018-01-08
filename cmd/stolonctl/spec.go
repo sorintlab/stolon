@@ -39,10 +39,12 @@ func init() {
 }
 
 func spec(cmd *cobra.Command, args []string) {
-	e, err := NewStore()
+	kvStore, err := NewKVStore()
 	if err != nil {
 		die("cannot create store: %v", err)
 	}
+
+	e := NewStore(kvStore)
 
 	cd, _, err := getClusterData(e)
 	if err != nil {

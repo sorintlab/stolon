@@ -15,6 +15,8 @@
 package main
 
 import (
+	"context"
+
 	"github.com/sorintlab/stolon/pkg/cluster"
 	"github.com/spf13/cobra"
 )
@@ -40,10 +42,12 @@ func removeKeeper(cmd *cobra.Command, args []string) {
 
 	keeperID := args[0]
 
-	store, err := NewStore()
+	kvStore, err := NewKVStore()
 	if err != nil {
 		die("cannot create store: %v", err)
 	}
+
+	store := NewStore(kvStore)
 
 	cd, pair, err := getClusterData(store)
 	if err != nil {
@@ -78,7 +82,7 @@ func removeKeeper(cmd *cobra.Command, args []string) {
 	// NOTE: if the removed db is listed inside another db.Followers it'll will
 	// be cleaned by the sentinels
 
-	_, err = store.AtomicPutClusterData(newCd, pair)
+	_, err = store.AtomicPutClusterData(context.TODO(), newCd, pair)
 	if err != nil {
 		die("cannot update cluster data: %v", err)
 	}

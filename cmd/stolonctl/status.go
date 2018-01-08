@@ -15,12 +15,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"sort"
 	"text/tabwriter"
 
 	"github.com/sorintlab/stolon/pkg/cluster"
+	"github.com/sorintlab/stolon/pkg/store"
 
 	"github.com/spf13/cobra"
 )
@@ -84,19 +86,22 @@ func status(cmd *cobra.Command, args []string) {
 	tabOut := new(tabwriter.Writer)
 	tabOut.Init(os.Stdout, 0, 8, 1, '\t', 0)
 
-	e, err := NewStore()
+	kvStore, err := NewKVStore()
 	if err != nil {
 		die("cannot create store: %v", err)
 	}
 
-	sentinelsInfo, err := e.GetSentinelsInfo()
+	e := NewStore(kvStore)
+
+	sentinelsInfo, err := e.GetSentinelsInfo(context.TODO())
 	if err != nil {
 		die("cannot get sentinels info: %v", err)
 	}
 
-	lsid, err := e.GetLeaderSentinelId()
-	if err != nil {
-		die("cannot get leader sentinel info")
+	election := NewElection(kvStore)
+	lsid, err := election.Leader()
+	if err != nil && err != store.ErrElectionNoLeader {
+		die("cannot get leader sentinel info: %v", err)
 	}
 
 	stdout("=== Active sentinels ===")
@@ -118,7 +123,7 @@ func status(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	proxiesInfo, err := e.GetProxiesInfo()
+	proxiesInfo, err := e.GetProxiesInfo(context.TODO())
 	if err != nil {
 		die("cannot get proxies info: %v", err)
 	}

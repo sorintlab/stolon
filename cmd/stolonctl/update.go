@@ -15,6 +15,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -93,10 +94,12 @@ func update(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	e, err := NewStore()
+	kvStore, err := NewKVStore()
 	if err != nil {
 		die("cannot create store: %v", err)
 	}
+
+	e := NewStore(kvStore)
 
 	retry := 0
 	for retry < maxRetries {
@@ -127,7 +130,7 @@ func update(cmd *cobra.Command, args []string) {
 		}
 
 		// retry if cd has been modified between reading and writing
-		_, err = e.AtomicPutClusterData(cd, pair)
+		_, err = e.AtomicPutClusterData(context.TODO(), cd, pair)
 		if err != nil {
 			if err == libkvstore.ErrKeyModified {
 				retry++

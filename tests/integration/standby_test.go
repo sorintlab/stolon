@@ -46,7 +46,7 @@ func TestInitStandbyCluster(t *testing.T) {
 
 	primaryStoreEndpoints := fmt.Sprintf("%s:%s", ptstore.listenAddress, ptstore.port)
 	pStorePath := filepath.Join(common.StoreBasePath, primaryClusterName)
-	psm := store.NewStoreManager(ptstore.store, pStorePath)
+	psm := store.NewStore(ptstore.store, pStorePath)
 
 	initialClusterSpec := &cluster.ClusterSpec{
 		InitMode:           cluster.ClusterInitModeP(cluster.ClusterInitModeNew),
@@ -95,7 +95,7 @@ func TestInitStandbyCluster(t *testing.T) {
 
 	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
 	storePath := filepath.Join(common.StoreBasePath, clusterName)
-	sm := store.NewStoreManager(tstore.store, storePath)
+	sm := store.NewStore(tstore.store, storePath)
 
 	pgpass, err := ioutil.TempFile(dir, "pgpass")
 	if err != nil {
@@ -175,7 +175,7 @@ func TestPromoteStandbyCluster(t *testing.T) {
 
 	primaryStoreEndpoints := fmt.Sprintf("%s:%s", ptstore.listenAddress, ptstore.port)
 	pStorePath := filepath.Join(common.StoreBasePath, primaryClusterName)
-	psm := store.NewStoreManager(ptstore.store, pStorePath)
+	psm := store.NewStore(ptstore.store, pStorePath)
 
 	initialClusterSpec := &cluster.ClusterSpec{
 		InitMode:           cluster.ClusterInitModeP(cluster.ClusterInitModeNew),
@@ -224,7 +224,7 @@ func TestPromoteStandbyCluster(t *testing.T) {
 
 	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
 	storePath := filepath.Join(common.StoreBasePath, clusterName)
-	sm := store.NewStoreManager(tstore.store, storePath)
+	sm := store.NewStore(tstore.store, storePath)
 
 	pgpass, err := ioutil.TempFile(dir, "pgpass")
 	if err != nil {

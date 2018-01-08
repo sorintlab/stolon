@@ -43,6 +43,7 @@ const (
 )
 
 const (
+	DefaultStoreTimeout         = 5 * time.Second
 	DefaultProxyCheckInterval   = 5 * time.Second
 	DefaultProxyTimeoutInterval = 15 * time.Second
 

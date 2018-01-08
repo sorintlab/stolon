@@ -1,7 +1,7 @@
 FROM postgres:9.6.1
 
 ENV STSENTINEL_CLUSTER_NAME=stolon-cluster \
-    STSENTINEL_STORE_BACKEND=etcd \
+    STSENTINEL_STORE_BACKEND=etcdv3 \
     STSENTINEL_STORE_ENDPOINTS=http://localhost:2379 \
     STSENTINEL_INITIAL_CLUSTER_SPEC=/etc/stolon/init-spec.json
 

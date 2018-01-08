@@ -35,7 +35,7 @@ spec:
           # TODO(sgotti) Get cluster name from "stoloncluster" label using a downward volume api instead of duplicating the name here?
             value: "kube-stolon"
           - name: STKEEPER_STORE_BACKEND
-            value: "etcd" # Or consul
+            value: "etcdv3" # Or: etcdv2, consul
           - name: STKEEPER_STORE_ENDPOINTS
             value: "http://192.168.122.1:2379"
           - name: STKEEPER_PG_REPL_USERNAME
