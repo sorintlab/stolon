@@ -16,6 +16,7 @@ package postgresql
 
 import (
 	"bufio"
+	"context"
 	"database/sql"
 	"fmt"
 	"regexp"
@@ -27,7 +28,6 @@ import (
 	"os"
 
 	_ "github.com/lib/pq"
-	"golang.org/x/net/context"
 )
 
 const (
