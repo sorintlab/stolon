@@ -53,10 +53,15 @@ Anyway it's quite easy to reset a cluster from scratch keeping the current maste
 ## Requirements
 
 * PostgreSQL 10 or 9 (9.4, 9.5, 9.6)
-* etcd >= 2.0 or consul >= 0.6
+* etcd2 >= v2.0, etcd3 >= v3.0 or consul >= v0.6
+
+* OS: currently stolon is tested on GNU/Linux (with reports of people using it also on Solaris, *BSD and Darwin)
+
 
 
 ## build
+
+To build stolon we usually test and support the latest two major versions of Go like in the [Go release policy](https://golang.org/doc/devel/release.html#policy).
 
 ```
 ./build
