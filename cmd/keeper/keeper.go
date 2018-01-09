@@ -15,6 +15,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -41,7 +42,6 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
-	"golang.org/x/net/context"
 )
 
 var log = slog.S()
