@@ -47,6 +47,8 @@ const (
 	DefaultProxyCheckInterval   = 5 * time.Second
 	DefaultProxyTimeoutInterval = 15 * time.Second
 
+	DefaultDBWaitReadyTimeout = 60 * time.Second
+
 	DefaultDBNotIncreasingXLogPosTimes = 10
 
 	DefaultSleepInterval                         = 5 * time.Second
