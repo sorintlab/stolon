@@ -15,6 +15,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -43,7 +44,6 @@ import (
 	"github.com/mitchellh/copystructure"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
-	"golang.org/x/net/context"
 )
 
 var log = slog.S()
@@ -92,7 +92,7 @@ func die(format string, a ...interface{}) {
 	os.Exit(1)
 }
 
-func (s *Sentinel) electionLoop() {
+func (s *Sentinel) electionLoop(ctx context.Context) {
 	for {
 		log.Infow("Trying to acquire sentinels leadership")
 		electedCh, errCh := s.election.RunForElection()
@@ -117,7 +117,7 @@ func (s *Sentinel) electionLoop() {
 					log.Errorw("election loop error", zap.Error(err))
 				}
 				goto end
-			case <-s.stop:
+			case <-ctx.Done():
 				log.Debugw("stopping election loop")
 				s.election.Stop()
 				return
@@ -1442,7 +1442,6 @@ type Sentinel struct {
 	e   *store.Store
 
 	election store.Election
-	stop     chan bool
 	end      chan bool
 
 	lastLeadershipCount uint
@@ -1471,7 +1470,7 @@ type Sentinel struct {
 	keeperInfoHistories KeeperInfoHistories
 }
 
-func NewSentinel(uid string, cfg *config, stop chan bool, end chan bool) (*Sentinel, error) {
+func NewSentinel(uid string, cfg *config, end chan bool) (*Sentinel, error) {
 	var initialClusterSpec *cluster.ClusterSpec
 	if cfg.initialClusterSpecFile != "" {
 		configData, err := ioutil.ReadFile(cfg.initialClusterSpecFile)
@@ -1511,7 +1510,6 @@ func NewSentinel(uid string, cfg *config, stop chan bool, end chan bool) (*Senti
 		election:           election,
 		leader:             false,
 		initialClusterSpec: initialClusterSpec,
-		stop:               stop,
 		end:                end,
 		UIDFn:              common.UID,
 		// This is just to choose a pseudo random keeper so
@@ -1524,19 +1522,17 @@ func NewSentinel(uid string, cfg *config, stop chan bool, end chan bool) (*Senti
 	}, nil
 }
 
-func (s *Sentinel) Start() {
+func (s *Sentinel) Start(ctx context.Context) {
 	endCh := make(chan struct{})
 
-	ctx, cancel := context.WithCancel(context.Background())
 	timerCh := time.NewTimer(0).C
 
-	go s.electionLoop()
+	go s.electionLoop(ctx)
 
 	for true {
 		select {
-		case <-s.stop:
+		case <-ctx.Done():
 			log.Infow("stopping stolon sentinel")
-			cancel()
 			s.end <- true
 			return
 		case <-timerCh:
@@ -1668,10 +1664,10 @@ func (s *Sentinel) clusterSentinelCheck(pctx context.Context) {
 	s.updateDBConvergenceInfos(newcd)
 }
 
-func sigHandler(sigs chan os.Signal, stop chan bool) {
+func sigHandler(sigs chan os.Signal, cancel context.CancelFunc) {
 	s := <-sigs
 	log.Debugw("got signal", "signal", s)
-	close(stop)
+	cancel()
 }
 
 func main() {
@@ -1704,17 +1700,17 @@ func sentinel(c *cobra.Command, args []string) {
 	uid := common.UID()
 	log.Infow("sentinel uid", "uid", uid)
 
-	stop := make(chan bool, 0)
+	ctx, cancel := context.WithCancel(context.Background())
 	end := make(chan bool, 0)
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-	go sigHandler(sigs, stop)
+	go sigHandler(sigs, cancel)
 
-	s, err := NewSentinel(uid, &cfg, stop, end)
+	s, err := NewSentinel(uid, &cfg, end)
 	if err != nil {
 		die("cannot create sentinel: %v", err)
 	}
-	go s.Start()
+	go s.Start(ctx)
 
 	<-end
 }

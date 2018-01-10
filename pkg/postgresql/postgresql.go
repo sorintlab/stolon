@@ -16,6 +16,7 @@ package postgresql
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -33,7 +34,6 @@ import (
 
 	_ "github.com/lib/pq"
 	"github.com/mitchellh/copystructure"
-	"golang.org/x/net/context"
 )
 
 const (

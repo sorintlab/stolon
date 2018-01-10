@@ -15,6 +15,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -41,7 +42,6 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
-	"golang.org/x/net/context"
 )
 
 var log = slog.S()
@@ -364,10 +364,9 @@ type PostgresKeeper struct {
 	sleepInterval  time.Duration
 	requestTimeout time.Duration
 
-	e    *store.Store
-	pgm  *postgresql.Manager
-	stop chan bool
-	end  chan error
+	e   *store.Store
+	pgm *postgresql.Manager
+	end chan error
 
 	localStateMutex  sync.Mutex
 	keeperLocalState *KeeperLocalState
@@ -378,7 +377,7 @@ type PostgresKeeper struct {
 	lastPGState     *cluster.PostgresState
 }
 
-func NewPostgresKeeper(cfg *config, stop chan bool, end chan error) (*PostgresKeeper, error) {
+func NewPostgresKeeper(cfg *config, end chan error) (*PostgresKeeper, error) {
 	storePath := filepath.Join(common.StoreBasePath, cfg.ClusterName)
 
 	kvstore, err := store.NewKVStore(store.Config{
@@ -424,9 +423,8 @@ func NewPostgresKeeper(cfg *config, stop chan bool, end chan error) (*PostgresKe
 		keeperLocalState: &KeeperLocalState{},
 		dbLocalState:     &DBLocalState{},
 
-		e:    e,
-		stop: stop,
-		end:  end,
+		e:   e,
+		end: end,
 	}
 
 	err = p.loadKeeperLocalState()
@@ -644,7 +642,7 @@ func (p *PostgresKeeper) getLastPGState() *cluster.PostgresState {
 	return pgState
 }
 
-func (p *PostgresKeeper) Start() {
+func (p *PostgresKeeper) Start(ctx context.Context) {
 	endSMCh := make(chan struct{})
 	endPgStatecheckerCh := make(chan struct{})
 	endUpdateKeeperInfo := make(chan struct{})
@@ -672,15 +670,13 @@ func (p *PostgresKeeper) Start() {
 
 	p.pgm.Stop(true)
 
-	ctx, cancel := context.WithCancel(context.Background())
 	smTimerCh := time.NewTimer(0).C
 	updatePGStateTimerCh := time.NewTimer(0).C
 	updateKeeperInfoTimerCh := time.NewTimer(0).C
 	for true {
 		select {
-		case <-p.stop:
+		case <-ctx.Done():
 			log.Debugw("stopping stolon keeper")
-			cancel()
 			p.pgm.Stop(true)
 			p.end <- nil
 			return
@@ -1589,10 +1585,10 @@ func (p *PostgresKeeper) saveDBLocalState() error {
 	return common.WriteFileAtomic(p.dbLocalStateFilePath(), sj, 0600)
 }
 
-func sigHandler(sigs chan os.Signal, stop chan bool) {
+func sigHandler(sigs chan os.Signal, cancel context.CancelFunc) {
 	s := <-sigs
 	log.Debugw("got signal", "signal", s)
-	close(stop)
+	cancel()
 }
 
 func main() {
@@ -1721,17 +1717,17 @@ func keeper(c *cobra.Command, args []string) {
 		}
 	}
 
-	stop := make(chan bool, 0)
+	ctx, cancel := context.WithCancel(context.Background())
 	end := make(chan error, 0)
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-	go sigHandler(sigs, stop)
+	go sigHandler(sigs, cancel)
 
-	p, err := NewPostgresKeeper(&cfg, stop, end)
+	p, err := NewPostgresKeeper(&cfg, end)
 	if err != nil {
 		die("cannot create keeper: %v", err)
 	}
-	go p.Start()
+	go p.Start(ctx)
 
 	<-end
 }

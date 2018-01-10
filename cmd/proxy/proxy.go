@@ -318,7 +318,7 @@ func (c *ClusterChecker) Start() error {
 	// TimeoutChecker but we have to change the libkv stores to support contexts.
 	go c.TimeoutChecker(checkOkCh)
 
-	for true {
+	for {
 		select {
 		case <-timerCh:
 			go func() {
@@ -339,7 +339,6 @@ func (c *ClusterChecker) Start() error {
 			}
 		}
 	}
-	return nil
 }
 
 func main() {
