@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -103,7 +104,7 @@ func init() {
 	cmdKeeper.PersistentFlags().StringVar(&cfg.uid, "id", "", "keeper uid (must be unique in the cluster and can contain only lower-case letters, numbers and the underscore character). If not provided a random uid will be generated.")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.uid, "uid", "", "keeper uid (must be unique in the cluster and can contain only lower-case letters, numbers and the underscore character). If not provided a random uid will be generated.")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.dataDir, "data-dir", "", "data directory")
-	cmdKeeper.PersistentFlags().StringVar(&cfg.pgListenAddress, "pg-listen-address", "localhost", "postgresql instance listening address")
+	cmdKeeper.PersistentFlags().StringVar(&cfg.pgListenAddress, "pg-listen-address", "", "postgresql instance listening address")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.pgPort, "pg-port", "5432", "postgresql instance listening port")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.pgBinPath, "pg-bin-path", "", "absolute path to postgresql binaries. If empty they will be searched in the current PATH")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.pgReplAuthMethod, "pg-repl-auth-method", "md5", "postgres replication user auth method. Default is md5.")
@@ -1628,6 +1629,26 @@ func keeper(c *cobra.Command, args []string) {
 
 	if err = os.MkdirAll(cfg.dataDir, 0700); err != nil {
 		die("cannot create data dir: %v", err)
+	}
+
+	if cfg.pgListenAddress == "" {
+		die("--pg-listen-address is required")
+	}
+
+	ip := net.ParseIP(cfg.pgListenAddress)
+	if ip == nil {
+		log.Warnf("provided --pgListenAddress %q: is not an ip address but a hostname. This will be advertized to the other components and may have undefined behaviors if resolved differently by other hosts", cfg.pgListenAddress)
+	}
+	ipAddr, err := net.ResolveIPAddr("ip", cfg.pgListenAddress)
+	if err != nil {
+		log.Warnf("cannot resolve provided --pgListenAddress %q: %v", cfg.pgListenAddress, err)
+	} else {
+		if ipAddr.IP.IsLoopback() {
+			log.Warnf("provided --pgListenAddress %q is a loopback ip. This will be advertized to the other components and communication will fail if they are on different hosts", cfg.pgListenAddress)
+		}
+	}
+	if cfg.pgListenAddress == "" {
+		die("--pg-listen-address is required")
 	}
 
 	if _, ok := validAuthMethods[cfg.pgReplAuthMethod]; !ok {
