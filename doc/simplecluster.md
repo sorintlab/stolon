@@ -32,7 +32,7 @@ sentinel leadership acquired
 ### Launch first keeper
 
 ```
-./bin/stolon-keeper --cluster-name stolon-cluster --store-backend=etcdv3 --uid postgres0 --data-dir data/postgres0 --pg-su-password=supassword --pg-repl-username=repluser --pg-repl-password=replpassword
+./bin/stolon-keeper --cluster-name stolon-cluster --store-backend=etcdv3 --uid postgres0 --data-dir data/postgres0 --pg-su-password=supassword --pg-repl-username=repluser --pg-repl-password=replpassword --pg-listen-address=127.0.0.1
 ```
 
 This will start a stolon keeper with id `postgres0` listening by default on localhost:5431, it will setup and initialize a postgres instance inside `data/postgres0/postgres/`
@@ -119,7 +119,7 @@ postgres=# select * from test;
 ### Start another keeper:
 
 ```
-./bin/stolon-keeper --cluster-name stolon-cluster --store-backend=etcdv3 --uid postgres1 --data-dir data/postgres1 --pg-su-password=supassword --pg-repl-username=repluser --pg-repl-password=replpassword --pg-port 5435
+./bin/stolon-keeper --cluster-name stolon-cluster --store-backend=etcdv3 --uid postgres1 --data-dir data/postgres1 --pg-su-password=supassword --pg-repl-username=repluser --pg-repl-password=replpassword --pg-listen-address=127.0.0.1 --pg-port 5435
 ```
 
 This instance will start replicating from the master (postgres0)
