@@ -1,3 +1,22 @@
+### v0.8.0
+
+#### New features
+
+* Added support for etcd v3 api (using --store-backend etcdv3) ([#393](https://github.com/sorintlab/stolon/pull/393))
+* Now the stolon-proxy has tcp keepalive enabled by default and provides options for tuning its behavior ([#357](https://github.com/sorintlab/stolon/pull/357))
+* Added `removekeeper` command to stolonctl ([#383](https://github.com/sorintlab/stolon/pull/383))
+* Added the ability to choose the authentication method for su and replication user (currently one of md5 or trust) ([#380](https://github.com/sorintlab/stolon/pull/380))
+
+#### BugFixes
+* Fixed and improved db startup logic to handle a different pg_ctl start behavior between postgres 9 and 10 ([#401](https://github.com/sorintlab/stolon/pull/401))
+* Fixed keeper datadir locking ([#405](https://github.com/sorintlab/stolon/pull/405))
+
+and [many other](https://github.com/sorintlab/stolon/milestone/7) bug fixes and documentation improvements.
+
+Thanks to everybody who contributed to this release:
+
+AmberBee, @emded, Pierre Fersing
+
 ### v0.7.0
 
 #### New features
