@@ -1086,7 +1086,14 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				log.Errorw("failed to start instance", zap.Error(err))
 				return
 			}
-			// wait for the db having replyed all the wals
+
+			if standbySettings == nil {
+				// wait for the db having replyed all the wals
+				if err = pgm.WaitRecoveryDone(cd.Cluster.DefSpec().SyncTimeout.Duration); err != nil {
+					log.Errorw("recovery not finished", zap.Error(err))
+					return
+				}
+			}
 			if err = pgm.WaitReady(cd.Cluster.DefSpec().SyncTimeout.Duration); err != nil {
 				log.Errorw("timeout waiting for instance to be ready", zap.Error(err))
 				return
