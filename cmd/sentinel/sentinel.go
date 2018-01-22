@@ -61,17 +61,15 @@ var cmdSentinel = &cobra.Command{
 type config struct {
 	cmd.CommonConfig
 	initialClusterSpecFile string
-	logLevel               string
 	debug                  bool
 }
 
 var cfg config
 
 func init() {
-	cmd.AddCommonFlags(cmdSentinel, &cfg.CommonConfig)
+	cmd.AddCommonFlags(cmdSentinel, &cfg.CommonConfig, true)
 
 	cmdSentinel.PersistentFlags().StringVar(&cfg.initialClusterSpecFile, "initial-cluster-spec", "", "a file providing the initial cluster specification, used only at cluster initialization, ignored if cluster is already initialized")
-	cmdSentinel.PersistentFlags().StringVar(&cfg.logLevel, "log-level", "info", "debug, info(default), warn or error")
 	cmdSentinel.PersistentFlags().BoolVar(&cfg.debug, "debug", false, "enable debug logging (deprecated, use log-level instead)")
 
 	cmdSentinel.PersistentFlags().MarkDeprecated("debug", "use --log-level=debug instead")
@@ -1677,7 +1675,7 @@ func main() {
 }
 
 func sentinel(c *cobra.Command, args []string) {
-	switch cfg.logLevel {
+	switch cfg.LogLevel {
 	case "error":
 		slog.SetLevel(zap.ErrorLevel)
 	case "warn":
@@ -1687,10 +1685,14 @@ func sentinel(c *cobra.Command, args []string) {
 	case "debug":
 		slog.SetLevel(zap.DebugLevel)
 	default:
-		die("invalid log level: %v", cfg.logLevel)
+		die("invalid log level: %v", cfg.LogLevel)
 	}
 	if cfg.debug {
 		slog.SetDebug()
+	}
+	if cmd.IsColorLoggerEnable(c, &cfg.CommonConfig) {
+		log = slog.SColor()
+		postgresql.SetLogger(log)
 	}
 
 	if err := cmd.CheckCommonConfig(&cfg.CommonConfig); err != nil {

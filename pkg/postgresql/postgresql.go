@@ -34,6 +34,7 @@ import (
 
 	_ "github.com/lib/pq"
 	"github.com/mitchellh/copystructure"
+	"go.uber.org/zap"
 )
 
 const (
@@ -80,6 +81,10 @@ type InitConfig struct {
 	Locale        string
 	Encoding      string
 	DataChecksums bool
+}
+
+func SetLogger(l *zap.SugaredLogger) {
+	log = l
 }
 
 func NewManager(pgBinPath string, dataDir string, localConnParams, replConnParams ConnParams, suAuthMethod, suUsername, suPassword, replAuthMethod, replUsername, replPassword string, requestTimeout time.Duration) *Manager {

@@ -1,5 +1,5 @@
-hash: 3b2ef680619a1b6fbadbbc280befced0f6f0d6399bde2b4ceb9b7f9b473d2b4c
-updated: 2018-01-23T08:49:25.948974522+01:00
+hash: 09f296dca7c28f8cc5ad0721f467e428577bec4b336afe5ed48e1c9a016212f7
+updated: 2018-01-23T19:55:03.657498105+01:00
 imports:
 - name: github.com/coreos/etcd
   version: 1e1dbb23924672c6cd72c62ee0db2b45f778da71
@@ -68,6 +68,8 @@ imports:
   version: 50761b0867bd1d9d069276790bcd4a3bccf2324a
   subpackages:
   - oid
+- name: github.com/mattn/go-isatty
+  version: 0360b2af4f38e8d38c7fce2a9f4e702702d73a39
 - name: github.com/mitchellh/copystructure
   version: 5af94aef99f597e6a9e1f6ac6be6ce0f3c96b49d
 - name: github.com/mitchellh/go-homedir
@@ -111,6 +113,10 @@ imports:
   - internal/timeseries
   - lex/httplex
   - trace
+- name: golang.org/x/sys
+  version: af50095a40f9041b3b38960738837185c26e9419
+  subpackages:
+  - unix
 - name: golang.org/x/text
   version: 4ee4af566555f5fbe026368b75596286a312663a
   subpackages:

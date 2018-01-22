@@ -52,7 +52,6 @@ type config struct {
 	listenAddress string
 	port          string
 	stopListening bool
-	logLevel      string
 	debug         bool
 
 	keepAliveIdle     int
@@ -63,12 +62,11 @@ type config struct {
 var cfg config
 
 func init() {
-	cmd.AddCommonFlags(cmdProxy, &cfg.CommonConfig)
+	cmd.AddCommonFlags(cmdProxy, &cfg.CommonConfig, true)
 
 	cmdProxy.PersistentFlags().StringVar(&cfg.listenAddress, "listen-address", "127.0.0.1", "proxy listening address")
 	cmdProxy.PersistentFlags().StringVar(&cfg.port, "port", "5432", "proxy listening port")
 	cmdProxy.PersistentFlags().BoolVar(&cfg.stopListening, "stop-listening", true, "stop listening on store error")
-	cmdProxy.PersistentFlags().StringVar(&cfg.logLevel, "log-level", "info", "debug, info (default), warn or error")
 	cmdProxy.PersistentFlags().BoolVar(&cfg.debug, "debug", false, "enable debug logging")
 	cmdProxy.PersistentFlags().IntVar(&cfg.keepAliveIdle, "tcp-keepalive-idle", 0, "set tcp keepalive idle (seconds)")
 	cmdProxy.PersistentFlags().IntVar(&cfg.keepAliveCount, "tcp-keepalive-count", 0, "set tcp keepalive probe count number")
@@ -348,7 +346,7 @@ func main() {
 }
 
 func proxy(c *cobra.Command, args []string) {
-	switch cfg.logLevel {
+	switch cfg.LogLevel {
 	case "error":
 		slog.SetLevel(zap.ErrorLevel)
 	case "warn":
@@ -358,14 +356,22 @@ func proxy(c *cobra.Command, args []string) {
 	case "debug":
 		slog.SetLevel(zap.DebugLevel)
 	default:
-		die("invalid log level: %v", cfg.logLevel)
+		die("invalid log level: %v", cfg.LogLevel)
 	}
 	if cfg.debug {
 		slog.SetDebug()
 	}
+	if cmd.IsColorLoggerEnable(c, &cfg.CommonConfig) {
+		log = slog.SColor()
+	}
 	if slog.IsDebug() {
-		stdlog := slog.StdLog()
-		pollon.SetLogger(stdlog)
+		if cmd.IsColorLoggerEnable(c, &cfg.CommonConfig) {
+			stdlog := slog.StdLogColor()
+			pollon.SetLogger(stdlog)
+		} else {
+			stdlog := slog.StdLog()
+			pollon.SetLogger(stdlog)
+		}
 	}
 
 	if err := cmd.CheckCommonConfig(&cfg.CommonConfig); err != nil {
