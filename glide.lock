@@ -1,5 +1,5 @@
 hash: 3b2ef680619a1b6fbadbbc280befced0f6f0d6399bde2b4ceb9b7f9b473d2b4c
-updated: 2018-01-03T13:56:39.620998578+01:00
+updated: 2018-01-23T08:49:25.948974522+01:00
 imports:
 - name: github.com/coreos/etcd
   version: 1e1dbb23924672c6cd72c62ee0db2b45f778da71
@@ -81,7 +81,7 @@ imports:
 - name: github.com/sorintlab/pollon
   version: 1475a2b4526829d0116cfd537cc8e9d9375035a9
 - name: github.com/sorintlab/tcpkeepalive
-  version: 8716b4a83184cc5801cfb46aab5cdfaa87a51dae
+  version: 0271421a7885b8f13783b676b75bbc18aefb2861
 - name: github.com/spf13/cobra
   version: de2d9c4eca8f3c1de17d48b096b6504e0296f003
 - name: github.com/spf13/pflag
