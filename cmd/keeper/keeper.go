@@ -284,6 +284,16 @@ func (p *PostgresKeeper) createPGParameters(db *cluster.DB) common.Parameters {
 		// development version).
 		// Now this will lead to problems starting the instance (or
 		// warning reloading the parameters) with postgresql < 9.6
+
+		// We deliberately don't use postgres FIRST or ANY methods with N
+		// different than len(synchronousStandbys) because we need that all the
+		// defined standbys are synchronous (so just only one failed standby
+		// will block the primary).
+		// This is needed for consistency. If we have 3 standbys and we use
+		// FIRST 2 (a, b, c), the sentinel, when the master fails, won't be able to know
+		// which of the 3 standbys is really synchronous and in sync with the
+		// master. And choosing the non synchronous one will cause the loss of
+		// the transactions contained in the wal records not transmitted.
 		if len(synchronousStandbys) > 1 {
 			parameters["synchronous_standby_names"] = fmt.Sprintf("%d (%s)", len(synchronousStandbys), strings.Join(synchronousStandbys, ","))
 		} else {
