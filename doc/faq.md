@@ -60,6 +60,14 @@ When using async replication the leader sentinel tries to find the best standby 
 
 When using synchronous replication only synchronous standbys will be choosen so standbys behind the master won't be choosen (be aware of postgresql synchronous replication limits explaned in the [postgresql documentation](https://www.postgresql.org/docs/9.6/static/warm-standby.html#SYNCHRONOUS-REPLICATION), for example, when a master restarts while no synchronous standbys are available, the transactions waiting for acknowledgement on the master will be marked as fully committed. We are thinking of a way to avoid this using stolon).
 
+## Does stolon uses postgres sync replication [quorum methods](https://www.postgresql.org/docs/10/static/runtime-config-replication.html#RUNTIME-CONFIG-REPLICATION-MASTER) (FIRST or ANY)?
+
+A "quorum" like and also more powerful and extensible feature is already provided by stolon and managed by the sentinel using the `MinSynchronousStandbys` and `MaxSynchronousStandbys` cluster specification options (if you want to extend it please open an RFE issue or a pull request).
+
+We deliberately don't use postgres FIRST or ANY methods with N different than the number of the wanted synchronous standbys because we need that all the defined standbys are synchronous (so just only one failed standby will block the primary).
+
+This is needed for consistency. If we have 3 standbys and we use FIRST 2 (a, b, c), the sentinel, when the master fails, won't be able to know which of the 3 standbys is really synchronous and in sync with the master. And choosing the non synchronous one will cause the loss of the transactions contained in the wal records not transmitted.
+
 ## Does stolon use Consul as a DNS server as well?
 
 Consul (or etcd) is used only as a key-value storage.
