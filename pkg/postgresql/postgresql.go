@@ -872,7 +872,7 @@ func (p *Manager) RemoveAll() error {
 func (p *Manager) GetSystemData() (*SystemData, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), p.requestTimeout)
 	defer cancel()
-	return getSystemData(ctx, p.replConnParams)
+	return GetSystemData(ctx, p.replConnParams)
 }
 
 func (p *Manager) GetTimelinesHistory(timeline uint64) ([]*TimelineHistory, error) {
