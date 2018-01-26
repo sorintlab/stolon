@@ -16,7 +16,9 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 
+	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 )
 
@@ -29,11 +31,12 @@ type CommonConfig struct {
 	StoreSkipTlsVerify     bool
 	ClusterName            string
 	InitialClusterSpecFile string
+	LogColor               bool
 	LogLevel               string
 	Debug                  bool
 }
 
-func AddCommonFlags(cmd *cobra.Command, cfg *CommonConfig) {
+func AddCommonFlags(cmd *cobra.Command, cfg *CommonConfig, hasLogger bool) {
 	cmd.PersistentFlags().StringVar(&cfg.StoreBackend, "store-backend", "", "store backend type (etcdv2/etcd, etcdv3 or consul)")
 	cmd.PersistentFlags().StringVar(&cfg.StoreEndpoints, "store-endpoints", "", "a comma-delimited list of store endpoints (use https scheme for tls communication) (defaults: http://127.0.0.1:2379 for etcd, http://127.0.0.1:8500 for consul)")
 	cmd.PersistentFlags().StringVar(&cfg.StoreCertFile, "store-cert-file", "", "certificate file for client identification to the store")
@@ -41,6 +44,10 @@ func AddCommonFlags(cmd *cobra.Command, cfg *CommonConfig) {
 	cmd.PersistentFlags().BoolVar(&cfg.StoreSkipTlsVerify, "store-skip-tls-verify", false, "skip store certificate verification (insecure!!!)")
 	cmd.PersistentFlags().StringVar(&cfg.StoreCAFile, "store-ca-file", "", "verify certificates of HTTPS-enabled store servers using this CA bundle")
 	cmd.PersistentFlags().StringVar(&cfg.ClusterName, "cluster-name", "", "cluster name")
+	if hasLogger {
+		cmd.PersistentFlags().BoolVar(&cfg.LogColor, "log-color", false, "enable color in log output (default if attached to a terminal)")
+		cmd.PersistentFlags().StringVar(&cfg.LogLevel, "log-level", "info", "debug, info (default), warn or error")
+	}
 }
 
 func CheckCommonConfig(cfg *CommonConfig) error {
@@ -63,4 +70,12 @@ func CheckCommonConfig(cfg *CommonConfig) error {
 	}
 
 	return nil
+}
+
+func IsColorLoggerEnable(cmd *cobra.Command, cfg *CommonConfig) bool {
+	if cmd.PersistentFlags().Changed("log-color") {
+		return cfg.LogColor
+	} else {
+		return isatty.IsTerminal(os.Stderr.Fd()) || isatty.IsCygwinTerminal(os.Stderr.Fd())
+	}
 }

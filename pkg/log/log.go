@@ -22,7 +22,10 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-var s *zap.SugaredLogger
+var (
+	s      *zap.SugaredLogger
+	sColor *zap.SugaredLogger
+)
 
 // default info level
 var level = zap.NewAtomicLevelAt(zapcore.InfoLevel)
@@ -38,13 +41,19 @@ func init() {
 		ErrorOutputPaths:  []string{"stderr"},
 	}
 
-	config.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
-
 	logger, err := config.Build()
 	if err != nil {
 		panic(fmt.Errorf("failed to initialize logger: %v", err))
 	}
 	s = logger.Sugar()
+
+	config.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
+
+	logger, err = config.Build()
+	if err != nil {
+		panic(fmt.Errorf("failed to initialize color logger: %v", err))
+	}
+	sColor = logger.Sugar()
 }
 
 func SetDebug() {
@@ -65,4 +74,12 @@ func S() *zap.SugaredLogger {
 
 func StdLog() *log.Logger {
 	return zap.NewStdLog(s.Desugar())
+}
+
+func SColor() *zap.SugaredLogger {
+	return sColor
+}
+
+func StdLogColor() *log.Logger {
+	return zap.NewStdLog(sColor.Desugar())
 }

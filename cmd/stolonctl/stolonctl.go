@@ -57,7 +57,7 @@ type config struct {
 var cfg config
 
 func init() {
-	cmd.AddCommonFlags(cmdStolonCtl, &cfg.CommonConfig)
+	cmd.AddCommonFlags(cmdStolonCtl, &cfg.CommonConfig, false)
 }
 
 var cmdVersion = &cobra.Command{

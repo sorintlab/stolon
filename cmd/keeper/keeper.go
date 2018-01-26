@@ -74,7 +74,6 @@ type config struct {
 
 	uid                     string
 	dataDir                 string
-	logLevel                string
 	debug                   bool
 	pgListenAddress         string
 	pgPort                  string
@@ -99,7 +98,7 @@ func init() {
 		die("cannot get current user: %v", err)
 	}
 
-	cmd.AddCommonFlags(cmdKeeper, &cfg.CommonConfig)
+	cmd.AddCommonFlags(cmdKeeper, &cfg.CommonConfig, true)
 
 	cmdKeeper.PersistentFlags().StringVar(&cfg.uid, "id", "", "keeper uid (must be unique in the cluster and can contain only lower-case letters, numbers and the underscore character). If not provided a random uid will be generated.")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.uid, "uid", "", "keeper uid (must be unique in the cluster and can contain only lower-case letters, numbers and the underscore character). If not provided a random uid will be generated.")
@@ -115,7 +114,6 @@ func init() {
 	cmdKeeper.PersistentFlags().StringVar(&cfg.pgSUUsername, "pg-su-username", user, "postgres superuser user name. Used for keeper managed instance access and pg_rewind based synchronization. It'll be created on db initialization. Defaults to the name of the effective user running stolon-keeper. Must be the same for all keepers.")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.pgSUPassword, "pg-su-password", "", "postgres superuser password. Only one of --pg-su-password or --pg-su-passwordfile must be provided. Must be the same for all keepers.")
 	cmdKeeper.PersistentFlags().StringVar(&cfg.pgSUPasswordFile, "pg-su-passwordfile", "", "postgres superuser password file. Only one of --pg-su-password or --pg-su-passwordfile must be provided. Must be the same for all keepers)")
-	cmdKeeper.PersistentFlags().StringVar(&cfg.logLevel, "log-level", "info", "debug, info (default), warn or error")
 	cmdKeeper.PersistentFlags().BoolVar(&cfg.debug, "debug", false, "enable debug logging")
 
 	cmdKeeper.PersistentFlags().MarkDeprecated("id", "please use --uid")
@@ -1620,7 +1618,7 @@ func keeper(c *cobra.Command, args []string) {
 	validAuthMethods := make(map[string]struct{})
 	validAuthMethods["trust"] = struct{}{}
 	validAuthMethods["md5"] = struct{}{}
-	switch cfg.logLevel {
+	switch cfg.LogLevel {
 	case "error":
 		slog.SetLevel(zap.ErrorLevel)
 	case "warn":
@@ -1630,10 +1628,14 @@ func keeper(c *cobra.Command, args []string) {
 	case "debug":
 		slog.SetLevel(zap.DebugLevel)
 	default:
-		die("invalid log level: %v", cfg.logLevel)
+		die("invalid log level: %v", cfg.LogLevel)
 	}
 	if cfg.debug {
 		slog.SetDebug()
+	}
+	if cmd.IsColorLoggerEnable(c, &cfg.CommonConfig) {
+		log = slog.SColor()
+		postgresql.SetLogger(log)
 	}
 
 	if cfg.dataDir == "" {

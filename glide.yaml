@@ -60,3 +60,5 @@ import:
   version: 5b3c4e850e90a4cf6a20ebd46c8b32a0a3afcb9e
 - package: github.com/golang/protobuf
   version: 1e59b77b52bf8e4b449a57e6f79f21226d571845
+- package: github.com/mattn/go-isatty
+  version: v0.0.3
