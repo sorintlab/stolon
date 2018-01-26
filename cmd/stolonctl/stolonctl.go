@@ -107,12 +107,12 @@ func NewKVStore() (store.KVStore, error) {
 }
 
 func NewStore(kvStore store.KVStore) *store.Store {
-	storePath := filepath.Join(common.StoreBasePath, cfg.ClusterName)
+	storePath := filepath.Join(cfg.StorePrefix, cfg.ClusterName)
 	return store.NewStore(kvStore, storePath)
 }
 
 func NewElection(kvStore store.KVStore) store.Election {
-	storePath := filepath.Join(common.StoreBasePath, cfg.ClusterName)
+	storePath := filepath.Join(cfg.StorePrefix, cfg.ClusterName)
 	return store.NewElection(kvStore, filepath.Join(storePath, common.SentinelLeaderKey), "")
 }
 

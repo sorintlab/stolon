@@ -105,7 +105,7 @@ func testInitNew(t *testing.T, merge bool) {
 	defer tstore.Stop()
 
 	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
-	storePath := filepath.Join(common.StoreBasePath, clusterName)
+	storePath := filepath.Join(common.StorePrefix, clusterName)
 
 	sm := store.NewStore(tstore.store, storePath)
 
@@ -181,7 +181,7 @@ func testInitExisting(t *testing.T, merge bool) {
 	defer tstore.Stop()
 
 	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
-	storePath := filepath.Join(common.StoreBasePath, clusterName)
+	storePath := filepath.Join(common.StorePrefix, clusterName)
 
 	sm := store.NewStore(tstore.store, storePath)
 
@@ -327,7 +327,7 @@ func TestInitUsers(t *testing.T) {
 
 	// Test pg-repl-username == pg-su-username
 	clusterName = uuid.NewV4().String()
-	storePath := filepath.Join(common.StoreBasePath, clusterName)
+	storePath := filepath.Join(common.StorePrefix, clusterName)
 
 	sm := store.NewStore(tstore.store, storePath)
 
@@ -370,7 +370,7 @@ func TestInitUsers(t *testing.T) {
 
 	// Test pg-repl-username != pg-su-username and pg-su-password defined
 	clusterName = uuid.NewV4().String()
-	storePath = filepath.Join(common.StoreBasePath, clusterName)
+	storePath = filepath.Join(common.StorePrefix, clusterName)
 
 	sm = store.NewStore(tstore.store, storePath)
 
@@ -418,7 +418,7 @@ func TestInitialClusterSpec(t *testing.T) {
 	clusterName := uuid.NewV4().String()
 
 	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
-	storePath := filepath.Join(common.StoreBasePath, clusterName)
+	storePath := filepath.Join(common.StorePrefix, clusterName)
 
 	sm := store.NewStore(tstore.store, storePath)
 

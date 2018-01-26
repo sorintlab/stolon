@@ -387,7 +387,7 @@ type PostgresKeeper struct {
 }
 
 func NewPostgresKeeper(cfg *config, end chan error) (*PostgresKeeper, error) {
-	storePath := filepath.Join(common.StoreBasePath, cfg.ClusterName)
+	storePath := filepath.Join(cfg.StorePrefix, cfg.ClusterName)
 
 	kvstore, err := store.NewKVStore(store.Config{
 		Backend:       store.Backend(cfg.StoreBackend),

@@ -26,7 +26,7 @@ import (
 )
 
 const (
-	StoreBasePath = "stolon/cluster"
+	StorePrefix = "stolon/cluster"
 
 	SentinelLeaderKey = "sentinel-leader"
 )

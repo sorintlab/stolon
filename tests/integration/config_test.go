@@ -53,7 +53,7 @@ func TestServerParameters(t *testing.T) {
 
 	clusterName := uuid.NewV4().String()
 
-	storePath := filepath.Join(common.StoreBasePath, clusterName)
+	storePath := filepath.Join(common.StorePrefix, clusterName)
 
 	sm := store.NewStore(tstore.store, storePath)
 
@@ -150,7 +150,7 @@ func TestAlterSystem(t *testing.T) {
 
 	clusterName := uuid.NewV4().String()
 
-	storePath := filepath.Join(common.StoreBasePath, clusterName)
+	storePath := filepath.Join(common.StorePrefix, clusterName)
 
 	sm := store.NewStore(tstore.store, storePath)
 

@@ -69,7 +69,7 @@ func TestInitWithMultipleKeepers(t *testing.T) {
 
 	clusterName := uuid.NewV4().String()
 
-	storePath := filepath.Join(common.StoreBasePath, clusterName)
+	storePath := filepath.Join(common.StorePrefix, clusterName)
 
 	sm := store.NewStore(tstore.store, storePath)
 
@@ -314,7 +314,7 @@ func testMasterStandby(t *testing.T, syncRepl bool) {
 	tks, tss, tp, tstore := setupServers(t, clusterName, dir, 2, 1, syncRepl, false, nil)
 	defer shutdown(tks, tss, tp, tstore)
 
-	storePath := filepath.Join(common.StoreBasePath, clusterName)
+	storePath := filepath.Join(common.StorePrefix, clusterName)
 	sm := store.NewStore(tstore.store, storePath)
 
 	master, standbys := waitMasterStandbysReady(t, sm, tks)
@@ -378,7 +378,7 @@ func testFailover(t *testing.T, syncRepl bool, standbyCluster bool) {
 	tks, tss, tp, tstore := setupServers(t, clusterName, dir, 2, 1, syncRepl, false, ptk)
 	defer shutdown(tks, tss, tp, tstore)
 
-	storePath := filepath.Join(common.StoreBasePath, clusterName)
+	storePath := filepath.Join(common.StorePrefix, clusterName)
 	sm := store.NewStore(tstore.store, storePath)
 
 	master, standbys := waitMasterStandbysReady(t, sm, tks)
@@ -492,7 +492,7 @@ func testFailoverFailed(t *testing.T, syncRepl bool, standbyCluster bool) {
 	tks, tss, tp, tstore := setupServers(t, clusterName, dir, 2, 1, syncRepl, false, ptk)
 	defer shutdown(tks, tss, tp, tstore)
 
-	storePath := filepath.Join(common.StoreBasePath, clusterName)
+	storePath := filepath.Join(common.StorePrefix, clusterName)
 	sm := store.NewStore(tstore.store, storePath)
 
 	master, standbys := waitMasterStandbysReady(t, sm, tks)
@@ -597,7 +597,7 @@ func testFailoverTooMuchLag(t *testing.T, standbyCluster bool) {
 	tks, tss, tp, tstore := setupServers(t, clusterName, dir, 2, 1, false, false, ptk)
 	defer shutdown(tks, tss, tp, tstore)
 
-	storePath := filepath.Join(common.StoreBasePath, clusterName)
+	storePath := filepath.Join(common.StorePrefix, clusterName)
 	sm := store.NewStore(tstore.store, storePath)
 
 	master, standbys := waitMasterStandbysReady(t, sm, tks)
@@ -675,7 +675,7 @@ func testOldMasterRestart(t *testing.T, syncRepl, usePgrewind bool, standbyClust
 	defer shutdown(tks, tss, tp, tstore)
 
 	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
-	storePath := filepath.Join(common.StoreBasePath, clusterName)
+	storePath := filepath.Join(common.StorePrefix, clusterName)
 	sm := store.NewStore(tstore.store, storePath)
 
 	master, standbys := waitMasterStandbysReady(t, sm, tks)
@@ -814,7 +814,7 @@ func testPartition1(t *testing.T, syncRepl, usePgrewind bool, standbyCluster boo
 	defer shutdown(tks, tss, tp, tstore)
 
 	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
-	storePath := filepath.Join(common.StoreBasePath, clusterName)
+	storePath := filepath.Join(common.StorePrefix, clusterName)
 	sm := store.NewStore(tstore.store, storePath)
 
 	master, standbys := waitMasterStandbysReady(t, sm, tks)
@@ -956,7 +956,7 @@ func testTimelineFork(t *testing.T, syncRepl, usePgrewind bool) {
 	defer shutdown(tks, tss, tp, tstore)
 
 	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
-	storePath := filepath.Join(common.StoreBasePath, clusterName)
+	storePath := filepath.Join(common.StorePrefix, clusterName)
 	sm := store.NewStore(tstore.store, storePath)
 
 	master, standbys := waitMasterStandbysReady(t, sm, tks)
@@ -1152,7 +1152,7 @@ func testMasterChangedAddress(t *testing.T, standbyCluster bool) {
 	tks, tss, tp, tstore := setupServers(t, clusterName, dir, 2, 1, false, false, ptk)
 	defer shutdown(tks, tss, tp, tstore)
 
-	storePath := filepath.Join(common.StoreBasePath, clusterName)
+	storePath := filepath.Join(common.StorePrefix, clusterName)
 	sm := store.NewStore(tstore.store, storePath)
 
 	master, standbys := waitMasterStandbysReady(t, sm, tks)
@@ -1245,7 +1245,7 @@ func TestFailedStandby(t *testing.T) {
 	tks, tss, tp, tstore := setupServersCustom(t, clusterName, dir, 3, 1, initialClusterSpec)
 	defer shutdown(tks, tss, tp, tstore)
 
-	storePath := filepath.Join(common.StoreBasePath, clusterName)
+	storePath := filepath.Join(common.StorePrefix, clusterName)
 	sm := store.NewStore(tstore.store, storePath)
 
 	// Wait for clusterView containing a master
@@ -1337,7 +1337,7 @@ func TestLoweredMaxStandbysPerSender(t *testing.T) {
 	defer shutdown(tks, tss, tp, tstore)
 
 	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
-	storePath := filepath.Join(common.StoreBasePath, clusterName)
+	storePath := filepath.Join(common.StorePrefix, clusterName)
 	sm := store.NewStore(tstore.store, storePath)
 
 	// Wait for clusterView containing a master
@@ -1404,7 +1404,7 @@ func TestKeeperRemoval(t *testing.T) {
 	defer shutdown(tks, tss, tp, tstore)
 
 	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
-	storePath := filepath.Join(common.StoreBasePath, clusterName)
+	storePath := filepath.Join(common.StorePrefix, clusterName)
 	sm := store.NewStore(tstore.store, storePath)
 
 	master, standbys := waitMasterStandbysReady(t, sm, tks)
@@ -1507,7 +1507,7 @@ func testKeeperRemovalStolonCtl(t *testing.T, syncRepl bool) {
 	defer shutdown(tks, tss, tp, tstore)
 
 	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
-	storePath := filepath.Join(common.StoreBasePath, clusterName)
+	storePath := filepath.Join(common.StorePrefix, clusterName)
 	sm := store.NewStore(tstore.store, storePath)
 
 	master, standbys := waitMasterStandbysReady(t, sm, tks)
@@ -1613,7 +1613,7 @@ func TestStandbyCantSync(t *testing.T) {
 	tks, tss, tp, tstore := setupServersCustom(t, clusterName, dir, 3, 1, initialClusterSpec)
 	defer shutdown(tks, tss, tp, tstore)
 
-	storePath := filepath.Join(common.StoreBasePath, clusterName)
+	storePath := filepath.Join(common.StorePrefix, clusterName)
 	sm := store.NewStore(tstore.store, storePath)
 
 	master, standbys := waitMasterStandbysReady(t, sm, tks)

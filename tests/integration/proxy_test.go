@@ -77,7 +77,7 @@ func TestProxyListening(t *testing.T) {
 		}
 	}()
 
-	storePath := filepath.Join(common.StoreBasePath, clusterName)
+	storePath := filepath.Join(common.StorePrefix, clusterName)
 
 	sm := store.NewStore(tstore.store, storePath)
 
