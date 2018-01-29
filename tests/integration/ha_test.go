@@ -1638,6 +1638,19 @@ func TestStandbyCantSync(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
+	// get current stanbdys[0] db uid
+	cd, _, err := sm.GetClusterData(context.TODO())
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	var standby0DBUID string
+	for _, db := range cd.DBs {
+		if db.Spec.KeeperUID == standbys[0].uid {
+			standby0DBUID = db.UID
+		}
+	}
+
 	// stop standbys[0]
 	t.Logf("Stopping standbys[0] keeper: %s", standbys[0].uid)
 	standbys[0].Stop()
@@ -1661,19 +1674,6 @@ func TestStandbyCantSync(t *testing.T) {
 	}
 	if err := standbys[1].WaitDBRole(common.RoleMaster, nil, 30*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
-	}
-
-	// get current stanbdys[0] db uid
-	cd, _, err := sm.GetClusterData(context.TODO())
-	if err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
-
-	var standby0DBUID string
-	for _, db := range cd.DBs {
-		if db.Spec.KeeperUID == standbys[0].uid {
-			standby0DBUID = db.UID
-		}
 	}
 
 	// start standbys[0]
