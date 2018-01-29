@@ -77,6 +77,7 @@ var URLSchemeRegexp = regexp.MustCompile(`^([a-zA-Z][a-zA-Z0-9+-.]*)://`)
 type Config struct {
 	Backend       Backend
 	Endpoints     string
+	BasePath      string
 	CertFile      string
 	KeyFile       string
 	CAFile        string

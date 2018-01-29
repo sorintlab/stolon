@@ -1484,7 +1484,7 @@ func NewSentinel(uid string, cfg *config, end chan bool) (*Sentinel, error) {
 		}
 	}
 
-	storePath := filepath.Join(common.StoreBasePath, cfg.ClusterName)
+	storePath := filepath.Join(cfg.StorePrefix, cfg.ClusterName)
 
 	kvstore, err := store.NewKVStore(store.Config{
 		Backend:       store.Backend(cfg.StoreBackend),
