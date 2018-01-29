@@ -1357,6 +1357,10 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				log.Errorw("failed to start postgres", zap.Error(err))
 				return
 			}
+			if err = pgm.WaitReady(cluster.DefaultDBWaitReadyTimeout); err != nil {
+				log.Errorw("timeout waiting for instance to be ready", zap.Error(err))
+				return
+			}
 			started = true
 		}
 
