@@ -448,7 +448,7 @@ func (s *Store) GetProxiesInfo(ctx context.Context) (cluster.ProxiesInfo, error)
 		if err != nil {
 			return nil, err
 		}
-		psi = append(psi, &pi)
+		psi[pi.UID] = &pi
 	}
 	return psi, nil
 }

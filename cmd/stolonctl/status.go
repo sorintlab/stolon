@@ -127,6 +127,7 @@ func status(cmd *cobra.Command, args []string) {
 	if err != nil {
 		die("cannot get proxies info: %v", err)
 	}
+	proxiesInfoSlice := proxiesInfo.ToSlice()
 
 	stdout("")
 	stdout("=== Active proxies ===")
@@ -134,9 +135,9 @@ func status(cmd *cobra.Command, args []string) {
 	if len(proxiesInfo) == 0 {
 		stdout("No active proxies")
 	} else {
-		sort.Sort(proxiesInfo)
+		sort.Sort(proxiesInfoSlice)
 		fmt.Fprintf(tabOut, "ID\n")
-		for _, pi := range proxiesInfo {
+		for _, pi := range proxiesInfoSlice {
 			fmt.Fprintf(tabOut, "%s\n", pi.UID)
 			tabOut.Flush()
 		}

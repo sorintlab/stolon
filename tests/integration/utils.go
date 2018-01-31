@@ -970,6 +970,26 @@ func (ts *TestStore) WaitDown(timeout time.Duration) error {
 	return fmt.Errorf("timeout")
 }
 
+func WaitClusterDataUpdated(e *store.Store, timeout time.Duration) error {
+	icd, _, err := e.GetClusterData(context.TODO())
+	if err != nil {
+		return fmt.Errorf("unexpected err: %v", err)
+	}
+	start := time.Now()
+	for time.Now().Add(-timeout).Before(start) {
+		cd, _, err := e.GetClusterData(context.TODO())
+		if err != nil || cd == nil {
+			goto end
+		}
+		if !reflect.DeepEqual(icd, cd) {
+			return nil
+		}
+	end:
+		time.Sleep(sleepInterval)
+	}
+	return fmt.Errorf("timeout")
+}
+
 func WaitClusterDataWithMaster(e *store.Store, timeout time.Duration) (string, error) {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
@@ -1188,6 +1208,24 @@ func WaitClusterSyncedXLogPos(keepers []*TestKeeper, xLogPos uint64, e *store.St
 			c++
 		}
 		if c == len(keepersUIDs) {
+			return nil
+		}
+	end:
+		time.Sleep(sleepInterval)
+	}
+	return fmt.Errorf("timeout")
+}
+
+func WaitClusterDataEnabledProxiesNum(e *store.Store, n int, timeout time.Duration) error {
+	// TODO(sgotti) find a way to retrieve the proxies internally generated uids
+	// and check for them instead of relying only on the number of proxies
+	start := time.Now()
+	for time.Now().Add(-timeout).Before(start) {
+		cd, _, err := e.GetClusterData(context.TODO())
+		if err != nil || cd == nil {
+			goto end
+		}
+		if len(cd.Proxy.Spec.EnabledProxies) == n {
 			return nil
 		}
 	end:

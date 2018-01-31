@@ -322,6 +322,48 @@ func (s *Sentinel) updateKeepersStatus(cd *cluster.ClusterData, keepersInfo clus
 	return cd, kihs
 }
 
+// activeProxiesInfos takes the provided proxyInfo list and returns a list of
+// proxiesInfo considered active. We also consider as active the proxies not yet
+// in the proxyInfoHistories since only after some time we'll know if they are
+// really active (updating their proxyInfo) or stale. This is needed to not
+// exclude any possible active proxy from the checks in updateCluster and not
+// remove them from the enabled proxies list. At worst a stale proxy will be
+// added to the enabled proxies list.
+func (s *Sentinel) activeProxiesInfos(proxiesInfo cluster.ProxiesInfo) cluster.ProxiesInfo {
+	pihs := s.proxyInfoHistories.DeepCopy()
+
+	tmpPihs := pihs.DeepCopy()
+	// remove missing proxyInfos from the history
+	for proxyUID, _ := range pihs {
+		if _, ok := proxiesInfo[proxyUID]; !ok {
+			delete(pihs, proxyUID)
+		}
+
+	}
+	pihs = tmpPihs
+
+	activeProxiesInfo := proxiesInfo.DeepCopy()
+	// keep only updated proxies info
+	for _, pi := range proxiesInfo {
+		if pih, ok := pihs[pi.UID]; ok {
+			if pih.ProxyInfo.InfoUID == pi.InfoUID {
+				if timer.Since(pih.Timer) > 2*cluster.DefaultProxyTimeoutInterval {
+					delete(activeProxiesInfo, pi.UID)
+				}
+			} else {
+				pihs[pi.UID] = &ProxyInfoHistory{ProxyInfo: pi, Timer: timer.Now()}
+			}
+		} else {
+			// add proxyInfo if not in the history
+			pihs[pi.UID] = &ProxyInfoHistory{ProxyInfo: pi, Timer: timer.Now()}
+		}
+	}
+
+	s.proxyInfoHistories = pihs
+
+	return activeProxiesInfo
+}
+
 func (s *Sentinel) getDBForKeeper(cd *cluster.ClusterData, keeperUID string) *cluster.DB {
 	for _, db := range cd.DBs {
 		if db.Spec.KeeperUID == keeperUID {
@@ -1033,15 +1075,39 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 		if curMasterDBUID == wantedMasterDBUID {
 			masterDB := newcd.DBs[curMasterDBUID]
 
-			proxiesReady := true
-			for _, pi := range pis {
-				if pi.Generation != newcd.Proxy.Generation {
-					proxiesReady = false
+			if newcd.Proxy.Spec.MasterDBUID == "" {
+				// if the Proxy.Spec.MasterDBUID is empty we have to wait for all
+				// the proxies to have converged to be sure they closed connections
+				// to previous master or disappear (in this case we assume that they
+				// have closed connections to previous master)
+				unconvergedProxiesUIDs := []string{}
+				for _, pi := range pis {
+					if pi.Generation != newcd.Proxy.Generation {
+						unconvergedProxiesUIDs = append(unconvergedProxiesUIDs, pi.UID)
+					}
 				}
-			}
-			if !proxiesReady {
-				log.Infow("waiting for proxies to close connections to old master")
-				return newcd, nil
+				if len(unconvergedProxiesUIDs) > 0 {
+					log.Infow("waiting for proxies to be converged to the current generation", "proxies", unconvergedProxiesUIDs)
+				} else {
+					// Tell proxy that there's a new active master
+					newcd.Proxy.Spec.MasterDBUID = wantedMasterDBUID
+					newcd.Proxy.Generation++
+					newcd.Proxy.ChangeTime = time.Now()
+				}
+			} else {
+				// if we have Proxy.Spec.MasterDBUID != "" then we have waited for
+				// proxies to have converged and we can set enabled proxies to
+				// the currently available proxies in proxyInfo.
+				enabledProxies := []string{}
+				for _, pi := range pis {
+					enabledProxies = append(enabledProxies, pi.UID)
+				}
+				sort.Strings(enabledProxies)
+				if !reflect.DeepEqual(newcd.Proxy.Spec.EnabledProxies, enabledProxies) {
+					newcd.Proxy.Spec.EnabledProxies = enabledProxies
+					newcd.Proxy.Generation++
+					newcd.Proxy.ChangeTime = time.Now()
+				}
 			}
 
 			// change master db role to "master" if the cluster role has been changed in the spec
@@ -1050,32 +1116,8 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 				masterDB.Spec.FollowConfig = nil
 			}
 
-			// update enabled proxies to current available proxies in proxyInfo.
-			// We do this only when the master isn't changed since during a master
-			// change we don't want new proxies coming up and start listening on
-			// the old master for a time window. For example: proxy starts and
-			// read proxy spec with a masterdb defined, sentinel elects new
-			// master, proxy publishes its proxyinfo, it's not in enabledProxies
-			// so won't start listening.
-			enabledProxies := []string{}
-			for _, pi := range pis {
-				enabledProxies = append(enabledProxies, pi.UID)
-			}
-			sort.Strings(enabledProxies)
-			if !reflect.DeepEqual(newcd.Proxy.Spec.EnabledProxies, enabledProxies) {
-				newcd.Proxy.Spec.EnabledProxies = enabledProxies
-				newcd.Proxy.Generation++
-				newcd.Proxy.ChangeTime = time.Now()
-			}
-
 			// Set standbys to follow master only if it's healthy and converged
 			if masterDB.Status.Healthy && s.dbConvergenceState(masterDB, clusterSpec.ConvergenceTimeout.Duration) == Converged {
-				// Tell proxy that there's a new active master
-				if newcd.Proxy.Spec.MasterDBUID != wantedMasterDBUID {
-					newcd.Proxy.Spec.MasterDBUID = wantedMasterDBUID
-					newcd.Proxy.Generation++
-					newcd.Proxy.ChangeTime = time.Now()
-				}
 
 				// Remove old masters
 				toRemove := []*cluster.DB{}
@@ -1434,6 +1476,27 @@ type DBConvergenceInfo struct {
 	Timer      int64
 }
 
+type ProxyInfoHistory struct {
+	ProxyInfo *cluster.ProxyInfo
+	Timer     int64
+}
+
+type ProxyInfoHistories map[string]*ProxyInfoHistory
+
+func (p ProxyInfoHistories) DeepCopy() ProxyInfoHistories {
+	if p == nil {
+		return nil
+	}
+	np, err := copystructure.Copy(p)
+	if err != nil {
+		panic(err)
+	}
+	if !reflect.DeepEqual(p, np) {
+		panic("not equal")
+	}
+	return np.(ProxyInfoHistories)
+}
+
 type Sentinel struct {
 	uid string
 	cfg *config
@@ -1466,6 +1529,7 @@ type Sentinel struct {
 	dbConvergenceInfos     map[string]*DBConvergenceInfo
 
 	keeperInfoHistories KeeperInfoHistories
+	proxyInfoHistories  ProxyInfoHistories
 }
 
 func NewSentinel(uid string, cfg *config, end chan bool) (*Sentinel, error) {
@@ -1632,6 +1696,7 @@ func (s *Sentinel) clusterSentinelCheck(pctx context.Context) {
 		s.dbNotIncreasingXLogPos = make(map[string]int64)
 		s.keeperInfoHistories = make(KeeperInfoHistories)
 		s.dbConvergenceInfos = make(map[string]*DBConvergenceInfo)
+		s.proxyInfoHistories = make(ProxyInfoHistories)
 
 		// Update db convergence timers since its the first run
 		s.updateDBConvergenceInfos(cd)
@@ -1640,7 +1705,9 @@ func (s *Sentinel) clusterSentinelCheck(pctx context.Context) {
 	newcd, newKeeperInfoHistories := s.updateKeepersStatus(cd, keepersInfo, firstRun)
 	log.Debugf("newcd dump after updateKeepersStatus: %s", spew.Sdump(newcd))
 
-	newcd, err = s.updateCluster(newcd, proxiesInfo)
+	activeProxiesInfos := s.activeProxiesInfos(proxiesInfo)
+
+	newcd, err = s.updateCluster(newcd, activeProxiesInfos)
 	if err != nil {
 		log.Errorw("failed to update cluster data", zap.Error(err))
 		return
