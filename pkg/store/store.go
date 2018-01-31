@@ -227,10 +227,11 @@ func NewElection(kvStore KVStore, path, candidateUID string) Election {
 	case *etcdV3Store:
 		etcdV3Store := kvStore.(*etcdV3Store)
 		return &etcdv3Election{
-			c:            etcdV3Store.c,
-			path:         path,
-			candidateUID: candidateUID,
-			ttl:          MinTTL,
+			c:              etcdV3Store.c,
+			path:           path,
+			candidateUID:   candidateUID,
+			ttl:            MinTTL,
+			requestTimeout: cluster.DefaultStoreTimeout,
 		}
 	default:
 		panic("unknown kvstore")
