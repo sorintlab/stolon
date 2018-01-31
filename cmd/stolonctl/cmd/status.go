@@ -21,6 +21,7 @@ import (
 	"sort"
 	"text/tabwriter"
 
+	cmdcommon "github.com/sorintlab/stolon/cmd"
 	"github.com/sorintlab/stolon/pkg/cluster"
 	"github.com/sorintlab/stolon/pkg/store"
 
@@ -86,22 +87,24 @@ func status(cmd *cobra.Command, args []string) {
 	tabOut := new(tabwriter.Writer)
 	tabOut.Init(os.Stdout, 0, 8, 1, '\t', 0)
 
-	kvStore, err := NewKVStore()
+	e, err := cmdcommon.NewStore(&cfg.CommonConfig)
 	if err != nil {
-		die("cannot create store: %v", err)
+		die("%v", err)
 	}
 
-	e := NewStore(kvStore)
-
-	sentinelsInfo, err := e.GetSentinelsInfo(context.TODO())
+	election, err := cmdcommon.NewElection(&cfg.CommonConfig, "")
 	if err != nil {
-		die("cannot get sentinels info: %v", err)
+		die("cannot create election: %v", err)
 	}
 
-	election := NewElection(kvStore)
 	lsid, err := election.Leader()
 	if err != nil && err != store.ErrElectionNoLeader {
 		die("cannot get leader sentinel info: %v", err)
+	}
+
+	sentinelsInfo, err := e.GetSentinelsInfo(context.TODO())
+	if err != nil {
+		die("cannot create election: %v", err)
 	}
 
 	stdout("=== Active sentinels ===")

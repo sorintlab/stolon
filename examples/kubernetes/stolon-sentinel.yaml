@@ -19,13 +19,17 @@ spec:
           - |
             exec gosu stolon stolon-sentinel
         env:
-          # TODO(sgotti) Get cluster name from "stolon-cluster" label using a downward volume api instead of duplicating the name here
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
           - name: STSENTINEL_CLUSTER_NAME
+          # TODO(sgotti) Get cluster name from "stolon-cluster" label using a downward volume api instead of duplicating the name here
             value: "kube-stolon"
           - name: STSENTINEL_STORE_BACKEND
-            value: "etcdv3" # Or: etcdv2, consul
-          - name: STSENTINEL_STORE_ENDPOINTS
-            value: "http://192.168.122.1:2379"
+            value: "kubernetes"
+          - name: STSENTINEL_KUBE_RESOURCE_KIND
+            value: "configmap"
           ## Uncomment this to enable debug logs
           #- name: STSENTINEL_DEBUG
           #  value: "true"

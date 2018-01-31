@@ -19,13 +19,17 @@ spec:
           - |
             exec gosu stolon stolon-proxy
         env:
-          # TODO(sgotti) Get cluster name from "stolon-cluster" label using a downward volume api instead of duplicating the name here
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
           - name: STPROXY_CLUSTER_NAME
+          # TODO(sgotti) Get cluster name from "stolon-cluster" label using a downward volume api instead of duplicating the name here
             value: "kube-stolon"
           - name: STPROXY_STORE_BACKEND
-            value: "etcdv3" # Or: etcdv2, consul
-          - name: STPROXY_STORE_ENDPOINTS
-            value: "http://192.168.122.1:2379"
+            value: "kubernetes"
+          - name: STPROXY_KUBE_RESOURCE_KIND
+            value: "configmap"
           - name: STPROXY_LISTEN_ADDRESS
             value: "0.0.0.0"
           ## Uncomment this to enable debug logs

@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -62,7 +61,7 @@ type config struct {
 var cfg config
 
 func init() {
-	cmd.AddCommonFlags(CmdProxy, &cfg.CommonConfig, true)
+	cmd.AddCommonFlags(CmdProxy, &cfg.CommonConfig)
 
 	CmdProxy.PersistentFlags().StringVar(&cfg.listenAddress, "listen-address", "127.0.0.1", "proxy listening address")
 	CmdProxy.PersistentFlags().StringVar(&cfg.port, "port", "5432", "proxy listening port")
@@ -99,27 +98,17 @@ type ClusterChecker struct {
 
 	listener         *net.TCPListener
 	pp               *pollon.Proxy
-	e                *store.Store
+	e                store.Store
 	endPollonProxyCh chan error
 
 	pollonMutex sync.Mutex
 }
 
 func NewClusterChecker(uid string, cfg config) (*ClusterChecker, error) {
-	storePath := filepath.Join(cfg.StorePrefix, cfg.ClusterName)
-
-	kvstore, err := store.NewKVStore(store.Config{
-		Backend:       store.Backend(cfg.StoreBackend),
-		Endpoints:     cfg.StoreEndpoints,
-		CertFile:      cfg.StoreCertFile,
-		KeyFile:       cfg.StoreKeyFile,
-		CAFile:        cfg.StoreCAFile,
-		SkipTLSVerify: cfg.StoreSkipTlsVerify,
-	})
+	e, err := cmd.NewStore(&cfg.CommonConfig)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create store: %v", err)
 	}
-	e := store.NewStore(kvstore, storePath)
 
 	return &ClusterChecker{
 		uid:              uid,
@@ -188,7 +177,7 @@ func (c *ClusterChecker) sendPollonConfData(confData pollon.ConfData) {
 	}
 }
 
-func (c *ClusterChecker) SetProxyInfo(e *store.Store, generation int64, ttl time.Duration) error {
+func (c *ClusterChecker) SetProxyInfo(e store.Store, generation int64, ttl time.Duration) error {
 	proxyInfo := &cluster.ProxyInfo{
 		InfoUID:    common.UID(),
 		UID:        c.uid,

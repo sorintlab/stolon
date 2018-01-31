@@ -17,6 +17,8 @@ package cmd
 import (
 	"encoding/json"
 
+	cmdcommon "github.com/sorintlab/stolon/cmd"
+
 	"github.com/spf13/cobra"
 )
 
@@ -39,12 +41,10 @@ func init() {
 }
 
 func clusterdata(cmd *cobra.Command, args []string) {
-	kvStore, err := NewKVStore()
+	e, err := cmdcommon.NewStore(&cfg.CommonConfig)
 	if err != nil {
-		die("cannot create store: %v", err)
+		die("%v", err)
 	}
-
-	e := NewStore(kvStore)
 
 	cd, _, err := getClusterData(e)
 	if err != nil {

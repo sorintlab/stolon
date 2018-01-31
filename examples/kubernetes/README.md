@@ -10,7 +10,6 @@ Prebuilt images are available on the dockerhub, the images' tags are the stolon 
 
 * `master-pg9.6`: automatically built after every commit to the master branch.
 
-
 In the [image](image/docker) directory you'll find a Makefile to build the image used in this example (starting from the official postgreSQL images). The Makefile generates the Dockefile from a template Dockerfile where you have to define the wanted postgres version and image tag (`PGVERSION` and `TAG` mandatory variables).
 For example, if you want to build an image named `stolon:master-pg9.6` that uses postgresql 9.6 you should execute:
 
@@ -26,8 +25,11 @@ The provided example uses `sorintlab/stolon:master-pg9.6`
 ## Cluster setup and tests
 
 This example has some predefined values that you'd like to change:
-* The cluster name is `kube-stolon`
-* It uses an etcdv3 backend and points to a single node etcd cluster endpoint on `192.168.39.1:2379` without tls. You can change the `ST${COMPONENT}_STORE_*` environment variables to choose you preferred store backend and related configuration (see the [commands invocation documentation](/doc/commands_invocation.md)).
+
+* The cluster name is `kube-stolon`. It's set in the various `stolon-cluster` labels and in the component `--cluster-name` option. The labels and the `--cluster-name` option must be in sync.
+* It uses the kubernetes backend. You can also choose other backends (like etcdv3) setting the `ST${COMPONENT}_STORE_*` environment variables (see the [commands invocation documentation](/doc/commands_invocation.md)).
+
+If your k8s cluster has RBAC enabled you should create a role and a rolebinding to a service account. As an example take a look at the provided [role](role.yaml) and [role-binding](role-binding.yaml) example definitions that define a `stolon` role bound to the `default` service account in the `default` namespace.
 
 ### Initialize the cluster
 
@@ -38,13 +40,13 @@ You can execute stolonctl in different ways:
 * as a one shot command executed inside a temporary pod:
 
 ```
-kubectl run -i -t stolonctl --image=sorintlab/stolon:master-pg9.6 --restart=Never --rm -- /usr/local/bin/stolonctl --cluster-name=kube-stolon --store-backend=etcdv3 init
+kubectl run -i -t stolonctl --image=sorintlab/stolon:master-pg9.6 --restart=Never --rm -- /usr/local/bin/stolonctl --cluster-name=kube-stolon --store-backend=kubernetes --kube-resource-kind=configmap init
 ```
 
 * from a machine that can access the store backend:
 
 ```
-stolonctl --cluster-name=kube-stolon --store-backend=etcdv3 init
+stolonctl --cluster-name=kube-stolon --store-backend=kubernetes --kube-resource-kind=configmap init
 ```
 
 * later from one of the pods running the stolon components.

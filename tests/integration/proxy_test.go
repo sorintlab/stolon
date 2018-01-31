@@ -79,7 +79,7 @@ func TestProxyListening(t *testing.T) {
 
 	storePath := filepath.Join(common.StorePrefix, clusterName)
 
-	sm := store.NewStore(tstore.store, storePath)
+	sm := store.NewKVBackedStore(tstore.store, storePath)
 
 	cd := &cluster.ClusterData{
 		FormatVersion: cluster.CurrentCDFormatVersion,
@@ -188,7 +188,7 @@ func TestProxyListening(t *testing.T) {
 		t.Fatalf("expecting tp listening, but it's not listening.")
 	}
 	// wait proxy reading again from the store
-	time.Sleep(cluster.DefaultProxyCheckInterval)
+	time.Sleep(2 * cluster.DefaultProxyCheckInterval)
 	// tp should listen
 	if ok := tp.CheckListening(); !ok {
 		t.Fatalf("expecting tp listening, but it's not listening.")

@@ -1034,7 +1034,7 @@ func (ts *TestStore) WaitDown(timeout time.Duration) error {
 	return fmt.Errorf("timeout")
 }
 
-func WaitClusterDataUpdated(e *store.Store, timeout time.Duration) error {
+func WaitClusterDataUpdated(e *store.KVBackedStore, timeout time.Duration) error {
 	icd, _, err := e.GetClusterData(context.TODO())
 	if err != nil {
 		return fmt.Errorf("unexpected err: %v", err)
@@ -1054,7 +1054,7 @@ func WaitClusterDataUpdated(e *store.Store, timeout time.Duration) error {
 	return fmt.Errorf("timeout")
 }
 
-func WaitClusterDataWithMaster(e *store.Store, timeout time.Duration) (string, error) {
+func WaitClusterDataWithMaster(e *store.KVBackedStore, timeout time.Duration) (string, error) {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
 		cd, _, err := e.GetClusterData(context.TODO())
@@ -1070,7 +1070,7 @@ func WaitClusterDataWithMaster(e *store.Store, timeout time.Duration) (string, e
 	return "", fmt.Errorf("timeout")
 }
 
-func WaitClusterDataMaster(master string, e *store.Store, timeout time.Duration) error {
+func WaitClusterDataMaster(master string, e *store.KVBackedStore, timeout time.Duration) error {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
 		cd, _, err := e.GetClusterData(context.TODO())
@@ -1088,7 +1088,7 @@ func WaitClusterDataMaster(master string, e *store.Store, timeout time.Duration)
 	return fmt.Errorf("timeout")
 }
 
-func WaitClusterDataKeeperInitialized(keeperUID string, e *store.Store, timeout time.Duration) error {
+func WaitClusterDataKeeperInitialized(keeperUID string, e *store.KVBackedStore, timeout time.Duration) error {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
 		cd, _, err := e.GetClusterData(context.TODO())
@@ -1112,7 +1112,7 @@ func WaitClusterDataKeeperInitialized(keeperUID string, e *store.Store, timeout 
 // WaitClusterDataSynchronousStandbys waits for:
 // * synchronous standby defined in masterdb spec
 // * synchronous standby reported from masterdb status
-func WaitClusterDataSynchronousStandbys(synchronousStandbys []string, e *store.Store, timeout time.Duration) error {
+func WaitClusterDataSynchronousStandbys(synchronousStandbys []string, e *store.KVBackedStore, timeout time.Duration) error {
 	sort.Sort(sort.StringSlice(synchronousStandbys))
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
@@ -1155,7 +1155,7 @@ func WaitClusterDataSynchronousStandbys(synchronousStandbys []string, e *store.S
 	return fmt.Errorf("timeout")
 }
 
-func WaitClusterPhase(e *store.Store, phase cluster.ClusterPhase, timeout time.Duration) error {
+func WaitClusterPhase(e *store.KVBackedStore, phase cluster.ClusterPhase, timeout time.Duration) error {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
 		cd, _, err := e.GetClusterData(context.TODO())
@@ -1171,7 +1171,7 @@ func WaitClusterPhase(e *store.Store, phase cluster.ClusterPhase, timeout time.D
 	return fmt.Errorf("timeout")
 }
 
-func WaitNumDBs(e *store.Store, n int, timeout time.Duration) error {
+func WaitNumDBs(e *store.KVBackedStore, n int, timeout time.Duration) error {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
 		cd, _, err := e.GetClusterData(context.TODO())
@@ -1187,7 +1187,7 @@ func WaitNumDBs(e *store.Store, n int, timeout time.Duration) error {
 	return fmt.Errorf("timeout")
 }
 
-func WaitStandbyKeeper(e *store.Store, keeperUID string, timeout time.Duration) error {
+func WaitStandbyKeeper(e *store.KVBackedStore, keeperUID string, timeout time.Duration) error {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
 		cd, _, err := e.GetClusterData(context.TODO())
@@ -1209,7 +1209,7 @@ func WaitStandbyKeeper(e *store.Store, keeperUID string, timeout time.Duration) 
 	return fmt.Errorf("timeout")
 }
 
-func WaitClusterDataKeepers(keepersUIDs []string, e *store.Store, timeout time.Duration) error {
+func WaitClusterDataKeepers(keepersUIDs []string, e *store.KVBackedStore, timeout time.Duration) error {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
 		cd, _, err := e.GetClusterData(context.TODO())
@@ -1234,7 +1234,7 @@ func WaitClusterDataKeepers(keepersUIDs []string, e *store.Store, timeout time.D
 
 // WaitClusterSyncedXLogPos waits for all the specified keepers to have the same
 // reported XLogPos and that it's >= than master XLogPos
-func WaitClusterSyncedXLogPos(keepers []*TestKeeper, xLogPos uint64, e *store.Store, timeout time.Duration) error {
+func WaitClusterSyncedXLogPos(keepers []*TestKeeper, xLogPos uint64, e *store.KVBackedStore, timeout time.Duration) error {
 	keepersUIDs := []string{}
 	for _, sk := range keepers {
 		keepersUIDs = append(keepersUIDs, sk.uid)
@@ -1280,7 +1280,7 @@ func WaitClusterSyncedXLogPos(keepers []*TestKeeper, xLogPos uint64, e *store.St
 	return fmt.Errorf("timeout")
 }
 
-func WaitClusterDataEnabledProxiesNum(e *store.Store, n int, timeout time.Duration) error {
+func WaitClusterDataEnabledProxiesNum(e *store.KVBackedStore, n int, timeout time.Duration) error {
 	// TODO(sgotti) find a way to retrieve the proxies internally generated uids
 	// and check for them instead of relying only on the number of proxies
 	start := time.Now()

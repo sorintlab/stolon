@@ -18,9 +18,10 @@ import (
 	"context"
 	"os"
 
+	cmdcommon "github.com/sorintlab/stolon/cmd"
 	"github.com/sorintlab/stolon/pkg/cluster"
+	"github.com/sorintlab/stolon/pkg/store"
 
-	libkvstore "github.com/docker/libkv/store"
 	"github.com/spf13/cobra"
 )
 
@@ -41,12 +42,10 @@ func promote(cmd *cobra.Command, args []string) {
 		die("too many arguments")
 	}
 
-	kvStore, err := NewKVStore()
+	e, err := cmdcommon.NewStore(&cfg.CommonConfig)
 	if err != nil {
-		die("cannot create store: %v", err)
+		die("%v", err)
 	}
-
-	e := NewStore(kvStore)
 
 	accepted := true
 	if !initOpts.forceYes {
@@ -87,7 +86,7 @@ func promote(cmd *cobra.Command, args []string) {
 		// retry if cd has been modified between reading and writing
 		_, err = e.AtomicPutClusterData(context.TODO(), cd, pair)
 		if err != nil {
-			if err == libkvstore.ErrKeyModified {
+			if err == store.ErrKeyModified {
 				retry++
 				continue
 			}

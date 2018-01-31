@@ -48,7 +48,7 @@ func TestSentinelEnabledProxies(t *testing.T) {
 	clusterName := uuid.NewV4().String()
 
 	storePath := filepath.Join(common.StorePrefix, clusterName)
-	sm := store.NewStore(tstore.store, storePath)
+	sm := store.NewKVBackedStore(tstore.store, storePath)
 
 	initialClusterSpec := &cluster.ClusterSpec{
 		InitMode:           cluster.ClusterInitModeP(cluster.ClusterInitModeNew),

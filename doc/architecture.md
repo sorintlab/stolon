@@ -27,17 +27,40 @@ Sentinels and proxies don't need a local data directory but only use the store (
 
 #### Store
 
-Currently the store can be etcd (using v2 or v3 api) or consul, we leverage their features to achieve consistent and persistent cluster data.
+Currently the store can be etcd (using v2 or v3 api), consul or kubernetes, we leverage their features to achieve consistent and persistent cluster data.
 
 The store should be high available (at least three nodes).
 
+When a stolon component is not able to read (quorum consistent read) or write to a quorate partition of the store (the stolon component is partitioned, the store is partitioned, the store is down etc...) it will just retry talking with it.
+
+In addition, the stolon-proxy, to avoid sending client connections to a partioned master, will drop all the connections since it cannot know if the cluster data has changed (for example if the proxy has problems reading from the store but the sentinel can write to it).
+
+### etcd and consul store backends
+
 If etcd or consul becomes partitioned (network partition or store nodes dead/with problems), thanks to the raft protocol, only the quorate partition can accept writes.
 
-When this happens the stolon components not able to read or write to a quorate partition (stolon uses quorum reads) will just retry talking with it.
-
-In addition, the stolon-proxy, if not able to talk with the store, to avoid sending client connections to a paritioned master, will drop all the connections since it cannot know if the cluster data has changed (for example if the proxy has problems reading from the store but the sentinel can write to it).
-
 Every stolon executable has a `--store-prefix` option (defaulting to `stolon/cluster`) to set the store path prefix. For etcdv3 and consul, if not provided, a starting `/` will be automatically added since they have a directory based layout. Instead, for etcdv3, the prefix will be kept as provided (etcdv3 has a flat namespace and for this reason two prefixes with and without a starting `/` are different and both valid).
+
+### kubernetes store backend
+
+The kubernetes store relies on the kubernetes api server and uses kubernetes resources to save the clusterdata, components discovery and status report.
+
+The k8s API server must be configured with enabled etcd quorum read (should be the default in standard kubernetes installations since the option to remove it is deprecated).
+
+**NOTE**: a kubernetes based store will share the kubernetes API server with all the other k8s cluster resources. If the API servers are overloaded and doesn't answer in time, as explained above, the proxies will, after a timeout, close connections to the master keeper. The same will happen if you're updating you kubernetes cluster and you have the need to shutdown all your API servers. A dedicated store, like an etcd cluster, will probably be more reliable and avoid the proxies closing connection and impacting you application availability.
+
+To store the clusterdata and handle sentinel leader election a configmap resource named `stolon-cluster-$CLUSTERNAME` is created/updated. Pay attention to don't delete this configmap or you'll lose you cluster data. The clusterdata is saved inside a metadata field called `stolon-clusterdata`. No data provided by the configmap is used and user should pay attention to not manually modify the configmap.
+
+To discovery stolon components (keepers, proxies, sentinels) a lookup with specific label selectors is executed. These labels must be correctly set on the pod definition (see the [kubernetes example](/examples/kubernetes)). They are:
+
+`app` set to the component type: `stolon-keeper`, `stolon-sentinel`, `stolon-proxy`
+`stolon-cluster` set to the stolon cluster name
+
+Every components also saves its state in an annotation of their own pod called `stolon-status`
+
+`stolonctl` may be executed inside a pod running a stolon component or also externally. It'll behave like `kubectl` when choosing how to access the k8s API servers:
+When run inside a pod it'll use the pod service account to connect to the k8s API servers. When run externally it'll honor the `$KUBECONFIG` environment variable, use the default `~/.kube/config` file or you can override the `kube-config` file path, the context and the namespace to use with the `stolonctl` options `--kubeconfig`, `--kube-context` and `--kube-namespace`.
+
 
 ##### Handling permanent loss of the store.
 
