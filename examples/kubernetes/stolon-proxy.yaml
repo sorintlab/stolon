@@ -1,17 +1,14 @@
-apiVersion: v1
-kind: ReplicationController
+apiVersion: extensions/v1beta1
+kind: Deployment
 metadata:
   name: stolon-proxy
 spec:
   replicas: 2
-  selector:
-    name: stolon-proxy
   template:
     metadata:
       labels:
-        name: stolon-proxy
-        stolon-cluster: "kube-stolon"
-        stolon-proxy: "true"
+        app: stolon-proxy
+        stolon-cluster: kube-stolon
     spec:
       containers:
       - name: stolon-proxy
@@ -22,8 +19,8 @@ spec:
           - |
             exec gosu stolon stolon-proxy
         env:
+          # TODO(sgotti) Get cluster name from "stolon-cluster" label using a downward volume api instead of duplicating the name here
           - name: STPROXY_CLUSTER_NAME
-          # TODO(sgotti) Get cluster name from "stoloncluster" label using a downward volume api instead of duplicating the name here
             value: "kube-stolon"
           - name: STPROXY_STORE_BACKEND
             value: "etcdv3" # Or: etcdv2, consul
