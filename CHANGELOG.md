@@ -1,3 +1,20 @@
+### v0.9.0
+
+#### New features
+
+* The logs will be colored only when on a tty or when `--log-color` is provided ([#416](https://github.com/sorintlab/stolon/pull/416))
+* Now the store prefix is configurable `--store-prefix` ([#425](https://github.com/sorintlab/stolon/pull/425))
+
+
+#### BugFixes
+
+* Fixed keeper missing waits for instance ready ([#418](https://github.com/sorintlab/stolon/pull/418))
+* Fixed etcdv3 store wrong get leader timeout causing `stolonctl status` errors ([#426](https://github.com/sorintlab/stolon/pull/426))
+
+Thanks to everybody who contributed to this release:
+
+Pierre Fersing, Dmitry Andreev
+
 ### v0.8.0
 
 #### New features
