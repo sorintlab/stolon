@@ -1,17 +1,14 @@
-apiVersion: v1
-kind: ReplicationController
+apiVersion: extensions/v1beta1
+kind: Deployment
 metadata:
   name: stolon-sentinel
 spec:
   replicas: 2
-  selector:
-    name: stolon-sentinel
   template:
     metadata:
       labels:
-        name: stolon-sentinel
-        stolon-cluster: "kube-stolon"
-        stolon-sentinel: "true"
+        app: stolon-sentinel
+        stolon-cluster: kube-stolon
     spec:
       containers:
       - name: stolon-sentinel
@@ -22,6 +19,7 @@ spec:
           - |
             exec gosu stolon stolon-sentinel
         env:
+          # TODO(sgotti) Get cluster name from "stolon-cluster" label using a downward volume api instead of duplicating the name here
           - name: STSENTINEL_CLUSTER_NAME
             value: "kube-stolon"
           - name: STSENTINEL_STORE_BACKEND

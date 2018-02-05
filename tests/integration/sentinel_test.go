@@ -160,7 +160,7 @@ func TestSentinelEnabledProxies(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	if err := WaitClusterDataEnabledProxiesNum(sm, 2, 3*initialClusterSpec.SleepInterval.Duration); err != nil {
+	if err := WaitClusterDataEnabledProxiesNum(sm, 2, 6*initialClusterSpec.SleepInterval.Duration); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 }

@@ -1,6 +1,6 @@
 ## Cluster initialization
 
-The cluster initialization can be done at the first time when the cluster isn't initiliazed (empty cluster data in the store) or also on an already initialized cluster, dropping it and creating a new one. In this case be careful that the current cluster data will be overwritten and, depending on how you are specifying the cluster specification, the keeper may erase/overwrite their managed postgreg db cluster.
+The cluster initialization can be done at the first time when the cluster isn't initialized (empty cluster data in the store) or also on an already initialized cluster, dropping it and creating a new one. In this case be careful that the current cluster data will be overwritten and, depending on how you are specifying the cluster specification, the keeper may erase/overwrite their managed postgreg db cluster.
 
 ### Initialize a new stolon cluster with a new postgres db cluster
 
