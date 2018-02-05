@@ -190,6 +190,7 @@ func (c *ClusterChecker) sendPollonConfData(confData pollon.ConfData) {
 
 func (c *ClusterChecker) SetProxyInfo(e *store.Store, generation int64, ttl time.Duration) error {
 	proxyInfo := &cluster.ProxyInfo{
+		InfoUID:    common.UID(),
 		UID:        c.uid,
 		Generation: generation,
 	}
@@ -262,9 +263,7 @@ func (c *ClusterChecker) Check() error {
 		// cannot ignore this error since the sentinel won't know that we exist
 		// and are sending connections to a master so, when electing a new
 		// master, it'll not wait for us to close connections to the old one.
-		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
-		log.Errorw("failed to update proxyInfo", zap.Error(err))
-		return nil
+		return fmt.Errorf("failed to update proxyInfo: %v", err)
 	}
 
 	// start proxing only if we are inside enabledProxies, this ensures that the
@@ -273,6 +272,7 @@ func (c *ClusterChecker) Check() error {
 		log.Infow("proxying to master address", "address", addr)
 		c.sendPollonConfData(pollon.ConfData{DestAddr: addr})
 	} else {
+		log.Infow("not proxying to master address since we aren't in the enabled proxies list", "address", addr)
 		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
 	}
 
@@ -325,7 +325,7 @@ func (c *ClusterChecker) Start() error {
 		case err := <-checkCh:
 			if err != nil {
 				// don't report check ok since it returned an error
-				log.Debugw("check function error", zap.Error(err))
+				log.Infow("check function error", zap.Error(err))
 			} else {
 				// report that check was ok
 				checkOkCh <- struct{}{}

@@ -124,13 +124,41 @@ type SentinelInfo struct {
 	UID string
 }
 
-type ProxiesInfo []*ProxyInfo
-
-func (p ProxiesInfo) Len() int           { return len(p) }
-func (p ProxiesInfo) Less(i, j int) bool { return p[i].UID < p[j].UID }
-func (p ProxiesInfo) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
-
 type ProxyInfo struct {
+	// An unique id for this info, used to know when the proxy info
+	// has been updated
+	InfoUID string `json:"infoUID,omitempty"`
+
 	UID        string
 	Generation int64
 }
+
+type ProxiesInfo map[string]*ProxyInfo
+
+func (p ProxiesInfo) DeepCopy() ProxiesInfo {
+	if p == nil {
+		return nil
+	}
+	np, err := copystructure.Copy(p)
+	if err != nil {
+		panic(err)
+	}
+	if !reflect.DeepEqual(p, np) {
+		panic("not equal")
+	}
+	return np.(ProxiesInfo)
+}
+
+func (p ProxiesInfo) ToSlice() ProxiesInfoSlice {
+	pis := ProxiesInfoSlice{}
+	for _, pi := range p {
+		pis = append(pis, pi)
+	}
+	return pis
+}
+
+type ProxiesInfoSlice []*ProxyInfo
+
+func (p ProxiesInfoSlice) Len() int           { return len(p) }
+func (p ProxiesInfoSlice) Less(i, j int) bool { return p[i].UID < p[j].UID }
+func (p ProxiesInfoSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
