@@ -1,4 +1,12 @@
 [[constraint]]
+  name = "github.com/spf13/cobra"
+  revision = "de2d9c4eca8f3c1de17d48b096b6504e0296f003"
+
+[[constraint]]
+  name = "github.com/spf13/pflag"
+  version = "1.0.0"
+
+[[constraint]]
   name = "github.com/coreos/etcd"
   version = "3.2.11"
 
@@ -25,10 +33,6 @@
 [[constraint]]
   branch = "master"
   name = "github.com/sorintlab/pollon"
-
-[[constraint]]
-  name = "github.com/spf13/pflag"
-  version = "1.0.0"
 
 [[constraint]]
   name = "go.uber.org/zap"
