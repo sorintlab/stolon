@@ -43,7 +43,7 @@ mkdir -p ${BINDIR}
 
 export GO15VENDOREXPERIMENT=1
 
-VERSION=$(${BASEDIR}/scripts/git-version.sh)
+VERSION=${STOLON_VERSION:-$(${BASEDIR}/scripts/git-version.sh)}
 LD_FLAGS="-s -X ${REPO_PATH}/cmd.Version=$VERSION"
 
 # for static compilation we need to compile with cgo disabled (CGO_ENABLED=0),
