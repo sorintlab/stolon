@@ -756,6 +756,21 @@ func (p *PostgresKeeper) resync(db, followedDB *cluster.DB, tryPgrewind bool) er
 	} else {
 		log.Infow("syncing from followed db", "followedDB", followedDB.UID, "keeper", followedDB.Spec.KeeperUID)
 	}
+	
+	// get user define tablespaces dir through replConnParams
+	pgUserTablespaces, err := pgm.GetFollowedPGUserTablespaces(replConnParams)
+	if err != nil {
+		return fmt.Errorf("get followed User Tablespaces: %v", err)
+	}
+
+	// remove all user tablespaces dir and recreate these dir
+	if err := pgm.RemoveAllUserTablespaces(pgUserTablespaces); err != nil {
+		return fmt.Errorf("failed to remove the postgres user tablespaces dir: %v", err)
+	}
+	if err := pgm.MkdirAllUserTablespaces(pgUserTablespaces); err != nil {
+		return fmt.Errorf("failed to mkdir the postgres user tablespaces dir: %v", err)
+	}
+	
 	if err := pgm.SyncFromFollowed(replConnParams); err != nil {
 		return fmt.Errorf("sync error: %v", err)
 	}

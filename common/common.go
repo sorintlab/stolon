@@ -102,3 +102,5 @@ func WriteFileAtomic(filename string, data []byte, perm os.FileMode) error {
 	}
 	return err
 }
+
+type UserTablespaces map[string]string
