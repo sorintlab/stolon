@@ -22,9 +22,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sorintlab/stolon/common"
-
 	"github.com/mitchellh/copystructure"
+	"github.com/sorintlab/stolon/common"
+	util "github.com/sorintlab/stolon/pkg/postgresql"
 )
 
 func Uint16P(u uint16) *uint16 {
@@ -225,6 +225,11 @@ type ClusterSpec struct {
 	// AdditionalWalSenders defines the number of additional wal_senders in
 	// addition to the ones internally defined by stolon
 	AdditionalWalSenders *uint16 `json:"additionalWalSenders"`
+	// AdditionalMasterReplicationSlots defines additional replication slots to
+	// be created on the master postgres instance. Replication slots not defined
+	// here will be dropped from the master instance (i.e. manually created
+	// replication slots will be removed).
+	AdditionalMasterReplicationSlots []string `json:"additionalMasterReplicationSlots"`
 	// Whether to use pg_rewind
 	UsePgrewind *bool `json:"usePgrewind,omitempty"`
 	// InitMode defines the cluster initialization mode. Current modes are: new, existing, pitr
@@ -397,6 +402,12 @@ func (os *ClusterSpec) Validate() error {
 	if s.InitMode == nil {
 		return fmt.Errorf("initMode undefined")
 	}
+	for _, replicationSlot := range s.AdditionalMasterReplicationSlots {
+		if err := validateReplicationSlot(replicationSlot); err != nil {
+			return err
+		}
+	}
+
 	// The unique validation we're doing on pgHBA entries is that they don't contain a newline character
 	for _, e := range s.PGHBA {
 		if strings.Contains(e, "\n") {
@@ -439,6 +450,16 @@ func (os *ClusterSpec) Validate() error {
 		}
 	default:
 		return fmt.Errorf("unknown role: %q", *s.InitMode)
+	}
+	return nil
+}
+
+func validateReplicationSlot(replicationSlot string) error {
+	if !util.IsValidReplSlotName(replicationSlot) {
+		return fmt.Errorf("wrong replication slot name: %q", replicationSlot)
+	}
+	if common.IsStolonName(replicationSlot) {
+		return fmt.Errorf("replication slot name is reserved: %q", replicationSlot)
 	}
 	return nil
 }
@@ -530,6 +551,10 @@ type DBSpec struct {
 	// AdditionalWalSenders defines the number of additional wal_senders in
 	// addition to the ones internally defined by stolon
 	AdditionalWalSenders uint16 `json:"additionalWalSenders"`
+	// AdditionalReplicationSlots is a list of additional replication slots.
+	// Replication slots not defined here will be dropped from the instance
+	// (i.e. manually created replication slots will be removed).
+	AdditionalReplicationSlots []string `json:"additionalReplicationSlots"`
 	// InitMode defines the db initialization mode. Current modes are: none, new
 	InitMode DBInitMode `json:"initMode,omitempty"`
 	// Init configuration used when InitMode is "new"

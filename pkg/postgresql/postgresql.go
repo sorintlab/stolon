@@ -530,9 +530,14 @@ func (p *Manager) SetupRoles() error {
 }
 
 func (p *Manager) GetReplicationSlots() ([]string, error) {
+	maj, _, err := p.PGDataVersion()
+	if err != nil {
+		return nil, err
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), p.requestTimeout)
 	defer cancel()
-	return getReplicatinSlots(ctx, p.localConnParams)
+	return getReplicationSlots(ctx, p.localConnParams, maj)
 }
 
 func (p *Manager) CreateReplicationSlot(name string) error {

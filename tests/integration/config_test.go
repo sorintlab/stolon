@@ -210,3 +210,119 @@ func TestAlterSystem(t *testing.T) {
 		t.Fatalf("expected archive_mode not defined, got value: %q", v)
 	}
 }
+
+func TestAdditionalReplicationSlots(t *testing.T) {
+	t.Parallel()
+
+	dir, err := ioutil.TempDir("", "stolon")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer os.RemoveAll(dir)
+
+	clusterName := uuid.NewV4().String()
+
+	tks, tss, tp, tstore := setupServers(t, clusterName, dir, 2, 1, false, false, nil)
+	defer shutdown(tks, tss, tp, tstore)
+
+	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
+	storePath := filepath.Join(common.StorePrefix, clusterName)
+	sm := store.NewStore(tstore.store, storePath)
+
+	master, standbys := waitMasterStandbysReady(t, sm, tks)
+	standby := standbys[0]
+
+	if err := populate(t, master); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := write(t, master, 1, 1); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	c, err := getLines(t, master)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if c != 1 {
+		t.Fatalf("wrong number of lines, want: %d, got: %d", 1, c)
+	}
+	if err := waitLines(t, standby, 1, 30*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// create additional replslots on master
+	err = StolonCtl(clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "additionalMasterReplicationSlots" : [ "replslot01", "replslot02" ] }`)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := waitNotStolonReplicationSlots(master, []string{"replslot01", "replslot02"}, 30*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	// no repl slot on standby
+	if err := waitNotStolonReplicationSlots(standby, []string{}, 30*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// remove replslot02
+	err = StolonCtl(clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "additionalMasterReplicationSlots" : [ "replslot01" ] }`)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := waitNotStolonReplicationSlots(master, []string{"replslot01"}, 30*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	// no repl slot on standby
+	if err := waitNotStolonReplicationSlots(standby, []string{}, 30*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// remove additional replslots on master
+	err = StolonCtl(clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "additionalMasterReplicationSlots" : null }`)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := waitNotStolonReplicationSlots(master, []string{}, 30*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	// no repl slot on standby
+	if err := waitNotStolonReplicationSlots(standby, []string{}, 30*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// create additional replslots on master
+	err = StolonCtl(clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "additionalMasterReplicationSlots" : [ "replslot01", "replslot02" ] }`)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := waitNotStolonReplicationSlots(master, []string{"replslot01", "replslot02"}, 30*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	// no repl slot on standby
+	if err := waitNotStolonReplicationSlots(standby, []string{}, 30*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// Manually create a replication slot. It should be dropped.
+	if _, err := master.Exec("select pg_create_physical_replication_slot('manualreplslot')"); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := waitNotStolonReplicationSlots(master, []string{"replslot01", "replslot02"}, 30*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// Stop the keeper process on master, should also stop the database
+	t.Logf("Stopping current master keeper: %s", master.uid)
+	master.Stop()
+
+	// Wait for cluster data containing standby as master
+	if err := WaitClusterDataMaster(standby.uid, sm, 30*time.Second); err != nil {
+		t.Fatalf("expected master %q in cluster view", standby.uid)
+	}
+	if err := standby.WaitDBRole(common.RoleMaster, nil, 30*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// repl slot on standby which is the new master
+	if err := waitNotStolonReplicationSlots(standby, []string{"replslot01", "replslot02"}, 30*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+}

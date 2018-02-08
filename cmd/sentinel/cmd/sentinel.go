@@ -399,6 +399,14 @@ func (s *Sentinel) setDBSpecFromClusterSpec(cd *cluster.ClusterData) {
 			db.Spec.FollowConfig.StandbySettings = clusterSpec.StandbySettings
 		}
 		db.Spec.AdditionalWalSenders = *clusterSpec.AdditionalWalSenders
+		switch s.dbType(cd, db.UID) {
+		case dbTypeMaster:
+			db.Spec.AdditionalReplicationSlots = clusterSpec.AdditionalMasterReplicationSlots
+		case dbTypeStandby:
+			db.Spec.AdditionalReplicationSlots = nil
+			// TODO(sgotti). Update when there'll be an option to define
+			// additional replication slots on standbys
+		}
 	}
 }
 

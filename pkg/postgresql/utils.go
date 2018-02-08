@@ -150,7 +150,16 @@ func alterPasswordlessRole(ctx context.Context, connParams ConnParams, roles []s
 	return err
 }
 
-func getReplicatinSlots(ctx context.Context, connParams ConnParams) ([]string, error) {
+// getReplicatinSlots return existing replication slots. On PostgreSQL > 10 we
+// skip temporary slots.
+func getReplicationSlots(ctx context.Context, connParams ConnParams, maj int) ([]string, error) {
+	var q string
+	if maj < 10 {
+		q = "select slot_name from pg_replication_slots"
+	} else {
+		q = "select slot_name from pg_replication_slots where temporary is false"
+	}
+
 	db, err := sql.Open("postgres", connParams.ConnString())
 	if err != nil {
 		return nil, err
@@ -159,7 +168,7 @@ func getReplicatinSlots(ctx context.Context, connParams ConnParams) ([]string, e
 
 	replSlots := []string{}
 
-	rows, err := query(ctx, db, "select slot_name from pg_replication_slots")
+	rows, err := query(ctx, db, q)
 	if err != nil {
 		return nil, err
 	}
