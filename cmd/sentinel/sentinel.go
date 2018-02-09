@@ -526,10 +526,13 @@ func (s *Sentinel) dbValidity(cd *cluster.ClusterData, dbUID string) dbValidity 
 
 	masterDB := cd.DBs[cd.Cluster.Status.Master]
 
-	// if with a different postgres systemID it's invalid
-	if db.Status.SystemID != masterDB.Status.SystemID {
-		log.Debugw("invalid db since the postgres systemdID is different that the master one", "db", db.UID, "keeper", db.Spec.KeeperUID, "dbSystemdID", db.Status.SystemID, "masterSystemID", masterDB.Status.SystemID)
-		return dbValidityInvalid
+	// ignore empty (not provided) systemid
+	if db.Status.SystemID != "" {
+		// if with a different postgres systemID it's invalid
+		if db.Status.SystemID != masterDB.Status.SystemID {
+			log.Infow("invalid db since the postgres systemdID is different that the master one", "db", db.UID, "keeper", db.Spec.KeeperUID, "dbSystemdID", db.Status.SystemID, "masterSystemID", masterDB.Status.SystemID)
+			return dbValidityInvalid
+		}
 	}
 
 	// If on a different timeline branch it's invalid
