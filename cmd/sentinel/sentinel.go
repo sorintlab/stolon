@@ -269,22 +269,22 @@ func (s *Sentinel) updateKeepersStatus(cd *cluster.ClusterData, keepersInfo clus
 		// Mark not found DBs in DBstates in error
 		k, ok := keepersInfo[db.Spec.KeeperUID]
 		if !ok {
-			log.Errorw("no keeper info available", "db", db.UID, "keeper", db.Spec.KeeperUID)
+			log.Warnw("no keeper info available", "db", db.UID, "keeper", db.Spec.KeeperUID)
 			s.SetDBError(db.UID)
 			continue
 		}
 		dbs := k.PostgresState
 		if dbs == nil {
-			log.Errorw("no db state available", "db", db.UID)
+			log.Warnw("no db state available", "db", db.UID, "keeper", db.Spec.KeeperUID)
 			s.SetDBError(db.UID)
 			continue
 		}
 		if dbs.UID != db.UID {
-			log.Warnw("received db state for unexpected db uid", "receivedDB", dbs.UID, "db", db.UID)
+			log.Warnw("received db state for unexpected db uid", "receivedDB", dbs.UID, "db", db.UID, "keeper", db.Spec.KeeperUID)
 			s.SetDBError(db.UID)
 			continue
 		}
-		log.Debugw("received db state", "db", db.UID)
+		log.Debugw("received db state", "db", db.UID, "keeper", db.Spec.KeeperUID)
 
 		if db.Status.XLogPos == dbs.XLogPos {
 			s.SetDBNotIncreasingXLogPos(db.UID)
