@@ -23,7 +23,7 @@ func StringInSlice(s []string, e string) bool {
 	return false
 }
 
-// CompareStringSlice compares two slices of strings, an nil slice is considered an empty one
+// CompareStringSlice compares two slices of strings, a nil slice is considered an empty one
 func CompareStringSlice(a []string, b []string) bool {
 	if len(a) != len(b) {
 		return false
@@ -35,4 +35,15 @@ func CompareStringSlice(a []string, b []string) bool {
 		}
 	}
 	return true
+}
+
+// CommonElements return the common elements in two slices of strings
+func CommonElements(a []string, b []string) []string {
+	common := []string{}
+	for _, v := range a {
+		if StringInSlice(b, v) {
+			common = append(common, v)
+		}
+	}
+	return common
 }
