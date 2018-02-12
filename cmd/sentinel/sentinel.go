@@ -392,7 +392,6 @@ func (s *Sentinel) setDBSpecFromClusterSpec(cd *cluster.ClusterData) {
 	for _, db := range cd.DBs {
 		db.Spec.RequestTimeout = *clusterSpec.RequestTimeout
 		db.Spec.MaxStandbys = *clusterSpec.MaxStandbys
-		db.Spec.SynchronousReplication = s.syncRepl(clusterSpec)
 		db.Spec.UsePgrewind = *clusterSpec.UsePgrewind
 		db.Spec.PGParameters = clusterSpec.PGParameters
 		db.Spec.PGHBA = clusterSpec.PGHBA
@@ -1061,6 +1060,7 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 
 			// Setup synchronous standbys to the one of the previous master (replacing ourself with the previous master)
 			if s.syncRepl(clusterSpec) {
+				newMasterDB.Spec.SynchronousReplication = true
 				for _, dbUID := range oldMasterdb.Spec.SynchronousStandbys {
 					newMasterDB.Spec.SynchronousStandbys = []string{}
 					if dbUID != newMasterDB.UID {
@@ -1072,6 +1072,9 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 				if len(newMasterDB.Spec.SynchronousStandbys) == 0 {
 					newMasterDB.Spec.SynchronousStandbys = []string{fakeStandbyName}
 				}
+			} else {
+				newMasterDB.Spec.SynchronousReplication = false
+				newMasterDB.Spec.SynchronousStandbys = nil
 			}
 		}
 
@@ -1180,6 +1183,8 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 
 				// Setup synchronous standbys
 				if s.syncRepl(clusterSpec) {
+					masterDB.Spec.SynchronousReplication = true
+
 					// make a map of synchronous standbys starting from the current ones
 					synchronousStandbys := map[string]struct{}{}
 					for _, dbUID := range masterDB.Spec.SynchronousStandbys {
@@ -1249,6 +1254,9 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 
 					// Sort synchronousStandbys so we can compare the slice regardless of its order
 					sort.Sort(sort.StringSlice(masterDB.Spec.SynchronousStandbys))
+				} else {
+					masterDB.Spec.SynchronousReplication = false
+					masterDB.Spec.SynchronousStandbys = nil
 				}
 
 				// NotFailed != Good since there can be some dbs that are converging
@@ -1328,6 +1336,9 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 					// Remove followers
 					db.Spec.Followers = []string{}
 					db.Spec.FollowConfig = &cluster.FollowConfig{Type: cluster.FollowTypeInternal, DBUID: wantedMasterDBUID}
+
+					db.Spec.SynchronousReplication = false
+					db.Spec.SynchronousStandbys = nil
 				}
 			}
 		}
