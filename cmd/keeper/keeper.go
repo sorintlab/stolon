@@ -677,7 +677,7 @@ func (p *PostgresKeeper) Start(ctx context.Context) {
 	pgm := postgresql.NewManager(p.pgBinPath, p.dataDir, p.getLocalConnParams(), p.getLocalReplConnParams(), p.pgSUAuthMethod, p.pgSUUsername, p.pgSUPassword, p.pgReplAuthMethod, p.pgReplUsername, p.pgReplPassword, p.requestTimeout)
 	p.pgm = pgm
 
-	p.pgm.Stop(true)
+	p.pgm.StopIfStarted(true)
 
 	smTimerCh := time.NewTimer(0).C
 	updatePGStateTimerCh := time.NewTimer(0).C
@@ -686,7 +686,9 @@ func (p *PostgresKeeper) Start(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			log.Debugw("stopping stolon keeper")
-			p.pgm.Stop(true)
+			if err = p.pgm.StopIfStarted(true); err != nil {
+				log.Errorw("failed to stop pg instance", zap.Error(err))
+			}
 			p.end <- nil
 			return
 
@@ -892,7 +894,9 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 
 	if p.bootUUID != k.Status.BootUUID {
 		log.Infow("our db boot UID is different than the cluster data one, waiting for it to be updated", "bootUUID", p.bootUUID, "clusterBootUUID", k.Status.BootUUID)
-		pgm.Stop(true)
+		if err = pgm.StopIfStarted(true); err != nil {
+			log.Errorw("failed to stop pg instance", zap.Error(err))
+		}
 		return
 	}
 
@@ -908,7 +912,10 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 		// resync has failed so we have to clean up stale data
 		log.Errorw("db failed to initialize or resync")
 
-		pgm.Stop(true)
+		if err = pgm.StopIfStarted(true); err != nil {
+			log.Errorw("failed to stop pg instance", zap.Error(err))
+			return
+		}
 
 		// Clean up cluster db datadir
 		if err = pgm.RemoveAll(); err != nil {
@@ -989,7 +996,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 			}
 
 			if started {
-				if err = pgm.Stop(true); err != nil {
+				if err = pgm.StopIfStarted(true); err != nil {
 					log.Errorw("failed to stop pg instance", zap.Error(err))
 					return
 				}
@@ -1043,7 +1050,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				log.Errorw("failed to save db local state", zap.Error(err))
 				return
 			}
-			if err = pgm.Stop(true); err != nil {
+			if err = pgm.StopIfStarted(true); err != nil {
 				log.Errorw("failed to stop pg instance", zap.Error(err))
 				return
 			}
@@ -1067,7 +1074,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 			pgm.SetParameters(pgParameters)
 
 			if started {
-				if err = pgm.Stop(true); err != nil {
+				if err = pgm.StopIfStarted(true); err != nil {
 					log.Errorw("failed to stop pg instance", zap.Error(err))
 					return
 				}
@@ -1123,7 +1130,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				log.Errorw("failed to save db local state", zap.Error(err))
 				return
 			}
-			if err = pgm.Stop(true); err != nil {
+			if err = pgm.StopIfStarted(true); err != nil {
 				log.Errorw("failed to stop pg instance", zap.Error(err))
 				return
 			}
@@ -1143,7 +1150,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 			}
 
 			if started {
-				if err = pgm.Stop(true); err != nil {
+				if err = pgm.StopIfStarted(true); err != nil {
 					log.Errorw("failed to stop pg instance", zap.Error(err))
 					return
 				}
@@ -1226,7 +1233,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 
 				if fullResync {
 					if started {
-						if err = pgm.Stop(true); err != nil {
+						if err = pgm.StopIfStarted(true); err != nil {
 							log.Errorw("failed to stop pg instance", zap.Error(err))
 							return
 						}
@@ -1259,7 +1266,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 			pgm.SetParameters(pgParameters)
 
 			if started {
-				if err = pgm.Stop(true); err != nil {
+				if err = pgm.StopIfStarted(true); err != nil {
 					log.Errorw("failed to stop pg instance", zap.Error(err))
 					return
 				}
@@ -1301,7 +1308,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				log.Errorw("failed to save db local state", zap.Error(err))
 				return
 			}
-			if err = pgm.Stop(true); err != nil {
+			if err = pgm.StopIfStarted(true); err != nil {
 				log.Errorw("failed to stop pg instance", zap.Error(err))
 				return
 			}
