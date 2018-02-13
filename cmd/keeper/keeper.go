@@ -271,10 +271,13 @@ func (p *PostgresKeeper) createPGParameters(db *cluster.DB) common.Parameters {
 	}
 
 	// Setup synchronous replication
-	if db.Spec.SynchronousReplication && len(db.Spec.SynchronousStandbys) > 0 {
+	if db.Spec.SynchronousReplication && (len(db.Spec.SynchronousStandbys) > 0 || len(db.Spec.ExternalSynchronousStandbys) > 0) {
 		synchronousStandbys := []string{}
 		for _, synchronousStandby := range db.Spec.SynchronousStandbys {
 			synchronousStandbys = append(synchronousStandbys, common.StolonName(synchronousStandby))
+		}
+		for _, synchronousStandby := range db.Spec.ExternalSynchronousStandbys {
+			synchronousStandbys = append(synchronousStandbys, synchronousStandby)
 		}
 		// TODO(sgotti) Find a way to detect the pg major version also
 		// when the instance is empty. Parsing the postgres --version
@@ -592,6 +595,7 @@ func (p *PostgresKeeper) GetPGState(pctx context.Context) (*cluster.PostgresStat
 		}
 		synchronousStandbys := []string{}
 		for _, n := range synchronousStandbyNames {
+			// pgState.SynchronousStandbys must contain only the internal standbys dbUIDs
 			if !common.IsStolonName(n) {
 				continue
 			}
