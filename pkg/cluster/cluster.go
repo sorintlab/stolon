@@ -551,6 +551,8 @@ type DBSpec struct {
 	IncludeConfig bool `json:"includePreviousConfig,omitempty"`
 	// SynchronousStandbys are the standbys to be configured as synchronous
 	SynchronousStandbys []string `json:"synchronousStandbys"`
+	// External SynchronousStandbys are external standbys names to be configured as synchronous
+	ExternalSynchronousStandbys []string `json:"externalSynchronousStandbys"`
 }
 
 type DBStatus struct {
@@ -566,9 +568,14 @@ type DBStatus struct {
 	XLogPos          uint64                   `json:"xLogPos,omitempty"`
 	TimelinesHistory PostgresTimelinesHistory `json:"timelinesHistory,omitempty"`
 
-	PGParameters        PGParameters `json:"pgParameters,omitempty"`
-	SynchronousStandbys []string     `json:"synchronousStandbys"`
-	OlderWalFile        string       `json:"olderWalFile,omitempty"`
+	PGParameters PGParameters `json:"pgParameters,omitempty"`
+
+	// DBUIDs of the internal standbys set as synchronous
+	// NOTE(sgotti) we currently don't report the external synchronous standbys.
+	// If/when needed lets add a new ExternalSynchronousStandbys field
+	SynchronousStandbys []string `json:"synchronousStandbys"`
+
+	OlderWalFile string `json:"olderWalFile,omitempty"`
 }
 
 type DB struct {

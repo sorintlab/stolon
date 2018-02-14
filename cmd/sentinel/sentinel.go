@@ -998,22 +998,13 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 				// if synchronous replication is enabled, only choose new master in the synchronous replication standbys.
 				var bestNewMasterDB *cluster.DB
 				if s.syncRepl(clusterSpec) {
-					onlyFake := true
-					// if only fake synchronous standbys are defined we cannot choose any standby
-					for _, dbUID := range curMasterDB.Spec.SynchronousStandbys {
-						if dbUID != fakeStandbyName {
-							onlyFake = false
-						}
-					}
-					if !onlyFake {
-						if !util.CompareStringSlice(curMasterDB.Status.SynchronousStandbys, curMasterDB.Spec.SynchronousStandbys) {
-							log.Warnw("cannot choose synchronous standby since the latest master reported synchronous standbys are different from the db spec ones", "reported", curMasterDB.Status.SynchronousStandbys, "spec", curMasterDB.Spec.SynchronousStandbys)
-						} else {
-							for _, nm := range bestNewMasters {
-								if util.StringInSlice(curMasterDB.Spec.SynchronousStandbys, nm.UID) {
-									bestNewMasterDB = nm
-									break
-								}
+					if !util.CompareStringSlice(curMasterDB.Status.SynchronousStandbys, curMasterDB.Spec.SynchronousStandbys) {
+						log.Warnw("cannot choose synchronous standby since the latest master reported synchronous standbys are different from the db spec ones", "reported", curMasterDB.Status.SynchronousStandbys, "spec", curMasterDB.Spec.SynchronousStandbys)
+					} else {
+						for _, nm := range bestNewMasters {
+							if util.StringInSlice(curMasterDB.Spec.SynchronousStandbys, nm.UID) {
+								bestNewMasterDB = nm
+								break
 							}
 						}
 					}
@@ -1063,6 +1054,7 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 				newMasterDB.Spec.SynchronousReplication = true
 				for _, dbUID := range oldMasterdb.Spec.SynchronousStandbys {
 					newMasterDB.Spec.SynchronousStandbys = []string{}
+					newMasterDB.Spec.ExternalSynchronousStandbys = []string{}
 					if dbUID != newMasterDB.UID {
 						newMasterDB.Spec.SynchronousStandbys = append(newMasterDB.Spec.SynchronousStandbys, dbUID)
 					} else {
@@ -1070,11 +1062,12 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 					}
 				}
 				if len(newMasterDB.Spec.SynchronousStandbys) == 0 {
-					newMasterDB.Spec.SynchronousStandbys = []string{fakeStandbyName}
+					newMasterDB.Spec.ExternalSynchronousStandbys = []string{fakeStandbyName}
 				}
 			} else {
 				newMasterDB.Spec.SynchronousReplication = false
 				newMasterDB.Spec.SynchronousStandbys = nil
+				newMasterDB.Spec.ExternalSynchronousStandbys = nil
 			}
 		}
 
@@ -1183,15 +1176,12 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 
 				// Setup synchronous standbys
 				if s.syncRepl(clusterSpec) {
-					masterDB.Spec.SynchronousReplication = true
+					addFakeStandby := false
+					externalSynchronousStandbys := map[string]struct{}{}
 
 					// make a map of synchronous standbys starting from the current ones
 					synchronousStandbys := map[string]struct{}{}
 					for _, dbUID := range masterDB.Spec.SynchronousStandbys {
-						// filter out fake standby
-						if dbUID == fakeStandbyName {
-							continue
-						}
 						synchronousStandbys[dbUID] = struct{}{}
 					}
 
@@ -1242,21 +1232,33 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 					}
 
 					// If there're not enough real synchronous standbys add a fake synchronous standby because we have to be strict and make the master block transactions until MaxSynchronousStandbys real standbys are available
-					if len(synchronousStandbys) < int(*clusterSpec.MinSynchronousStandbys) {
+					if len(synchronousStandbys)+len(externalSynchronousStandbys) < int(*clusterSpec.MinSynchronousStandbys) {
 						log.Infow("using a fake synchronous standby since there are not enough real standbys available", "masterDB", masterDB.UID, "required", int(*clusterSpec.MinSynchronousStandbys))
-						synchronousStandbys[fakeStandbyName] = struct{}{}
+						addFakeStandby = true
 					}
 
+					masterDB.Spec.SynchronousReplication = true
 					masterDB.Spec.SynchronousStandbys = []string{}
+					masterDB.Spec.ExternalSynchronousStandbys = []string{}
 					for dbUID, _ := range synchronousStandbys {
 						masterDB.Spec.SynchronousStandbys = append(masterDB.Spec.SynchronousStandbys, dbUID)
 					}
 
+					for dbUID, _ := range externalSynchronousStandbys {
+						masterDB.Spec.ExternalSynchronousStandbys = append(masterDB.Spec.ExternalSynchronousStandbys, dbUID)
+					}
+
+					if addFakeStandby {
+						masterDB.Spec.ExternalSynchronousStandbys = append(masterDB.Spec.ExternalSynchronousStandbys, fakeStandbyName)
+					}
+
 					// Sort synchronousStandbys so we can compare the slice regardless of its order
 					sort.Sort(sort.StringSlice(masterDB.Spec.SynchronousStandbys))
+					sort.Sort(sort.StringSlice(masterDB.Spec.ExternalSynchronousStandbys))
 				} else {
 					masterDB.Spec.SynchronousReplication = false
 					masterDB.Spec.SynchronousStandbys = nil
+					masterDB.Spec.ExternalSynchronousStandbys = nil
 				}
 
 				// NotFailed != Good since there can be some dbs that are converging
@@ -1265,6 +1267,7 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 				notFailedStandbysCount := goodStandbysCount + convergingStandbysCount
 
 				// Remove dbs in excess if we have a good number >= MaxStandbysPerSender
+				// We don't remove failed db until the number of good db is >= MaxStandbysPerSender since they can come back
 				if uint16(goodStandbysCount) >= *clusterSpec.MaxStandbysPerSender {
 					toRemove := []*cluster.DB{}
 					// Remove all non good standbys
@@ -1297,11 +1300,8 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 					}
 
 				} else {
-					// Add new dbs to substitute failed dbs. we
-					// don't remove failed db until the number of
-					// good db is >= MaxStandbysPerSender since they can come back
+					// Add new dbs to substitute failed dbs, if there're available keepers.
 
-					// define, if there're available keepers, new dbs
 					// nc can be negative if MaxStandbysPerSender has been lowered
 					nc := int(*clusterSpec.MaxStandbysPerSender - uint16(notFailedStandbysCount))
 					// Add missing DBs until MaxStandbysPerSender
@@ -1339,6 +1339,7 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 
 					db.Spec.SynchronousReplication = false
 					db.Spec.SynchronousStandbys = nil
+					db.Spec.ExternalSynchronousStandbys = nil
 				}
 			}
 		}
