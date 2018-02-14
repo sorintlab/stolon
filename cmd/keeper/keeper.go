@@ -944,16 +944,17 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 		return
 	}
 
-	started := false
 	if initialized {
+		var started bool
 		started, err = pgm.IsStarted()
 		if err != nil {
 			// log error getting instance state but go ahead.
 			log.Errorw("failed to retrieve instance status", zap.Error(err))
 		}
+		log.Debugw("db status", "initialized", true, "started", started)
+	} else {
+		log.Debugw("db status", "initialized", false, "started", false)
 	}
-
-	log.Debugw("db status", "started", started)
 
 	// if the db is initialized but there isn't a db local state then generate a new one
 	if initialized && dbls.UID == "" {
@@ -999,12 +1000,9 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				initConfig.DataChecksums = db.Spec.NewConfig.DataChecksums
 			}
 
-			if started {
-				if err = pgm.StopIfStarted(true); err != nil {
-					log.Errorw("failed to stop pg instance", zap.Error(err))
-					return
-				}
-				started = false
+			if err = pgm.StopIfStarted(true); err != nil {
+				log.Errorw("failed to stop pg instance", zap.Error(err))
+				return
 			}
 			if err = pgm.RemoveAll(); err != nil {
 				log.Errorw("failed to remove the postgres data dir", zap.Error(err))
@@ -1077,12 +1075,9 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 			// update pgm postgres parameters
 			pgm.SetParameters(pgParameters)
 
-			if started {
-				if err = pgm.StopIfStarted(true); err != nil {
-					log.Errorw("failed to stop pg instance", zap.Error(err))
-					return
-				}
-				started = false
+			if err = pgm.StopIfStarted(true); err != nil {
+				log.Errorw("failed to stop pg instance", zap.Error(err))
+				return
 			}
 			if err = pgm.RemoveAll(); err != nil {
 				log.Errorw("failed to remove the postgres data dir", zap.Error(err))
@@ -1153,12 +1148,9 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				return
 			}
 
-			if started {
-				if err = pgm.StopIfStarted(true); err != nil {
-					log.Errorw("failed to stop pg instance", zap.Error(err))
-					return
-				}
-				started = false
+			if err = pgm.StopIfStarted(true); err != nil {
+				log.Errorw("failed to stop pg instance", zap.Error(err))
+				return
 			}
 
 			// create postgres parameteres with empty InitPGParameters
@@ -1213,7 +1205,6 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				log.Errorw("failed to start instance", zap.Error(err))
 				return
 			}
-			started = true
 
 			if tryPgrewind {
 				fullResync := false
@@ -1236,12 +1227,9 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				}
 
 				if fullResync {
-					if started {
-						if err = pgm.StopIfStarted(true); err != nil {
-							log.Errorw("failed to stop pg instance", zap.Error(err))
-							return
-						}
-						started = false
+					if err = pgm.StopIfStarted(true); err != nil {
+						log.Errorw("failed to stop pg instance", zap.Error(err))
+						return
 					}
 					if err = p.resync(db, followedDB, false); err != nil {
 						log.Errorw("failed to resync from followed instance", zap.Error(err))
@@ -1269,12 +1257,9 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 			// update pgm postgres parameters
 			pgm.SetParameters(pgParameters)
 
-			if started {
-				if err = pgm.StopIfStarted(true); err != nil {
-					log.Errorw("failed to stop pg instance", zap.Error(err))
-					return
-				}
-				started = false
+			if err = pgm.StopIfStarted(true); err != nil {
+				log.Errorw("failed to stop pg instance", zap.Error(err))
+				return
 			}
 			if db.Spec.IncludeConfig {
 				if err = pgm.StartTmpMerged(); err != nil {
@@ -1363,6 +1348,11 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 			log.Errorw("database cluster not initialized but requested role is master. This shouldn't happen!")
 			return
 		}
+		started, err := pgm.IsStarted()
+		if err != nil {
+			log.Errorw("failed to retrieve instance status", zap.Error(err))
+			return
+		}
 		if !started {
 			if err = pgm.Start(); err != nil {
 				log.Errorw("failed to start postgres", zap.Error(err))
@@ -1372,7 +1362,6 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				log.Errorw("timeout waiting for instance to be ready", zap.Error(err))
 				return
 			}
-			started = true
 		}
 
 		if localRole == common.RoleStandby {
@@ -1416,6 +1405,11 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 			return
 		case common.RoleStandby:
 			log.Infow("already standby")
+			started, err := pgm.IsStarted()
+			if err != nil {
+				log.Errorw("failed to retrieve instance status", zap.Error(err))
+				return
+			}
 			if !started {
 				if err = pgm.WriteRecoveryConf(p.createRecoveryParameters(standbySettings, nil, nil)); err != nil {
 					log.Errorw("error writing recovery.conf", zap.Error(err))
@@ -1425,7 +1419,6 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 					log.Errorw("failed to start postgres", zap.Error(err))
 					return
 				}
-				started = true
 			}
 
 			// TODO(sgotti) Check that the followed instance has all the needed WAL segments
