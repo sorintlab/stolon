@@ -17,6 +17,7 @@ package postgresql
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -43,6 +44,10 @@ const (
 	tmpPostgresConf  = "stolon-temp-postgresql.conf"
 
 	startTimeout = 60 * time.Second
+)
+
+var (
+	ErrUnknownState = errors.New("unknown postgres state")
 )
 
 var log = slog.S()
@@ -337,6 +342,8 @@ func (p *Manager) start(args ...string) error {
 	return nil
 }
 
+// Stop tries to stop an instance. An error will be returned if the instance isn't started, stop fails or
+// times out (60 second).
 func (p *Manager) Stop(fast bool) error {
 	log.Infow("stopping database")
 	name := filepath.Join(p.pgBinPath, "pg_ctl")
@@ -364,6 +371,9 @@ func (p *Manager) IsStarted() (bool, error) {
 			status := cmd.ProcessState.Sys().(syscall.WaitStatus).ExitStatus()
 			if status == 3 {
 				return false, nil
+			}
+			if status == 4 {
+				return false, ErrUnknownState
 			}
 		}
 		return false, fmt.Errorf("cannot get instance state: %v", err)
@@ -396,9 +406,39 @@ func (p *Manager) Reload() error {
 	return nil
 }
 
+// StopIfStarted checks if the instance is started, then calls stop and
+// then check if the instance is really stopped
+func (p *Manager) StopIfStarted(fast bool) error {
+	// Stop will return an error if the instance isn't started, so first check
+	// if it's started
+	started, err := p.IsStarted()
+	if err != nil {
+		if err == ErrUnknownState {
+			// if IsStarted returns an unknown state error then assume that the
+			// instance is stopped
+			return nil
+		}
+		return err
+	}
+	if !started {
+		return nil
+	}
+	if err = p.Stop(fast); err != nil {
+		return err
+	}
+	started, err = p.IsStarted()
+	if err != nil {
+		return err
+	}
+	if started {
+		return fmt.Errorf("failed to stop")
+	}
+	return nil
+}
+
 func (p *Manager) Restart(fast bool) error {
 	log.Infow("restarting database")
-	if err := p.Stop(fast); err != nil {
+	if err := p.StopIfStarted(fast); err != nil {
 		return err
 	}
 	if err := p.Start(); err != nil {
