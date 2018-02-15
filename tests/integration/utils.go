@@ -864,10 +864,6 @@ func NewTestConsul(t *testing.T, dir string, a ...string) (*TestStore, error) {
 	if err != nil {
 		return nil, err
 	}
-	_, portRPC, err := getFreePort(true, false)
-	if err != nil {
-		return nil, err
-	}
 	_, portSerfLan, err := getFreePort(true, true)
 	if err != nil {
 		return nil, err
@@ -881,7 +877,7 @@ func NewTestConsul(t *testing.T, dir string, a ...string) (*TestStore, error) {
 		return nil, err
 	}
 
-	f, err := ioutil.TempFile(dir, "consul.json")
+	f, err := os.Create(filepath.Join(dir, fmt.Sprintf("consul%s.json", uid)))
 	if err != nil {
 		return nil, err
 	}
@@ -891,12 +887,11 @@ func NewTestConsul(t *testing.T, dir string, a ...string) (*TestStore, error) {
 		"ports": {
 			"dns": -1,
 			"http": %s,
-			"rpc": %s,
 			"serf_lan": %s,
 			"serf_wan": %s,
 			"server": %s
 		}
-	}`, portHTTP, portRPC, portSerfLan, portSerfWan, portServer))
+	}`, portHTTP, portSerfLan, portSerfWan, portServer))
 
 	args := []string{}
 	args = append(args, "agent")
