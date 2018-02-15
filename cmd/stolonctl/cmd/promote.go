@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package cmd
 
 import (
 	"context"
@@ -33,7 +33,7 @@ var cmdPromote = &cobra.Command{
 func init() {
 	cmdPromote.PersistentFlags().BoolVarP(&initOpts.forceYes, "yes", "y", false, "don't ask for confirmation")
 
-	cmdStolonCtl.AddCommand(cmdPromote)
+	CmdStolonCtl.AddCommand(cmdPromote)
 }
 
 func promote(cmd *cobra.Command, args []string) {

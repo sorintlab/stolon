@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package cmd
 
 import (
 	"bufio"
@@ -35,7 +35,7 @@ const (
 	maxRetries = 3
 )
 
-var cmdStolonCtl = &cobra.Command{
+var CmdStolonCtl = &cobra.Command{
 	Use:     "stolonctl",
 	Short:   "stolon command line client",
 	Version: cmd.Version,
@@ -57,7 +57,7 @@ type config struct {
 var cfg config
 
 func init() {
-	cmd.AddCommonFlags(cmdStolonCtl, &cfg.CommonConfig, false)
+	cmd.AddCommonFlags(CmdStolonCtl, &cfg.CommonConfig, false)
 }
 
 var cmdVersion = &cobra.Command{
@@ -67,17 +67,16 @@ var cmdVersion = &cobra.Command{
 }
 
 func init() {
-	cmdStolonCtl.AddCommand(cmdVersion)
+	CmdStolonCtl.AddCommand(cmdVersion)
 }
 
 func versionCommand(c *cobra.Command, args []string) {
 	stdout("stolonctl version %s", cmd.Version)
 }
 
-func main() {
-	flagutil.SetFlagsFromEnv(cmdStolonCtl.PersistentFlags(), "STOLONCTL")
-
-	cmdStolonCtl.Execute()
+func Execute() {
+	flagutil.SetFlagsFromEnv(CmdStolonCtl.PersistentFlags(), "STOLONCTL")
+	CmdStolonCtl.Execute()
 }
 
 func stderr(format string, a ...interface{}) {

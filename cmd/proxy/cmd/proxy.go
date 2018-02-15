@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package cmd
 
 import (
 	"context"
@@ -40,7 +40,7 @@ import (
 
 var log = slog.S()
 
-var cmdProxy = &cobra.Command{
+var CmdProxy = &cobra.Command{
 	Use:     "stolon-proxy",
 	Run:     proxy,
 	Version: cmd.Version,
@@ -62,17 +62,17 @@ type config struct {
 var cfg config
 
 func init() {
-	cmd.AddCommonFlags(cmdProxy, &cfg.CommonConfig, true)
+	cmd.AddCommonFlags(CmdProxy, &cfg.CommonConfig, true)
 
-	cmdProxy.PersistentFlags().StringVar(&cfg.listenAddress, "listen-address", "127.0.0.1", "proxy listening address")
-	cmdProxy.PersistentFlags().StringVar(&cfg.port, "port", "5432", "proxy listening port")
-	cmdProxy.PersistentFlags().BoolVar(&cfg.stopListening, "stop-listening", true, "stop listening on store error")
-	cmdProxy.PersistentFlags().BoolVar(&cfg.debug, "debug", false, "enable debug logging")
-	cmdProxy.PersistentFlags().IntVar(&cfg.keepAliveIdle, "tcp-keepalive-idle", 0, "set tcp keepalive idle (seconds)")
-	cmdProxy.PersistentFlags().IntVar(&cfg.keepAliveCount, "tcp-keepalive-count", 0, "set tcp keepalive probe count number")
-	cmdProxy.PersistentFlags().IntVar(&cfg.keepAliveInterval, "tcp-keepalive-interval", 0, "set tcp keepalive interval (seconds)")
+	CmdProxy.PersistentFlags().StringVar(&cfg.listenAddress, "listen-address", "127.0.0.1", "proxy listening address")
+	CmdProxy.PersistentFlags().StringVar(&cfg.port, "port", "5432", "proxy listening port")
+	CmdProxy.PersistentFlags().BoolVar(&cfg.stopListening, "stop-listening", true, "stop listening on store error")
+	CmdProxy.PersistentFlags().BoolVar(&cfg.debug, "debug", false, "enable debug logging")
+	CmdProxy.PersistentFlags().IntVar(&cfg.keepAliveIdle, "tcp-keepalive-idle", 0, "set tcp keepalive idle (seconds)")
+	CmdProxy.PersistentFlags().IntVar(&cfg.keepAliveCount, "tcp-keepalive-count", 0, "set tcp keepalive probe count number")
+	CmdProxy.PersistentFlags().IntVar(&cfg.keepAliveInterval, "tcp-keepalive-interval", 0, "set tcp keepalive interval (seconds)")
 
-	cmdProxy.PersistentFlags().MarkDeprecated("debug", "use --log-level=debug instead")
+	CmdProxy.PersistentFlags().MarkDeprecated("debug", "use --log-level=debug instead")
 }
 
 func stderr(format string, a ...interface{}) {
@@ -339,10 +339,10 @@ func (c *ClusterChecker) Start() error {
 	}
 }
 
-func main() {
-	flagutil.SetFlagsFromEnv(cmdProxy.PersistentFlags(), "STPROXY")
+func Execute() {
+	flagutil.SetFlagsFromEnv(CmdProxy.PersistentFlags(), "STPROXY")
 
-	cmdProxy.Execute()
+	CmdProxy.Execute()
 }
 
 func proxy(c *cobra.Command, args []string) {

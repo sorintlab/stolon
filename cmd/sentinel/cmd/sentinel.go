@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package cmd
 
 import (
 	"context"
@@ -52,7 +52,7 @@ const (
 	fakeStandbyName = "stolonfakestandby"
 )
 
-var cmdSentinel = &cobra.Command{
+var CmdSentinel = &cobra.Command{
 	Use:     "stolon-sentinel",
 	Run:     sentinel,
 	Version: cmd.Version,
@@ -67,12 +67,12 @@ type config struct {
 var cfg config
 
 func init() {
-	cmd.AddCommonFlags(cmdSentinel, &cfg.CommonConfig, true)
+	cmd.AddCommonFlags(CmdSentinel, &cfg.CommonConfig, true)
 
-	cmdSentinel.PersistentFlags().StringVar(&cfg.initialClusterSpecFile, "initial-cluster-spec", "", "a file providing the initial cluster specification, used only at cluster initialization, ignored if cluster is already initialized")
-	cmdSentinel.PersistentFlags().BoolVar(&cfg.debug, "debug", false, "enable debug logging (deprecated, use log-level instead)")
+	CmdSentinel.PersistentFlags().StringVar(&cfg.initialClusterSpecFile, "initial-cluster-spec", "", "a file providing the initial cluster specification, used only at cluster initialization, ignored if cluster is already initialized")
+	CmdSentinel.PersistentFlags().BoolVar(&cfg.debug, "debug", false, "enable debug logging (deprecated, use log-level instead)")
 
-	cmdSentinel.PersistentFlags().MarkDeprecated("debug", "use --log-level=debug instead")
+	CmdSentinel.PersistentFlags().MarkDeprecated("debug", "use --log-level=debug instead")
 }
 
 func stderr(format string, a ...interface{}) {
@@ -1750,10 +1750,10 @@ func sigHandler(sigs chan os.Signal, cancel context.CancelFunc) {
 	cancel()
 }
 
-func main() {
-	flagutil.SetFlagsFromEnv(cmdSentinel.PersistentFlags(), "STSENTINEL")
+func Execute() {
+	flagutil.SetFlagsFromEnv(CmdSentinel.PersistentFlags(), "STSENTINEL")
 
-	cmdSentinel.Execute()
+	CmdSentinel.Execute()
 }
 
 func sentinel(c *cobra.Command, args []string) {

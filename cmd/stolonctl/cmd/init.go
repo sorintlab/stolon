@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package cmd
 
 import (
 	"context"
@@ -42,7 +42,7 @@ func init() {
 	cmdInit.PersistentFlags().StringVarP(&initOpts.file, "file", "f", "", "file contaning the new cluster spec")
 	cmdInit.PersistentFlags().BoolVarP(&initOpts.forceYes, "yes", "y", false, "don't ask for confirmation")
 
-	cmdStolonCtl.AddCommand(cmdInit)
+	CmdStolonCtl.AddCommand(cmdInit)
 }
 
 func initCluster(cmd *cobra.Command, args []string) {
