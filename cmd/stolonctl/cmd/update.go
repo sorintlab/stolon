@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package cmd
 
 import (
 	"context"
@@ -45,7 +45,7 @@ func init() {
 	cmdUpdate.PersistentFlags().BoolVarP(&updateOpts.patch, "patch", "p", false, "patch the current cluster specification instead of replacing it")
 	cmdUpdate.PersistentFlags().StringVarP(&updateOpts.file, "file", "f", "", "file contaning a complete cluster specification or a patch to apply to the current cluster specification")
 
-	cmdStolonCtl.AddCommand(cmdUpdate)
+	CmdStolonCtl.AddCommand(cmdUpdate)
 }
 
 func patchClusterSpec(cs *cluster.ClusterSpec, p []byte) (*cluster.ClusterSpec, error) {

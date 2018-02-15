@@ -1,4 +1,4 @@
-// Copyright 2017 Sorint.lab
+// Copyright 2015 Sorint.lab
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package cmd
 
 import (
 	"encoding/json"
@@ -20,25 +20,25 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var cmdClusterData = &cobra.Command{
-	Use:   "clusterdata",
-	Run:   clusterdata,
-	Short: "Retrieve the current cluster data",
+var cmdSpec = &cobra.Command{
+	Use:   "spec",
+	Run:   spec,
+	Short: "Retrieve the current cluster specification",
 }
 
-type clusterdataOptions struct {
-	pretty bool
+type specOptions struct {
+	defaults bool
 }
 
-var clusterdataOpts clusterdataOptions
+var specOpts specOptions
 
 func init() {
-	cmdClusterData.PersistentFlags().BoolVar(&clusterdataOpts.pretty, "pretty", false, "pretty print")
+	cmdSpec.PersistentFlags().BoolVar(&specOpts.defaults, "defaults", false, "also show default values")
 
-	cmdStolonCtl.AddCommand(cmdClusterData)
+	CmdStolonCtl.AddCommand(cmdSpec)
 }
 
-func clusterdata(cmd *cobra.Command, args []string) {
+func spec(cmd *cobra.Command, args []string) {
 	kvStore, err := NewKVStore()
 	if err != nil {
 		die("cannot create store: %v", err)
@@ -51,19 +51,19 @@ func clusterdata(cmd *cobra.Command, args []string) {
 		die("%v", err)
 	}
 	if cd.Cluster == nil {
-		die("no cluster clusterdata available")
+		die("no cluster spec available")
 	}
-	var clusterdataj []byte
-	if clusterdataOpts.pretty {
-		clusterdataj, err = json.MarshalIndent(cd, "", "\t")
-		if err != nil {
-			die("failed to marshall clusterdata: %v", err)
-		}
-	} else {
-		clusterdataj, err = json.Marshal(cd)
-		if err != nil {
-			die("failed to marshall clusterdata: %v", err)
-		}
+	if cd.Cluster.Spec == nil {
+		die("no cluster spec available")
 	}
-	stdout("%s", clusterdataj)
+	cs := cd.Cluster.Spec
+	if specOpts.defaults {
+		cs = cd.Cluster.DefSpec()
+	}
+	specj, err := json.MarshalIndent(cs, "", "\t")
+	if err != nil {
+		die("failed to marshall spec: %v", err)
+	}
+
+	stdout("%s", specj)
 }

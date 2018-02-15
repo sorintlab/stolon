@@ -2,10 +2,10 @@
 
 There are 4 commands provided by stolon:
 
-* `stolon-keeper`
-* `stolon-sentinel`
-* `stolon-proxy`
-* `stolonctl`
+* [stolon-keeper](commands/stolon-keeper.md)
+* [stolon-sentinel](commands/stolon-sentinel.md)
+* [stolon-proxy](commands/stolon-proxy.md)
+* [stolonctl](commands/stolonctl.md)
 
 every command has different options and when called without any option or with `--help` they'll show an help with a description for every subcommand and option. Please take also a look at the various examples to see how the commands' options are used.
 
