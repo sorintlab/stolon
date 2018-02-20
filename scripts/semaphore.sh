@@ -19,8 +19,8 @@ popd
 # Install consul
 mkdir consul
 pushd consul
-curl -L https://releases.hashicorp.com/consul/0.6.3/consul_0.6.3_linux_amd64.zip -o consul_0.6.3_linux_amd64.zip
-unzip consul_0.6.3_linux_amd64.zip
+curl -L https://releases.hashicorp.com/consul/1.0.6/consul_1.0.6_linux_amd64.zip -o consul_1.0.6_linux_amd64.zip
+unzip consul_1.0.6_linux_amd64.zip
 popd
 
 # Install postgreSQL 9.5 and 9.6
