@@ -125,6 +125,75 @@ func GetXLogPos(q Querier) (uint64, error) {
 	return systemData.XLogPos, nil
 }
 
+// getReplicatinSlots return existing replication slots (also temporary
+// replication slots on PostgreSQL > 10)
+func getReplicationSlots(q Querier) ([]string, error) {
+	replSlots := []string{}
+
+	rows, err := q.Query("select slot_name from pg_replication_slots")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var slotName string
+		if err := rows.Scan(&slotName); err != nil {
+			return nil, err
+		}
+		replSlots = append(replSlots, slotName)
+	}
+
+	return replSlots, nil
+}
+
+func waitReplicationSlots(q Querier, replSlots []string, timeout time.Duration) error {
+	sort.Sort(sort.StringSlice(replSlots))
+
+	start := time.Now()
+	curReplSlots := []string{}
+	var err error
+	for time.Now().Add(-timeout).Before(start) {
+		curReplSlots, err := getReplicationSlots(q)
+		if err != nil {
+			goto end
+		}
+		sort.Sort(sort.StringSlice(curReplSlots))
+		if reflect.DeepEqual(replSlots, curReplSlots) {
+			return nil
+		}
+	end:
+		time.Sleep(2 * time.Second)
+	}
+	return fmt.Errorf("timeout waiting for replSlots %v, got: %v, last err: %v", replSlots, curReplSlots, err)
+}
+
+func waitNotStolonReplicationSlots(q Querier, replSlots []string, timeout time.Duration) error {
+	sort.Sort(sort.StringSlice(replSlots))
+
+	start := time.Now()
+	var curReplSlots []string
+	var err error
+	for time.Now().Add(-timeout).Before(start) {
+		allReplSlots, err := getReplicationSlots(q)
+		if err != nil {
+			goto end
+		}
+		curReplSlots = []string{}
+		for _, s := range allReplSlots {
+			if !common.IsStolonName(s) {
+				curReplSlots = append(curReplSlots, s)
+			}
+		}
+		sort.Sort(sort.StringSlice(curReplSlots))
+		if reflect.DeepEqual(replSlots, curReplSlots) {
+			return nil
+		}
+	end:
+		time.Sleep(2 * time.Second)
+	}
+	return fmt.Errorf("timeout waiting for replSlots %v, got: %v, last err: %v", replSlots, curReplSlots, err)
+}
+
 type Process struct {
 	t    *testing.T
 	uid  string
