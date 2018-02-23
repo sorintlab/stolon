@@ -98,7 +98,7 @@ func init() {
 		die("cannot get current user: %v", err)
 	}
 
-	cmd.AddCommonFlags(CmdKeeper, &cfg.CommonConfig, true)
+	cmd.AddCommonFlags(CmdKeeper, &cfg.CommonConfig)
 
 	CmdKeeper.PersistentFlags().StringVar(&cfg.uid, "id", "", "keeper uid (must be unique in the cluster and can contain only lower-case letters, numbers and the underscore character). If not provided a random uid will be generated.")
 	CmdKeeper.PersistentFlags().StringVar(&cfg.uid, "uid", "", "keeper uid (must be unique in the cluster and can contain only lower-case letters, numbers and the underscore character). If not provided a random uid will be generated.")
@@ -376,7 +376,7 @@ type PostgresKeeper struct {
 	sleepInterval  time.Duration
 	requestTimeout time.Duration
 
-	e   *store.Store
+	e   store.Store
 	pgm *postgresql.Manager
 	end chan error
 
@@ -390,20 +390,10 @@ type PostgresKeeper struct {
 }
 
 func NewPostgresKeeper(cfg *config, end chan error) (*PostgresKeeper, error) {
-	storePath := filepath.Join(cfg.StorePrefix, cfg.ClusterName)
-
-	kvstore, err := store.NewKVStore(store.Config{
-		Backend:       store.Backend(cfg.StoreBackend),
-		Endpoints:     cfg.StoreEndpoints,
-		CertFile:      cfg.StoreCertFile,
-		KeyFile:       cfg.StoreKeyFile,
-		CAFile:        cfg.StoreCAFile,
-		SkipTLSVerify: cfg.StoreSkipTlsVerify,
-	})
+	e, err := cmd.NewStore(&cfg.CommonConfig)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create store: %v", err)
 	}
-	e := store.NewStore(kvstore, storePath)
 
 	// Clean and get absolute datadir path
 	dataDir, err := filepath.Abs(cfg.dataDir)

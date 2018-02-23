@@ -57,7 +57,7 @@ func TestPITR(t *testing.T) {
 
 	storePath := filepath.Join(common.StorePrefix, clusterName)
 
-	sm := store.NewStore(tstore.store, storePath)
+	sm := store.NewKVBackedStore(tstore.store, storePath)
 
 	initialClusterSpec := &cluster.ClusterSpec{
 		InitMode:           cluster.ClusterInitModeP(cluster.ClusterInitModeNew),

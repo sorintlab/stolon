@@ -71,7 +71,7 @@ func TestInitWithMultipleKeepers(t *testing.T) {
 
 	storePath := filepath.Join(common.StorePrefix, clusterName)
 
-	sm := store.NewStore(tstore.store, storePath)
+	sm := store.NewKVBackedStore(tstore.store, storePath)
 
 	initialClusterSpec := &cluster.ClusterSpec{
 		InitMode:           cluster.ClusterInitModeP(cluster.ClusterInitModeNew),
@@ -272,7 +272,7 @@ func shutdown(tks map[string]*TestKeeper, tss map[string]*TestSentinel, tp *Test
 	}
 }
 
-func waitKeeperReady(t *testing.T, sm *store.Store, keeper *TestKeeper) {
+func waitKeeperReady(t *testing.T, sm *store.KVBackedStore, keeper *TestKeeper) {
 	if err := WaitClusterDataKeeperInitialized(keeper.uid, sm, 60*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -281,7 +281,7 @@ func waitKeeperReady(t *testing.T, sm *store.Store, keeper *TestKeeper) {
 	}
 }
 
-func waitMasterStandbysReady(t *testing.T, sm *store.Store, tks testKeepers) (master *TestKeeper, standbys []*TestKeeper) {
+func waitMasterStandbysReady(t *testing.T, sm *store.KVBackedStore, tks testKeepers) (master *TestKeeper, standbys []*TestKeeper) {
 	// Wait for normal cluster phase (master ready)
 	masterUID, err := WaitClusterDataWithMaster(sm, 60*time.Second)
 	if err != nil {
@@ -315,7 +315,7 @@ func testMasterStandby(t *testing.T, syncRepl bool) {
 	defer shutdown(tks, tss, tp, tstore)
 
 	storePath := filepath.Join(common.StorePrefix, clusterName)
-	sm := store.NewStore(tstore.store, storePath)
+	sm := store.NewKVBackedStore(tstore.store, storePath)
 
 	master, standbys := waitMasterStandbysReady(t, sm, tks)
 	standby := standbys[0]
@@ -379,7 +379,7 @@ func testFailover(t *testing.T, syncRepl bool, standbyCluster bool) {
 	defer shutdown(tks, tss, tp, tstore)
 
 	storePath := filepath.Join(common.StorePrefix, clusterName)
-	sm := store.NewStore(tstore.store, storePath)
+	sm := store.NewKVBackedStore(tstore.store, storePath)
 
 	master, standbys := waitMasterStandbysReady(t, sm, tks)
 	standby := standbys[0]
@@ -493,7 +493,7 @@ func testFailoverFailed(t *testing.T, syncRepl bool, standbyCluster bool) {
 	defer shutdown(tks, tss, tp, tstore)
 
 	storePath := filepath.Join(common.StorePrefix, clusterName)
-	sm := store.NewStore(tstore.store, storePath)
+	sm := store.NewKVBackedStore(tstore.store, storePath)
 
 	master, standbys := waitMasterStandbysReady(t, sm, tks)
 	standby := standbys[0]
@@ -598,7 +598,7 @@ func testFailoverTooMuchLag(t *testing.T, standbyCluster bool) {
 	defer shutdown(tks, tss, tp, tstore)
 
 	storePath := filepath.Join(common.StorePrefix, clusterName)
-	sm := store.NewStore(tstore.store, storePath)
+	sm := store.NewKVBackedStore(tstore.store, storePath)
 
 	master, standbys := waitMasterStandbysReady(t, sm, tks)
 	standby := standbys[0]
@@ -676,7 +676,7 @@ func testOldMasterRestart(t *testing.T, syncRepl, usePgrewind bool, standbyClust
 
 	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
 	storePath := filepath.Join(common.StorePrefix, clusterName)
-	sm := store.NewStore(tstore.store, storePath)
+	sm := store.NewKVBackedStore(tstore.store, storePath)
 
 	master, standbys := waitMasterStandbysReady(t, sm, tks)
 
@@ -815,7 +815,7 @@ func testPartition1(t *testing.T, syncRepl, usePgrewind bool, standbyCluster boo
 
 	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
 	storePath := filepath.Join(common.StorePrefix, clusterName)
-	sm := store.NewStore(tstore.store, storePath)
+	sm := store.NewKVBackedStore(tstore.store, storePath)
 
 	master, standbys := waitMasterStandbysReady(t, sm, tks)
 
@@ -957,7 +957,7 @@ func testTimelineFork(t *testing.T, syncRepl, usePgrewind bool) {
 
 	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
 	storePath := filepath.Join(common.StorePrefix, clusterName)
-	sm := store.NewStore(tstore.store, storePath)
+	sm := store.NewKVBackedStore(tstore.store, storePath)
 
 	master, standbys := waitMasterStandbysReady(t, sm, tks)
 
@@ -1153,7 +1153,7 @@ func testMasterChangedAddress(t *testing.T, standbyCluster bool) {
 	defer shutdown(tks, tss, tp, tstore)
 
 	storePath := filepath.Join(common.StorePrefix, clusterName)
-	sm := store.NewStore(tstore.store, storePath)
+	sm := store.NewKVBackedStore(tstore.store, storePath)
 
 	master, standbys := waitMasterStandbysReady(t, sm, tks)
 
@@ -1246,7 +1246,7 @@ func TestFailedStandby(t *testing.T) {
 	defer shutdown(tks, tss, tp, tstore)
 
 	storePath := filepath.Join(common.StorePrefix, clusterName)
-	sm := store.NewStore(tstore.store, storePath)
+	sm := store.NewKVBackedStore(tstore.store, storePath)
 
 	// Wait for clusterView containing a master
 	masterUID, err := WaitClusterDataWithMaster(sm, 30*time.Second)
@@ -1338,7 +1338,7 @@ func TestLoweredMaxStandbysPerSender(t *testing.T) {
 
 	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
 	storePath := filepath.Join(common.StorePrefix, clusterName)
-	sm := store.NewStore(tstore.store, storePath)
+	sm := store.NewKVBackedStore(tstore.store, storePath)
 
 	// Wait for clusterView containing a master
 	masterUID, err := WaitClusterDataWithMaster(sm, 30*time.Second)
@@ -1405,7 +1405,7 @@ func TestKeeperRemoval(t *testing.T) {
 
 	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
 	storePath := filepath.Join(common.StorePrefix, clusterName)
-	sm := store.NewStore(tstore.store, storePath)
+	sm := store.NewKVBackedStore(tstore.store, storePath)
 
 	master, standbys := waitMasterStandbysReady(t, sm, tks)
 	standby1 := standbys[0]
@@ -1508,7 +1508,7 @@ func testKeeperRemovalStolonCtl(t *testing.T, syncRepl bool) {
 
 	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
 	storePath := filepath.Join(common.StorePrefix, clusterName)
-	sm := store.NewStore(tstore.store, storePath)
+	sm := store.NewKVBackedStore(tstore.store, storePath)
 
 	master, standbys := waitMasterStandbysReady(t, sm, tks)
 
@@ -1614,7 +1614,7 @@ func TestStandbyCantSync(t *testing.T) {
 	defer shutdown(tks, tss, tp, tstore)
 
 	storePath := filepath.Join(common.StorePrefix, clusterName)
-	sm := store.NewStore(tstore.store, storePath)
+	sm := store.NewKVBackedStore(tstore.store, storePath)
 
 	master, standbys := waitMasterStandbysReady(t, sm, tks)
 

@@ -19,11 +19,9 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/sorintlab/stolon/cmd"
-	"github.com/sorintlab/stolon/common"
 	"github.com/sorintlab/stolon/pkg/cluster"
 	"github.com/sorintlab/stolon/pkg/flagutil"
 	"github.com/sorintlab/stolon/pkg/store"
@@ -57,7 +55,8 @@ type config struct {
 var cfg config
 
 func init() {
-	cmd.AddCommonFlags(CmdStolonCtl, &cfg.CommonConfig, false)
+	cfg.IsStolonCtl = true
+	cmd.AddCommonFlags(CmdStolonCtl, &cfg.CommonConfig)
 }
 
 var cmdVersion = &cobra.Command{
@@ -94,28 +93,7 @@ func die(format string, a ...interface{}) {
 	os.Exit(1)
 }
 
-func NewKVStore() (store.KVStore, error) {
-	return store.NewKVStore(store.Config{
-		Backend:       store.Backend(cfg.StoreBackend),
-		Endpoints:     cfg.StoreEndpoints,
-		CertFile:      cfg.StoreCertFile,
-		KeyFile:       cfg.StoreKeyFile,
-		CAFile:        cfg.StoreCAFile,
-		SkipTLSVerify: cfg.StoreSkipTlsVerify,
-	})
-}
-
-func NewStore(kvStore store.KVStore) *store.Store {
-	storePath := filepath.Join(cfg.StorePrefix, cfg.ClusterName)
-	return store.NewStore(kvStore, storePath)
-}
-
-func NewElection(kvStore store.KVStore) store.Election {
-	storePath := filepath.Join(cfg.StorePrefix, cfg.ClusterName)
-	return store.NewElection(kvStore, filepath.Join(storePath, common.SentinelLeaderKey), "")
-}
-
-func getClusterData(e *store.Store) (*cluster.ClusterData, *store.KVPair, error) {
+func getClusterData(e store.Store) (*cluster.ClusterData, *store.KVPair, error) {
 	cd, pair, err := e.GetClusterData(context.TODO())
 	if err != nil {
 		return nil, nil, fmt.Errorf("cannot get cluster data: %v", err)

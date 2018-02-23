@@ -20,6 +20,7 @@ import (
 	"io/ioutil"
 	"os"
 
+	cmdcommon "github.com/sorintlab/stolon/cmd"
 	"github.com/sorintlab/stolon/common"
 	"github.com/sorintlab/stolon/pkg/cluster"
 	"github.com/spf13/cobra"
@@ -71,12 +72,10 @@ func initCluster(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	kvStore, err := NewKVStore()
+	e, err := cmdcommon.NewStore(&cfg.CommonConfig)
 	if err != nil {
-		die("cannot create store: %v", err)
+		die("%v", err)
 	}
-
-	e := NewStore(kvStore)
 
 	cd, _, err := e.GetClusterData(context.TODO())
 	if err != nil {

@@ -22,7 +22,6 @@ import (
 	"math/rand"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
@@ -67,7 +66,7 @@ type config struct {
 var cfg config
 
 func init() {
-	cmd.AddCommonFlags(CmdSentinel, &cfg.CommonConfig, true)
+	cmd.AddCommonFlags(CmdSentinel, &cfg.CommonConfig)
 
 	CmdSentinel.PersistentFlags().StringVar(&cfg.initialClusterSpecFile, "initial-cluster-spec", "", "a file providing the initial cluster specification, used only at cluster initialization, ignored if cluster is already initialized")
 	CmdSentinel.PersistentFlags().BoolVar(&cfg.debug, "debug", false, "enable debug logging (deprecated, use log-level instead)")
@@ -1611,7 +1610,7 @@ func (p ProxyInfoHistories) DeepCopy() ProxyInfoHistories {
 type Sentinel struct {
 	uid string
 	cfg *config
-	e   *store.Store
+	e   store.Store
 
 	election store.Election
 	end      chan bool
@@ -1659,22 +1658,15 @@ func NewSentinel(uid string, cfg *config, end chan bool) (*Sentinel, error) {
 		}
 	}
 
-	storePath := filepath.Join(cfg.StorePrefix, cfg.ClusterName)
-
-	kvstore, err := store.NewKVStore(store.Config{
-		Backend:       store.Backend(cfg.StoreBackend),
-		Endpoints:     cfg.StoreEndpoints,
-		CertFile:      cfg.StoreCertFile,
-		KeyFile:       cfg.StoreKeyFile,
-		CAFile:        cfg.StoreCAFile,
-		SkipTLSVerify: cfg.StoreSkipTlsVerify,
-	})
+	e, err := cmd.NewStore(&cfg.CommonConfig)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create store: %v", err)
 	}
-	e := store.NewStore(kvstore, storePath)
 
-	election := store.NewElection(kvstore, filepath.Join(storePath, common.SentinelLeaderKey), uid)
+	election, err := cmd.NewElection(&cfg.CommonConfig, uid)
+	if err != nil {
+		return nil, fmt.Errorf("cannot create election: %v", err)
+	}
 
 	return &Sentinel{
 		uid:                uid,

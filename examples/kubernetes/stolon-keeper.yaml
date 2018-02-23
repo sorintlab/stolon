@@ -33,13 +33,17 @@ spec:
             chown stolon:stolon $STOLON_DATA
             exec gosu stolon stolon-keeper --data-dir $STOLON_DATA
         env:
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
           # TODO(sgotti) Get cluster name from "stolon-cluster" label using a downward volume api instead of duplicating the name here
           - name: STKEEPER_CLUSTER_NAME
             value: "kube-stolon"
           - name: STKEEPER_STORE_BACKEND
-            value: "etcdv3" # Or: etcdv2, consul
-          - name: STKEEPER_STORE_ENDPOINTS
-            value: "http://192.168.122.1:2379"
+            value: "kubernetes"
+          - name: STKEEPER_KUBE_RESOURCE_KIND
+            value: "configmap"
           - name: STKEEPER_PG_REPL_USERNAME
             value: "repluser"
             # Or use a password file like in the below supersuser password

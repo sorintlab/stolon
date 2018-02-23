@@ -17,6 +17,7 @@ package cmd
 import (
 	"context"
 
+	cmdcommon "github.com/sorintlab/stolon/cmd"
 	"github.com/sorintlab/stolon/pkg/cluster"
 	"github.com/spf13/cobra"
 )
@@ -42,12 +43,10 @@ func removeKeeper(cmd *cobra.Command, args []string) {
 
 	keeperID := args[0]
 
-	kvStore, err := NewKVStore()
+	store, err := cmdcommon.NewStore(&cfg.CommonConfig)
 	if err != nil {
-		die("cannot create store: %v", err)
+		die("%v", err)
 	}
-
-	store := NewStore(kvStore)
 
 	cd, pair, err := getClusterData(store)
 	if err != nil {

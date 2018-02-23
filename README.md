@@ -14,7 +14,7 @@ For an introduction to stolon you can also take a look at [this post](https://sg
 * Leverages PostgreSQL streaming replication.
 * Resilient to any kind of partitioning. While trying to keep the maximum availability, it prefers consistency over availability.
 * [kubernetes integration](examples/kubernetes/README.md) letting you achieve postgreSQL high availability.
-* Uses a cluster store like [etcd](https://github.com/coreos/etcd) or [consul](https://www.consul.io) as an high available data store and for leader election
+* Uses a cluster store like [etcd](https://github.com/coreos/etcd), [consul](https://www.consul.io) or kubernetes API server as an high available data store and for leader election
 * Asynchronous (default) and [synchronous](doc/syncrepl.md) replication.
 * Full cluster setup in minutes.
 * Easy [cluster admininistration](doc/stolonctl.md)
@@ -27,8 +27,8 @@ For an introduction to stolon you can also take a look at [this post](https://sg
 
 Stolon is composed of 3 main components
 
-* keeper: it manages a PostgreSQL instance converging to the clusterview provided by the sentinel(s).
-* sentinel: it discovers and monitors keepers and calculates the optimal clusterview.
+* keeper: it manages a PostgreSQL instance converging to the clusterview computed by the leader sentinel.
+* sentinel: it discovers and monitors keepers and proxies and computes the optimal clusterview.
 * proxy: the client's access point. It enforce connections to the right PostgreSQL master and forcibly closes connections to old masters.
 
 For more details and requirements see [Stolon Architecture and Requirements](doc/architecture.md)
@@ -53,7 +53,8 @@ Anyway it's quite easy to reset a cluster from scratch keeping the current maste
 ## Requirements
 
 * PostgreSQL 10 or 9 (9.4, 9.5, 9.6)
-* etcd2 >= v2.0, etcd3 >= v3.0 or consul >= v0.6
+* etcd2 >= v2.0, etcd3 >= v3.0, consul >= v0.6 or kubernetes 1.8 (based on the store you're going to use)
+
 
 * OS: currently stolon is tested on GNU/Linux (with reports of people using it also on Solaris, *BSD and Darwin)
 

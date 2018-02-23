@@ -107,7 +107,7 @@ func testInitNew(t *testing.T, merge bool) {
 	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
 	storePath := filepath.Join(common.StorePrefix, clusterName)
 
-	sm := store.NewStore(tstore.store, storePath)
+	sm := store.NewKVBackedStore(tstore.store, storePath)
 
 	initialClusterSpec := &cluster.ClusterSpec{
 		InitMode:           cluster.ClusterInitModeP(cluster.ClusterInitModeNew),
@@ -183,7 +183,7 @@ func testInitExisting(t *testing.T, merge bool) {
 	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
 	storePath := filepath.Join(common.StorePrefix, clusterName)
 
-	sm := store.NewStore(tstore.store, storePath)
+	sm := store.NewKVBackedStore(tstore.store, storePath)
 
 	initialClusterSpec := &cluster.ClusterSpec{
 		InitMode:           cluster.ClusterInitModeP(cluster.ClusterInitModeNew),
@@ -329,7 +329,7 @@ func TestInitUsers(t *testing.T) {
 	clusterName = uuid.NewV4().String()
 	storePath := filepath.Join(common.StorePrefix, clusterName)
 
-	sm := store.NewStore(tstore.store, storePath)
+	sm := store.NewKVBackedStore(tstore.store, storePath)
 
 	initialClusterSpec := &cluster.ClusterSpec{
 		InitMode:           cluster.ClusterInitModeP(cluster.ClusterInitModeNew),
@@ -372,7 +372,7 @@ func TestInitUsers(t *testing.T) {
 	clusterName = uuid.NewV4().String()
 	storePath = filepath.Join(common.StorePrefix, clusterName)
 
-	sm = store.NewStore(tstore.store, storePath)
+	sm = store.NewKVBackedStore(tstore.store, storePath)
 
 	ts2, err := NewTestSentinel(t, dir, clusterName, tstore.storeBackend, storeEndpoints, fmt.Sprintf("--initial-cluster-spec=%s", initialClusterSpecFile))
 	if err != nil {
@@ -420,7 +420,7 @@ func TestInitialClusterSpec(t *testing.T) {
 	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
 	storePath := filepath.Join(common.StorePrefix, clusterName)
 
-	sm := store.NewStore(tstore.store, storePath)
+	sm := store.NewKVBackedStore(tstore.store, storePath)
 
 	initialClusterSpec := &cluster.ClusterSpec{
 		InitMode:               cluster.ClusterInitModeP(cluster.ClusterInitModeNew),

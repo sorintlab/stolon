@@ -21,11 +21,12 @@ import (
 	"io/ioutil"
 	"os"
 
+	cmdcommon "github.com/sorintlab/stolon/cmd"
 	"github.com/sorintlab/stolon/pkg/cluster"
+	"github.com/sorintlab/stolon/pkg/store"
 
-	libkvstore "github.com/docker/libkv/store"
 	"github.com/spf13/cobra"
-	"k8s.io/kubernetes/pkg/util/strategicpatch"
+	"k8s.io/apimachinery/pkg/util/strategicpatch"
 )
 
 var cmdUpdate = &cobra.Command{
@@ -94,12 +95,10 @@ func update(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	kvStore, err := NewKVStore()
+	e, err := cmdcommon.NewStore(&cfg.CommonConfig)
 	if err != nil {
-		die("cannot create store: %v", err)
+		die("%v", err)
 	}
-
-	e := NewStore(kvStore)
 
 	retry := 0
 	for retry < maxRetries {
@@ -132,7 +131,7 @@ func update(cmd *cobra.Command, args []string) {
 		// retry if cd has been modified between reading and writing
 		_, err = e.AtomicPutClusterData(context.TODO(), cd, pair)
 		if err != nil {
-			if err == libkvstore.ErrKeyModified {
+			if err == store.ErrKeyModified {
 				retry++
 				continue
 			}
