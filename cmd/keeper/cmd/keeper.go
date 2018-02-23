@@ -942,6 +942,9 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 	db := cd.FindDB(k)
 	if db == nil {
 		log.Infow("no db assigned")
+		if err = pgm.StopIfStarted(true); err != nil {
+			log.Errorw("failed to stop pg instance", zap.Error(err))
+		}
 		return
 	}
 
