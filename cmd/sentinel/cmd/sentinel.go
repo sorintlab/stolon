@@ -1005,15 +1005,19 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 			} else {
 				// if synchronous replication is enabled, only choose new master in the synchronous replication standbys.
 				var bestNewMasterDB *cluster.DB
-				if s.syncRepl(clusterSpec) {
-					if !util.CompareStringSlice(curMasterDB.Status.SynchronousStandbys, curMasterDB.Spec.SynchronousStandbys) {
-						log.Warnw("cannot choose synchronous standby since the latest master reported synchronous standbys are different from the db spec ones", "reported", curMasterDB.Status.SynchronousStandbys, "spec", curMasterDB.Spec.SynchronousStandbys)
+				if curMasterDB.Spec.SynchronousReplication == true {
+					commonSyncStandbys := util.CommonElements(curMasterDB.Status.SynchronousStandbys, curMasterDB.Spec.SynchronousStandbys)
+					if len(commonSyncStandbys) == 0 {
+						log.Warnw("cannot choose synchronous standby since there are no common elements between the latest master reported synchronous standbys and the db spec ones", "reported", curMasterDB.Status.SynchronousStandbys, "spec", curMasterDB.Spec.SynchronousStandbys)
 					} else {
 						for _, nm := range bestNewMasters {
-							if util.StringInSlice(curMasterDB.Spec.SynchronousStandbys, nm.UID) {
+							if util.StringInSlice(commonSyncStandbys, nm.UID) {
 								bestNewMasterDB = nm
 								break
 							}
+						}
+						if bestNewMasterDB == nil {
+							log.Warnw("cannot choose synchronous standby since there's not match between the possible masters and the usable synchronousStandbys", "reported", curMasterDB.Status.SynchronousStandbys, "spec", curMasterDB.Spec.SynchronousStandbys, "common", commonSyncStandbys, "possibleMasters", bestNewMasters)
 						}
 					}
 				} else {
@@ -1060,9 +1064,9 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 			// Setup synchronous standbys to the one of the previous master (replacing ourself with the previous master)
 			if s.syncRepl(clusterSpec) {
 				newMasterDB.Spec.SynchronousReplication = true
+				newMasterDB.Spec.SynchronousStandbys = []string{}
+				newMasterDB.Spec.ExternalSynchronousStandbys = []string{}
 				for _, dbUID := range oldMasterdb.Spec.SynchronousStandbys {
-					newMasterDB.Spec.SynchronousStandbys = []string{}
-					newMasterDB.Spec.ExternalSynchronousStandbys = []string{}
 					if dbUID != newMasterDB.UID {
 						newMasterDB.Spec.SynchronousStandbys = append(newMasterDB.Spec.SynchronousStandbys, dbUID)
 					} else {
@@ -1184,85 +1188,165 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 
 				// Setup synchronous standbys
 				if s.syncRepl(clusterSpec) {
-					addFakeStandby := false
-					externalSynchronousStandbys := map[string]struct{}{}
+					// update synchronousStandbys only if the reported
+					// SynchronousStandbys are the same as the required ones. In
+					// this way, when we have to choose a new master we are sure
+					// that there're no intermediate changes between the
+					// reported standbys and the required ones.
+					if !util.CompareStringSlice(masterDB.Status.SynchronousStandbys, masterDB.Spec.SynchronousStandbys) {
+						log.Infof("won't update masterDB required synchronous standby since the latest master reported synchronous standbys are different from the db spec ones", "reported", curMasterDB.Status.SynchronousStandbys, "spec", curMasterDB.Spec.SynchronousStandbys)
+					} else {
+						addFakeStandby := false
+						externalSynchronousStandbys := map[string]struct{}{}
 
-					// make a map of synchronous standbys starting from the current ones
-					synchronousStandbys := map[string]struct{}{}
-					for _, dbUID := range masterDB.Spec.SynchronousStandbys {
-						synchronousStandbys[dbUID] = struct{}{}
-					}
+						// make a map of synchronous standbys starting from the current ones
+						prevSynchronousStandbys := map[string]struct{}{}
+						synchronousStandbys := map[string]struct{}{}
 
-					// Check if the current synchronous standbys are healthy or remove them
-					toRemove := map[string]struct{}{}
-					for dbUID, _ := range synchronousStandbys {
-						if _, ok := goodStandbys[dbUID]; !ok {
-							log.Infow("removing failed synchronous standby", "masterDB", masterDB.UID, "db", dbUID)
-							toRemove[dbUID] = struct{}{}
+						for _, dbUID := range masterDB.Spec.SynchronousStandbys {
+							prevSynchronousStandbys[dbUID] = struct{}{}
+							synchronousStandbys[dbUID] = struct{}{}
 						}
-					}
-					for dbUID, _ := range toRemove {
-						delete(synchronousStandbys, dbUID)
-					}
 
-					// Remove synchronous standbys in excess
-					if uint16(len(synchronousStandbys)) > *clusterSpec.MaxSynchronousStandbys {
-						rc := len(synchronousStandbys) - int(*clusterSpec.MaxSynchronousStandbys)
-						removedCount := 0
-						toRemove = map[string]struct{}{}
+						// Remove not existing dbs (removed above)
+						toRemove := map[string]struct{}{}
 						for dbUID, _ := range synchronousStandbys {
-							if removedCount >= rc {
-								break
+							if _, ok := newcd.DBs[dbUID]; !ok {
+								log.Infow("removing non existent db from synchronousStandbys", "masterDB", masterDB.UID, "db", dbUID)
+								toRemove[dbUID] = struct{}{}
 							}
-							log.Infow("removing synchronous standby in excess", "masterDB", masterDB.UID, "db", dbUID)
-							toRemove[dbUID] = struct{}{}
-							removedCount++
 						}
 						for dbUID, _ := range toRemove {
 							delete(synchronousStandbys, dbUID)
 						}
-					}
 
-					// try to add missing standbys up to MaxSynchronousStandbys
-					bestStandbys := s.findBestStandbys(newcd, curMasterDB)
-					ac := int(*clusterSpec.MaxSynchronousStandbys) - len(synchronousStandbys)
-					addedCount := 0
-					for _, bestStandby := range bestStandbys {
-						if addedCount >= ac {
-							break
+						// Check if the current synchronous standbys are healthy or remove them
+						toRemove = map[string]struct{}{}
+						for dbUID, _ := range synchronousStandbys {
+							if _, ok := goodStandbys[dbUID]; !ok {
+								log.Infow("removing failed synchronous standby", "masterDB", masterDB.UID, "db", dbUID)
+								toRemove[dbUID] = struct{}{}
+							}
 						}
-						if _, ok := synchronousStandbys[bestStandby.UID]; ok {
-							continue
+						for dbUID, _ := range toRemove {
+							delete(synchronousStandbys, dbUID)
 						}
-						log.Infow("adding synchronous standby", "masterDB", masterDB.UID, "synchronousStandbyDB", bestStandby.UID)
-						synchronousStandbys[bestStandby.UID] = struct{}{}
-						addedCount++
-					}
 
-					// If there're not enough real synchronous standbys add a fake synchronous standby because we have to be strict and make the master block transactions until MaxSynchronousStandbys real standbys are available
-					if len(synchronousStandbys)+len(externalSynchronousStandbys) < int(*clusterSpec.MinSynchronousStandbys) {
-						log.Infow("using a fake synchronous standby since there are not enough real standbys available", "masterDB", masterDB.UID, "required", int(*clusterSpec.MinSynchronousStandbys))
-						addFakeStandby = true
-					}
+						// Remove synchronous standbys in excess
+						if uint16(len(synchronousStandbys)) > *clusterSpec.MaxSynchronousStandbys {
+							rc := len(synchronousStandbys) - int(*clusterSpec.MaxSynchronousStandbys)
+							removedCount := 0
+							toRemove = map[string]struct{}{}
+							for dbUID, _ := range synchronousStandbys {
+								if removedCount >= rc {
+									break
+								}
+								log.Infow("removing synchronous standby in excess", "masterDB", masterDB.UID, "db", dbUID)
+								toRemove[dbUID] = struct{}{}
+								removedCount++
+							}
+							for dbUID, _ := range toRemove {
+								delete(synchronousStandbys, dbUID)
+							}
+						}
 
-					masterDB.Spec.SynchronousReplication = true
-					masterDB.Spec.SynchronousStandbys = []string{}
-					masterDB.Spec.ExternalSynchronousStandbys = []string{}
-					for dbUID, _ := range synchronousStandbys {
-						masterDB.Spec.SynchronousStandbys = append(masterDB.Spec.SynchronousStandbys, dbUID)
-					}
+						// try to add missing standbys up to MaxSynchronousStandbys
+						bestStandbys := s.findBestStandbys(newcd, curMasterDB)
 
-					for dbUID, _ := range externalSynchronousStandbys {
-						masterDB.Spec.ExternalSynchronousStandbys = append(masterDB.Spec.ExternalSynchronousStandbys, dbUID)
-					}
+						ac := int(*clusterSpec.MaxSynchronousStandbys) - len(synchronousStandbys)
+						addedCount := 0
+						for _, bestStandby := range bestStandbys {
+							if addedCount >= ac {
+								break
+							}
+							if _, ok := synchronousStandbys[bestStandby.UID]; ok {
+								continue
+							}
+							log.Infow("adding new synchronous standby in good state trying to reach MaxSynchronousStandbys", "masterDB", masterDB.UID, "synchronousStandbyDB", bestStandby.UID, "keeper", bestStandby.Spec.KeeperUID)
+							synchronousStandbys[bestStandby.UID] = struct{}{}
+							addedCount++
+						}
 
-					if addFakeStandby {
-						masterDB.Spec.ExternalSynchronousStandbys = append(masterDB.Spec.ExternalSynchronousStandbys, fakeStandbyName)
-					}
+						// If there're some missing standbys to reach
+						// MinSynchronousStandbys, keep previous sync standbys,
+						// also if not in a good state. In this way we have more
+						// possibilities to choose a sync standby to replace a
+						// failed master if they becoe healthy again
+						ac = int(*clusterSpec.MinSynchronousStandbys) - len(synchronousStandbys)
+						addedCount = 0
+						for _, db := range newcd.DBs {
+							if addedCount >= ac {
+								break
+							}
+							if _, ok := synchronousStandbys[db.UID]; ok {
+								continue
+							}
+							if _, ok := prevSynchronousStandbys[db.UID]; ok {
+								log.Infow("adding previous synchronous standby to reach MinSynchronousStandbys", "masterDB", masterDB.UID, "synchronousStandbyDB", db.UID, "keeper", db.Spec.KeeperUID)
+								synchronousStandbys[db.UID] = struct{}{}
+								addedCount++
+							}
+						}
 
-					// Sort synchronousStandbys so we can compare the slice regardless of its order
-					sort.Sort(sort.StringSlice(masterDB.Spec.SynchronousStandbys))
-					sort.Sort(sort.StringSlice(masterDB.Spec.ExternalSynchronousStandbys))
+						// if some of the new synchronousStandbys are not inside
+						// the prevSynchronousStandbys then also add all
+						// the prevSynchronousStandbys. In this way when there's
+						// a synchronousStandbys change we'll have, in a first
+						// step, both the old and the new standbys, then in the
+						// second step the old will be removed (since the new
+						// standbys are all inside prevSynchronousStandbys), so
+						// we'll always be able to choose a sync standby that we
+						// know was defined in the primary and in sync if the
+						// primary fails.
+						allInPrev := true
+						for k, _ := range synchronousStandbys {
+							if _, ok := prevSynchronousStandbys[k]; !ok {
+								allInPrev = false
+							}
+						}
+						if !allInPrev {
+							log.Infow("merging current and previous synchronous standbys", "masterDB", masterDB.UID, "prevSynchronousStandbys", prevSynchronousStandbys, "synchronousStandbys", synchronousStandbys)
+							// use only existing dbs
+							for _, db := range newcd.DBs {
+								if _, ok := prevSynchronousStandbys[db.UID]; ok {
+									log.Infow("adding previous synchronous standby", "masterDB", masterDB.UID, "synchronousStandbyDB", db.UID, "keeper", db.Spec.KeeperUID)
+									synchronousStandbys[db.UID] = struct{}{}
+								}
+							}
+						}
+
+						if !reflect.DeepEqual(synchronousStandbys, prevSynchronousStandbys) {
+							log.Infow("synchronousStandbys changed", "masterDB", masterDB.UID, "prevSynchronousStandbys", prevSynchronousStandbys, "synchronousStandbys", synchronousStandbys)
+						} else {
+							log.Debugf("synchronousStandbys not changed", "masterDB", masterDB.UID, "prevSynchronousStandbys", prevSynchronousStandbys, "synchronousStandbys", synchronousStandbys)
+						}
+
+						// If there're not enough real synchronous standbys add a fake synchronous standby because we have to be strict and make the master block transactions until MinSynchronousStandbys real standbys are available
+						if len(synchronousStandbys)+len(externalSynchronousStandbys) < int(*clusterSpec.MinSynchronousStandbys) {
+							log.Infow("using a fake synchronous standby since there are not enough real standbys available", "masterDB", masterDB.UID, "required", int(*clusterSpec.MinSynchronousStandbys))
+							addFakeStandby = true
+						}
+
+						masterDB.Spec.SynchronousReplication = true
+						masterDB.Spec.SynchronousStandbys = []string{}
+						masterDB.Spec.ExternalSynchronousStandbys = []string{}
+						for dbUID, _ := range synchronousStandbys {
+							masterDB.Spec.SynchronousStandbys = append(masterDB.Spec.SynchronousStandbys, dbUID)
+						}
+
+						for dbUID, _ := range externalSynchronousStandbys {
+							masterDB.Spec.ExternalSynchronousStandbys = append(masterDB.Spec.ExternalSynchronousStandbys, dbUID)
+						}
+
+						if addFakeStandby {
+							masterDB.Spec.ExternalSynchronousStandbys = append(masterDB.Spec.ExternalSynchronousStandbys, fakeStandbyName)
+						}
+
+						// Sort synchronousStandbys so we can compare the slice regardless of its order
+						sort.Sort(sort.StringSlice(masterDB.Spec.SynchronousStandbys))
+						sort.Sort(sort.StringSlice(masterDB.Spec.ExternalSynchronousStandbys))
+
+					}
 				} else {
 					masterDB.Spec.SynchronousReplication = false
 					masterDB.Spec.SynchronousStandbys = nil
@@ -1281,6 +1365,10 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 					// Remove all non good standbys
 					for _, db := range newcd.DBs {
 						if s.dbType(newcd, db.UID) != dbTypeStandby {
+							continue
+						}
+						// Don't remove standbys marked as synchronous standbys
+						if util.StringInSlice(masterDB.Spec.SynchronousStandbys, db.UID) {
 							continue
 						}
 						if _, ok := goodStandbys[db.UID]; !ok {

@@ -2444,6 +2444,1688 @@ func TestUpdateCluster(t *testing.T) {
 				},
 			},
 		},
+		// #15 One master and one standby all healthy. Synchronous replication
+		// enabled right now in the cluster spec.
+		{
+			cd: &cluster.ClusterData{
+				Cluster: &cluster.Cluster{
+					UID:        "cluster1",
+					Generation: 1,
+					Spec: &cluster.ClusterSpec{
+						ConvergenceTimeout:     &cluster.Duration{Duration: cluster.DefaultConvergenceTimeout},
+						InitTimeout:            &cluster.Duration{Duration: cluster.DefaultInitTimeout},
+						SyncTimeout:            &cluster.Duration{Duration: cluster.DefaultSyncTimeout},
+						MaxStandbysPerSender:   cluster.Uint16P(cluster.DefaultMaxStandbysPerSender),
+						SynchronousReplication: cluster.BoolP(true),
+					},
+					Status: cluster.ClusterStatus{
+						CurrentGeneration: 1,
+						Phase:             cluster.ClusterPhaseNormal,
+						Master:            "db1",
+					},
+				},
+				Keepers: cluster.Keepers{
+					"keeper1": &cluster.Keeper{
+						UID:  "keeper1",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy:         true,
+							LastHealthyTime: now,
+						},
+					},
+					"keeper2": &cluster.Keeper{
+						UID:  "keeper2",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy:         true,
+							LastHealthyTime: now,
+						},
+					},
+				},
+				DBs: cluster.DBs{
+					"db1": &cluster.DB{
+						UID:        "db1",
+						Generation: 1,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID:              "keeper1",
+							RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout},
+							MaxStandbys:            cluster.DefaultMaxStandbys,
+							AdditionalWalSenders:   cluster.DefaultAdditionalWalSenders,
+							SynchronousReplication: false,
+							Role:                        common.RoleMaster,
+							Followers:                   []string{"db2"},
+							SynchronousStandbys:         nil,
+							ExternalSynchronousStandbys: nil,
+						},
+						Status: cluster.DBStatus{
+							Healthy:           false,
+							CurrentGeneration: 1,
+						},
+					},
+					"db2": &cluster.DB{
+						UID:        "db2",
+						Generation: 1,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID:              "keeper2",
+							RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout},
+							MaxStandbys:            cluster.DefaultMaxStandbys,
+							AdditionalWalSenders:   cluster.DefaultAdditionalWalSenders,
+							SynchronousReplication: false,
+							Role:      common.RoleStandby,
+							Followers: []string{},
+							FollowConfig: &cluster.FollowConfig{
+								Type:  cluster.FollowTypeInternal,
+								DBUID: "db1",
+							},
+							SynchronousStandbys:         nil,
+							ExternalSynchronousStandbys: nil,
+						},
+						Status: cluster.DBStatus{
+							Healthy:           true,
+							CurrentGeneration: 1,
+						},
+					},
+				},
+				Proxy: &cluster.Proxy{
+					Generation: 1,
+					Spec: cluster.ProxySpec{
+						MasterDBUID:    "db1",
+						EnabledProxies: []string{},
+					},
+				},
+			},
+			outcd: &cluster.ClusterData{
+				Cluster: &cluster.Cluster{
+					UID:        "cluster1",
+					Generation: 1,
+					Spec: &cluster.ClusterSpec{
+						ConvergenceTimeout:     &cluster.Duration{Duration: cluster.DefaultConvergenceTimeout},
+						InitTimeout:            &cluster.Duration{Duration: cluster.DefaultInitTimeout},
+						SyncTimeout:            &cluster.Duration{Duration: cluster.DefaultSyncTimeout},
+						MaxStandbysPerSender:   cluster.Uint16P(cluster.DefaultMaxStandbysPerSender),
+						SynchronousReplication: cluster.BoolP(true),
+					},
+					Status: cluster.ClusterStatus{
+						CurrentGeneration: 1,
+						Phase:             cluster.ClusterPhaseNormal,
+						Master:            "db2",
+					},
+				},
+				Keepers: cluster.Keepers{
+					"keeper1": &cluster.Keeper{
+						UID:  "keeper1",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy:         true,
+							LastHealthyTime: now,
+						},
+					},
+					"keeper2": &cluster.Keeper{
+						UID:  "keeper2",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy:         true,
+							LastHealthyTime: now,
+						},
+					},
+				},
+				DBs: cluster.DBs{
+					"db1": &cluster.DB{
+						UID:        "db1",
+						Generation: 2,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID:              "keeper1",
+							RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout},
+							MaxStandbys:            cluster.DefaultMaxStandbys,
+							AdditionalWalSenders:   cluster.DefaultAdditionalWalSenders,
+							SynchronousReplication: false,
+							Role:                        common.RoleMaster,
+							Followers:                   []string{},
+							SynchronousStandbys:         nil,
+							ExternalSynchronousStandbys: nil,
+						},
+						Status: cluster.DBStatus{
+							Healthy:           false,
+							CurrentGeneration: 1,
+						},
+					},
+					"db2": &cluster.DB{
+						UID:        "db2",
+						Generation: 2,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID:              "keeper2",
+							RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout},
+							MaxStandbys:            cluster.DefaultMaxStandbys,
+							AdditionalWalSenders:   cluster.DefaultAdditionalWalSenders,
+							SynchronousReplication: true,
+							Role:                        common.RoleMaster,
+							Followers:                   []string{},
+							SynchronousStandbys:         []string{},
+							ExternalSynchronousStandbys: []string{fakeStandbyName},
+						},
+						Status: cluster.DBStatus{
+							Healthy:           true,
+							CurrentGeneration: 1,
+						},
+					},
+				},
+				Proxy: &cluster.Proxy{
+					Generation: 2,
+					Spec: cluster.ProxySpec{
+						MasterDBUID:    "",
+						EnabledProxies: []string{},
+					},
+				},
+			},
+		},
+		// #16 One master and one standby. Synchronous replication enabled right
+		// now in the cluster spec.
+		// master db not healthy: standby elected as new master since
+		// dbSpec.SynchronousReplication is false yet. The new master will have
+		// SynchronousReplication true and a fake sync stanby.
+		{
+			cd: &cluster.ClusterData{
+				Cluster: &cluster.Cluster{
+					UID:        "cluster1",
+					Generation: 1,
+					Spec: &cluster.ClusterSpec{
+						ConvergenceTimeout:     &cluster.Duration{Duration: cluster.DefaultConvergenceTimeout},
+						InitTimeout:            &cluster.Duration{Duration: cluster.DefaultInitTimeout},
+						SyncTimeout:            &cluster.Duration{Duration: cluster.DefaultSyncTimeout},
+						MaxStandbysPerSender:   cluster.Uint16P(cluster.DefaultMaxStandbysPerSender),
+						SynchronousReplication: cluster.BoolP(true),
+					},
+					Status: cluster.ClusterStatus{
+						CurrentGeneration: 1,
+						Phase:             cluster.ClusterPhaseNormal,
+						Master:            "db1",
+					},
+				},
+				Keepers: cluster.Keepers{
+					"keeper1": &cluster.Keeper{
+						UID:  "keeper1",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy:         true,
+							LastHealthyTime: now,
+						},
+					},
+					"keeper2": &cluster.Keeper{
+						UID:  "keeper2",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy:         true,
+							LastHealthyTime: now,
+						},
+					},
+				},
+				DBs: cluster.DBs{
+					"db1": &cluster.DB{
+						UID:        "db1",
+						Generation: 1,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID:              "keeper1",
+							RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout},
+							MaxStandbys:            cluster.DefaultMaxStandbys,
+							AdditionalWalSenders:   cluster.DefaultAdditionalWalSenders,
+							SynchronousReplication: false,
+							Role:                        common.RoleMaster,
+							Followers:                   []string{"db2"},
+							SynchronousStandbys:         nil,
+							ExternalSynchronousStandbys: nil,
+						},
+						Status: cluster.DBStatus{
+							Healthy:           false,
+							CurrentGeneration: 1,
+						},
+					},
+					"db2": &cluster.DB{
+						UID:        "db2",
+						Generation: 1,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID:              "keeper2",
+							RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout},
+							MaxStandbys:            cluster.DefaultMaxStandbys,
+							AdditionalWalSenders:   cluster.DefaultAdditionalWalSenders,
+							SynchronousReplication: false,
+							Role:      common.RoleStandby,
+							Followers: []string{},
+							FollowConfig: &cluster.FollowConfig{
+								Type:  cluster.FollowTypeInternal,
+								DBUID: "db1",
+							},
+							SynchronousStandbys:         nil,
+							ExternalSynchronousStandbys: nil,
+						},
+						Status: cluster.DBStatus{
+							Healthy:           true,
+							CurrentGeneration: 1,
+						},
+					},
+				},
+				Proxy: &cluster.Proxy{
+					Generation: 1,
+					Spec: cluster.ProxySpec{
+						MasterDBUID:    "db1",
+						EnabledProxies: []string{},
+					},
+				},
+			},
+			outcd: &cluster.ClusterData{
+				Cluster: &cluster.Cluster{
+					UID:        "cluster1",
+					Generation: 1,
+					Spec: &cluster.ClusterSpec{
+						ConvergenceTimeout:     &cluster.Duration{Duration: cluster.DefaultConvergenceTimeout},
+						InitTimeout:            &cluster.Duration{Duration: cluster.DefaultInitTimeout},
+						SyncTimeout:            &cluster.Duration{Duration: cluster.DefaultSyncTimeout},
+						MaxStandbysPerSender:   cluster.Uint16P(cluster.DefaultMaxStandbysPerSender),
+						SynchronousReplication: cluster.BoolP(true),
+					},
+					Status: cluster.ClusterStatus{
+						CurrentGeneration: 1,
+						Phase:             cluster.ClusterPhaseNormal,
+						Master:            "db2",
+					},
+				},
+				Keepers: cluster.Keepers{
+					"keeper1": &cluster.Keeper{
+						UID:  "keeper1",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy:         true,
+							LastHealthyTime: now,
+						},
+					},
+					"keeper2": &cluster.Keeper{
+						UID:  "keeper2",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy:         true,
+							LastHealthyTime: now,
+						},
+					},
+				},
+				DBs: cluster.DBs{
+					"db1": &cluster.DB{
+						UID:        "db1",
+						Generation: 2,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID:              "keeper1",
+							RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout},
+							MaxStandbys:            cluster.DefaultMaxStandbys,
+							AdditionalWalSenders:   cluster.DefaultAdditionalWalSenders,
+							SynchronousReplication: false,
+							Role:                        common.RoleMaster,
+							Followers:                   []string{},
+							SynchronousStandbys:         nil,
+							ExternalSynchronousStandbys: nil,
+						},
+						Status: cluster.DBStatus{
+							Healthy:           false,
+							CurrentGeneration: 1,
+						},
+					},
+					"db2": &cluster.DB{
+						UID:        "db2",
+						Generation: 2,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID:              "keeper2",
+							RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout},
+							MaxStandbys:            cluster.DefaultMaxStandbys,
+							AdditionalWalSenders:   cluster.DefaultAdditionalWalSenders,
+							SynchronousReplication: true,
+							Role:                        common.RoleMaster,
+							Followers:                   []string{},
+							SynchronousStandbys:         []string{},
+							ExternalSynchronousStandbys: []string{fakeStandbyName},
+						},
+						Status: cluster.DBStatus{
+							Healthy:           true,
+							CurrentGeneration: 1,
+						},
+					},
+				},
+				Proxy: &cluster.Proxy{
+					Generation: 2,
+					Spec: cluster.ProxySpec{
+						MasterDBUID:    "",
+						EnabledProxies: []string{},
+					},
+				},
+			},
+		},
+		// #17 One master and one standby. Synchronous replication already
+		// enabled.
+		// master db not healthy: standby elected as new master since it's in
+		// the SynchronousStandbys.
+		{
+			cd: &cluster.ClusterData{
+				Cluster: &cluster.Cluster{
+					UID:        "cluster1",
+					Generation: 1,
+					Spec: &cluster.ClusterSpec{
+						ConvergenceTimeout:     &cluster.Duration{Duration: cluster.DefaultConvergenceTimeout},
+						InitTimeout:            &cluster.Duration{Duration: cluster.DefaultInitTimeout},
+						SyncTimeout:            &cluster.Duration{Duration: cluster.DefaultSyncTimeout},
+						MaxStandbysPerSender:   cluster.Uint16P(cluster.DefaultMaxStandbysPerSender),
+						SynchronousReplication: cluster.BoolP(true),
+					},
+					Status: cluster.ClusterStatus{
+						CurrentGeneration: 1,
+						Phase:             cluster.ClusterPhaseNormal,
+						Master:            "db1",
+					},
+				},
+				Keepers: cluster.Keepers{
+					"keeper1": &cluster.Keeper{
+						UID:  "keeper1",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy:         true,
+							LastHealthyTime: now,
+						},
+					},
+					"keeper2": &cluster.Keeper{
+						UID:  "keeper2",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy:         true,
+							LastHealthyTime: now,
+						},
+					},
+				},
+				DBs: cluster.DBs{
+					"db1": &cluster.DB{
+						UID:        "db1",
+						Generation: 1,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID:              "keeper1",
+							RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout},
+							MaxStandbys:            cluster.DefaultMaxStandbys,
+							AdditionalWalSenders:   cluster.DefaultAdditionalWalSenders,
+							SynchronousReplication: true,
+							Role:                        common.RoleMaster,
+							Followers:                   []string{"db2"},
+							SynchronousStandbys:         []string{"db2"},
+							ExternalSynchronousStandbys: []string{},
+						},
+						Status: cluster.DBStatus{
+							Healthy:             false,
+							CurrentGeneration:   1,
+							SynchronousStandbys: []string{"db2"},
+						},
+					},
+					"db2": &cluster.DB{
+						UID:        "db2",
+						Generation: 1,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID:              "keeper2",
+							RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout},
+							MaxStandbys:            cluster.DefaultMaxStandbys,
+							AdditionalWalSenders:   cluster.DefaultAdditionalWalSenders,
+							SynchronousReplication: false,
+							Role:      common.RoleStandby,
+							Followers: []string{},
+							FollowConfig: &cluster.FollowConfig{
+								Type:  cluster.FollowTypeInternal,
+								DBUID: "db1",
+							},
+							SynchronousStandbys:         nil,
+							ExternalSynchronousStandbys: nil,
+						},
+						Status: cluster.DBStatus{
+							Healthy:           true,
+							CurrentGeneration: 1,
+						},
+					},
+				},
+				Proxy: &cluster.Proxy{
+					Generation: 1,
+					Spec: cluster.ProxySpec{
+						MasterDBUID:    "db1",
+						EnabledProxies: []string{},
+					},
+				},
+			},
+			outcd: &cluster.ClusterData{
+				Cluster: &cluster.Cluster{
+					UID:        "cluster1",
+					Generation: 1,
+					Spec: &cluster.ClusterSpec{
+						ConvergenceTimeout:     &cluster.Duration{Duration: cluster.DefaultConvergenceTimeout},
+						InitTimeout:            &cluster.Duration{Duration: cluster.DefaultInitTimeout},
+						SyncTimeout:            &cluster.Duration{Duration: cluster.DefaultSyncTimeout},
+						MaxStandbysPerSender:   cluster.Uint16P(cluster.DefaultMaxStandbysPerSender),
+						SynchronousReplication: cluster.BoolP(true),
+					},
+					Status: cluster.ClusterStatus{
+						CurrentGeneration: 1,
+						Phase:             cluster.ClusterPhaseNormal,
+						Master:            "db2",
+					},
+				},
+				Keepers: cluster.Keepers{
+					"keeper1": &cluster.Keeper{
+						UID:  "keeper1",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy:         true,
+							LastHealthyTime: now,
+						},
+					},
+					"keeper2": &cluster.Keeper{
+						UID:  "keeper2",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy:         true,
+							LastHealthyTime: now,
+						},
+					},
+				},
+				DBs: cluster.DBs{
+					"db1": &cluster.DB{
+						UID:        "db1",
+						Generation: 2,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID:              "keeper1",
+							RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout},
+							MaxStandbys:            cluster.DefaultMaxStandbys,
+							AdditionalWalSenders:   cluster.DefaultAdditionalWalSenders,
+							SynchronousReplication: true,
+							Role:                        common.RoleMaster,
+							Followers:                   []string{},
+							SynchronousStandbys:         []string{"db2"},
+							ExternalSynchronousStandbys: []string{},
+						},
+						Status: cluster.DBStatus{
+							Healthy:             false,
+							CurrentGeneration:   1,
+							SynchronousStandbys: []string{"db2"},
+						},
+					},
+					"db2": &cluster.DB{
+						UID:        "db2",
+						Generation: 2,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID:              "keeper2",
+							RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout},
+							MaxStandbys:            cluster.DefaultMaxStandbys,
+							AdditionalWalSenders:   cluster.DefaultAdditionalWalSenders,
+							SynchronousReplication: true,
+							Role:                        common.RoleMaster,
+							Followers:                   []string{},
+							SynchronousStandbys:         []string{"db1"},
+							ExternalSynchronousStandbys: []string{},
+						},
+						Status: cluster.DBStatus{
+							Healthy:           true,
+							CurrentGeneration: 1,
+						},
+					},
+				},
+				Proxy: &cluster.Proxy{
+					Generation: 2,
+					Spec: cluster.ProxySpec{
+						MasterDBUID:    "",
+						EnabledProxies: []string{},
+					},
+				},
+			},
+		},
+		// #18 One master and one standby. Synchronous replication already
+		// enabled.
+		// stanby db not healthy: standby kept inside synchronousStandbys since
+		// there's not better standby to choose
+		{
+			cd: &cluster.ClusterData{
+				Cluster: &cluster.Cluster{
+					UID:        "cluster1",
+					Generation: 1,
+					Spec: &cluster.ClusterSpec{
+						ConvergenceTimeout:     &cluster.Duration{Duration: cluster.DefaultConvergenceTimeout},
+						InitTimeout:            &cluster.Duration{Duration: cluster.DefaultInitTimeout},
+						SyncTimeout:            &cluster.Duration{Duration: cluster.DefaultSyncTimeout},
+						MaxStandbysPerSender:   cluster.Uint16P(cluster.DefaultMaxStandbysPerSender),
+						SynchronousReplication: cluster.BoolP(true),
+					},
+					Status: cluster.ClusterStatus{
+						CurrentGeneration: 1,
+						Phase:             cluster.ClusterPhaseNormal,
+						Master:            "db1",
+					},
+				},
+				Keepers: cluster.Keepers{
+					"keeper1": &cluster.Keeper{
+						UID:  "keeper1",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy:         true,
+							LastHealthyTime: now,
+						},
+					},
+					"keeper2": &cluster.Keeper{
+						UID:  "keeper2",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy:         true,
+							LastHealthyTime: now,
+						},
+					},
+				},
+				DBs: cluster.DBs{
+					"db1": &cluster.DB{
+						UID:        "db1",
+						Generation: 1,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID:              "keeper1",
+							RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout},
+							MaxStandbys:            cluster.DefaultMaxStandbys,
+							AdditionalWalSenders:   cluster.DefaultAdditionalWalSenders,
+							SynchronousReplication: true,
+							Role:                        common.RoleMaster,
+							Followers:                   []string{"db2"},
+							SynchronousStandbys:         []string{"db2"},
+							ExternalSynchronousStandbys: []string{},
+						},
+						Status: cluster.DBStatus{
+							Healthy:             true,
+							CurrentGeneration:   1,
+							SynchronousStandbys: []string{"db2"},
+						},
+					},
+					"db2": &cluster.DB{
+						UID:        "db2",
+						Generation: 1,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID:              "keeper2",
+							RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout},
+							MaxStandbys:            cluster.DefaultMaxStandbys,
+							AdditionalWalSenders:   cluster.DefaultAdditionalWalSenders,
+							SynchronousReplication: false,
+							Role:      common.RoleStandby,
+							Followers: []string{},
+							FollowConfig: &cluster.FollowConfig{
+								Type:  cluster.FollowTypeInternal,
+								DBUID: "db1",
+							},
+							SynchronousStandbys:         nil,
+							ExternalSynchronousStandbys: nil,
+						},
+						Status: cluster.DBStatus{
+							Healthy:           false,
+							CurrentGeneration: 1,
+						},
+					},
+				},
+				Proxy: &cluster.Proxy{
+					Generation: 1,
+					Spec: cluster.ProxySpec{
+						MasterDBUID:    "db1",
+						EnabledProxies: []string{},
+					},
+				},
+			},
+			outcd: &cluster.ClusterData{
+				Cluster: &cluster.Cluster{
+					UID:        "cluster1",
+					Generation: 1,
+					Spec: &cluster.ClusterSpec{
+						ConvergenceTimeout:     &cluster.Duration{Duration: cluster.DefaultConvergenceTimeout},
+						InitTimeout:            &cluster.Duration{Duration: cluster.DefaultInitTimeout},
+						SyncTimeout:            &cluster.Duration{Duration: cluster.DefaultSyncTimeout},
+						MaxStandbysPerSender:   cluster.Uint16P(cluster.DefaultMaxStandbysPerSender),
+						SynchronousReplication: cluster.BoolP(true),
+					},
+					Status: cluster.ClusterStatus{
+						CurrentGeneration: 1,
+						Phase:             cluster.ClusterPhaseNormal,
+						Master:            "db1",
+					},
+				},
+				Keepers: cluster.Keepers{
+					"keeper1": &cluster.Keeper{
+						UID:  "keeper1",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy:         true,
+							LastHealthyTime: now,
+						},
+					},
+					"keeper2": &cluster.Keeper{
+						UID:  "keeper2",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy:         true,
+							LastHealthyTime: now,
+						},
+					},
+				},
+				DBs: cluster.DBs{
+					"db1": &cluster.DB{
+						UID:        "db1",
+						Generation: 1,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID:              "keeper1",
+							RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout},
+							MaxStandbys:            cluster.DefaultMaxStandbys,
+							AdditionalWalSenders:   cluster.DefaultAdditionalWalSenders,
+							SynchronousReplication: true,
+							Role:                        common.RoleMaster,
+							Followers:                   []string{"db2"},
+							SynchronousStandbys:         []string{"db2"},
+							ExternalSynchronousStandbys: []string{},
+						},
+						Status: cluster.DBStatus{
+							Healthy:             true,
+							CurrentGeneration:   1,
+							SynchronousStandbys: []string{"db2"},
+						},
+					},
+					"db2": &cluster.DB{
+						UID:        "db2",
+						Generation: 1,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID:              "keeper2",
+							RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout},
+							MaxStandbys:            cluster.DefaultMaxStandbys,
+							AdditionalWalSenders:   cluster.DefaultAdditionalWalSenders,
+							SynchronousReplication: false,
+							Role:      common.RoleStandby,
+							Followers: []string{},
+							FollowConfig: &cluster.FollowConfig{
+								Type:  cluster.FollowTypeInternal,
+								DBUID: "db1",
+							},
+							SynchronousStandbys:         nil,
+							ExternalSynchronousStandbys: nil,
+						},
+						Status: cluster.DBStatus{
+							Healthy:           false,
+							CurrentGeneration: 1,
+						},
+					},
+				},
+				Proxy: &cluster.Proxy{
+					Generation: 1,
+					Spec: cluster.ProxySpec{
+						MasterDBUID:    "db1",
+						EnabledProxies: []string{},
+					},
+				},
+			},
+		},
+		// #19 One master and two standbys. Synchronous replication already
+		// enabled with MinSynchronousStandbys and MaxSynchronousStandbys to 1
+		// (default).
+		// sync standby db not healthy: the other standby choosed as new sync
+		// standby. Both will appear as SynchronousStandbys
+		{
+			cd: &cluster.ClusterData{
+				Cluster: &cluster.Cluster{
+					UID:        "cluster1",
+					Generation: 1,
+					Spec: &cluster.ClusterSpec{
+						ConvergenceTimeout:     &cluster.Duration{Duration: cluster.DefaultConvergenceTimeout},
+						InitTimeout:            &cluster.Duration{Duration: cluster.DefaultInitTimeout},
+						SyncTimeout:            &cluster.Duration{Duration: cluster.DefaultSyncTimeout},
+						MaxStandbysPerSender:   cluster.Uint16P(cluster.DefaultMaxStandbysPerSender),
+						SynchronousReplication: cluster.BoolP(true),
+					},
+					Status: cluster.ClusterStatus{
+						CurrentGeneration: 1,
+						Phase:             cluster.ClusterPhaseNormal,
+						Master:            "db1",
+					},
+				},
+				Keepers: cluster.Keepers{
+					"keeper1": &cluster.Keeper{
+						UID:  "keeper1",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy:         true,
+							LastHealthyTime: now,
+						},
+					},
+					"keeper2": &cluster.Keeper{
+						UID:  "keeper2",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy:         true,
+							LastHealthyTime: now,
+						},
+					},
+				},
+				DBs: cluster.DBs{
+					"db1": &cluster.DB{
+						UID:        "db1",
+						Generation: 1,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID:              "keeper1",
+							RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout},
+							MaxStandbys:            cluster.DefaultMaxStandbys,
+							AdditionalWalSenders:   cluster.DefaultAdditionalWalSenders,
+							InitMode:               cluster.DBInitModeNone,
+							SynchronousReplication: true,
+							Role:                        common.RoleMaster,
+							Followers:                   []string{"db2", "db3"},
+							SynchronousStandbys:         []string{"db2"},
+							ExternalSynchronousStandbys: []string{},
+						},
+						Status: cluster.DBStatus{
+							Healthy:             true,
+							CurrentGeneration:   1,
+							SynchronousStandbys: []string{"db2"},
+						},
+					},
+					"db2": &cluster.DB{
+						UID:        "db2",
+						Generation: 1,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID:              "keeper2",
+							RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout},
+							MaxStandbys:            cluster.DefaultMaxStandbys,
+							AdditionalWalSenders:   cluster.DefaultAdditionalWalSenders,
+							InitMode:               cluster.DBInitModeNone,
+							SynchronousReplication: false,
+							Role:      common.RoleStandby,
+							Followers: []string{},
+							FollowConfig: &cluster.FollowConfig{
+								Type:  cluster.FollowTypeInternal,
+								DBUID: "db1",
+							},
+							SynchronousStandbys:         nil,
+							ExternalSynchronousStandbys: nil,
+						},
+						Status: cluster.DBStatus{
+							Healthy:           false,
+							CurrentGeneration: 1,
+						},
+					},
+					"db3": &cluster.DB{
+						UID:        "db3",
+						Generation: 1,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID:              "keeper2",
+							RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout},
+							MaxStandbys:            cluster.DefaultMaxStandbys,
+							AdditionalWalSenders:   cluster.DefaultAdditionalWalSenders,
+							InitMode:               cluster.DBInitModeNone,
+							SynchronousReplication: false,
+							Role:      common.RoleStandby,
+							Followers: []string{},
+							FollowConfig: &cluster.FollowConfig{
+								Type:  cluster.FollowTypeInternal,
+								DBUID: "db1",
+							},
+							SynchronousStandbys:         nil,
+							ExternalSynchronousStandbys: nil,
+						},
+						Status: cluster.DBStatus{
+							Healthy:           true,
+							CurrentGeneration: 1,
+						},
+					},
+				},
+				Proxy: &cluster.Proxy{
+					Generation: 1,
+					Spec: cluster.ProxySpec{
+						MasterDBUID:    "db1",
+						EnabledProxies: []string{},
+					},
+				},
+			},
+			outcd: &cluster.ClusterData{
+				Cluster: &cluster.Cluster{
+					UID:        "cluster1",
+					Generation: 1,
+					Spec: &cluster.ClusterSpec{
+						ConvergenceTimeout:     &cluster.Duration{Duration: cluster.DefaultConvergenceTimeout},
+						InitTimeout:            &cluster.Duration{Duration: cluster.DefaultInitTimeout},
+						SyncTimeout:            &cluster.Duration{Duration: cluster.DefaultSyncTimeout},
+						MaxStandbysPerSender:   cluster.Uint16P(cluster.DefaultMaxStandbysPerSender),
+						SynchronousReplication: cluster.BoolP(true),
+					},
+					Status: cluster.ClusterStatus{
+						CurrentGeneration: 1,
+						Phase:             cluster.ClusterPhaseNormal,
+						Master:            "db1",
+					},
+				},
+				Keepers: cluster.Keepers{
+					"keeper1": &cluster.Keeper{
+						UID:  "keeper1",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy:         true,
+							LastHealthyTime: now,
+						},
+					},
+					"keeper2": &cluster.Keeper{
+						UID:  "keeper2",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy:         true,
+							LastHealthyTime: now,
+						},
+					},
+				},
+				DBs: cluster.DBs{
+					"db1": &cluster.DB{
+						UID:        "db1",
+						Generation: 2,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID:              "keeper1",
+							RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout},
+							MaxStandbys:            cluster.DefaultMaxStandbys,
+							AdditionalWalSenders:   cluster.DefaultAdditionalWalSenders,
+							InitMode:               cluster.DBInitModeNone,
+							SynchronousReplication: true,
+							Role:                        common.RoleMaster,
+							Followers:                   []string{"db2", "db3"},
+							SynchronousStandbys:         []string{"db2", "db3"},
+							ExternalSynchronousStandbys: []string{},
+						},
+						Status: cluster.DBStatus{
+							Healthy:             true,
+							CurrentGeneration:   1,
+							SynchronousStandbys: []string{"db2"},
+						},
+					},
+					"db2": &cluster.DB{
+						UID:        "db2",
+						Generation: 1,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID:              "keeper2",
+							RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout},
+							MaxStandbys:            cluster.DefaultMaxStandbys,
+							AdditionalWalSenders:   cluster.DefaultAdditionalWalSenders,
+							InitMode:               cluster.DBInitModeNone,
+							SynchronousReplication: false,
+							Role:      common.RoleStandby,
+							Followers: []string{},
+							FollowConfig: &cluster.FollowConfig{
+								Type:  cluster.FollowTypeInternal,
+								DBUID: "db1",
+							},
+							SynchronousStandbys:         nil,
+							ExternalSynchronousStandbys: nil,
+						},
+						Status: cluster.DBStatus{
+							Healthy:           false,
+							CurrentGeneration: 1,
+						},
+					},
+					"db3": &cluster.DB{
+						UID:        "db3",
+						Generation: 1,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID:              "keeper2",
+							RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout},
+							MaxStandbys:            cluster.DefaultMaxStandbys,
+							AdditionalWalSenders:   cluster.DefaultAdditionalWalSenders,
+							InitMode:               cluster.DBInitModeNone,
+							SynchronousReplication: false,
+							Role:      common.RoleStandby,
+							Followers: []string{},
+							FollowConfig: &cluster.FollowConfig{
+								Type:  cluster.FollowTypeInternal,
+								DBUID: "db1",
+							},
+							SynchronousStandbys:         nil,
+							ExternalSynchronousStandbys: nil,
+						},
+						Status: cluster.DBStatus{
+							Healthy:           true,
+							CurrentGeneration: 1,
+						},
+					},
+				},
+				Proxy: &cluster.Proxy{
+					Generation: 1,
+					Spec: cluster.ProxySpec{
+						MasterDBUID:    "db1",
+						EnabledProxies: []string{},
+					},
+				},
+			},
+		},
+		// #20 From previous. master haven't yet reported the new sync standbys (db2, db3).
+		// master db is not healty. db2 is the unique in common between the
+		// reported (db2) and the required in the spec (db2, db3) but it's not
+		// healty so no master could be elected.
+		{
+			cd: &cluster.ClusterData{
+				Cluster: &cluster.Cluster{
+					UID:        "cluster1",
+					Generation: 1,
+					Spec: &cluster.ClusterSpec{
+						ConvergenceTimeout:     &cluster.Duration{Duration: cluster.DefaultConvergenceTimeout},
+						InitTimeout:            &cluster.Duration{Duration: cluster.DefaultInitTimeout},
+						SyncTimeout:            &cluster.Duration{Duration: cluster.DefaultSyncTimeout},
+						MaxStandbysPerSender:   cluster.Uint16P(cluster.DefaultMaxStandbysPerSender),
+						SynchronousReplication: cluster.BoolP(true),
+					},
+					Status: cluster.ClusterStatus{
+						CurrentGeneration: 1,
+						Phase:             cluster.ClusterPhaseNormal,
+						Master:            "db1",
+					},
+				},
+				Keepers: cluster.Keepers{
+					"keeper1": &cluster.Keeper{
+						UID:  "keeper1",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy:         true,
+							LastHealthyTime: now,
+						},
+					},
+					"keeper2": &cluster.Keeper{
+						UID:  "keeper2",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy:         true,
+							LastHealthyTime: now,
+						},
+					},
+				},
+				DBs: cluster.DBs{
+					"db1": &cluster.DB{
+						UID:        "db1",
+						Generation: 2,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID:              "keeper1",
+							RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout},
+							MaxStandbys:            cluster.DefaultMaxStandbys,
+							AdditionalWalSenders:   cluster.DefaultAdditionalWalSenders,
+							InitMode:               cluster.DBInitModeNone,
+							SynchronousReplication: true,
+							Role:                        common.RoleMaster,
+							Followers:                   []string{"db2", "db3"},
+							SynchronousStandbys:         []string{"db2", "db3"},
+							ExternalSynchronousStandbys: []string{},
+						},
+						Status: cluster.DBStatus{
+							Healthy:             false,
+							CurrentGeneration:   1,
+							SynchronousStandbys: []string{"db2"},
+						},
+					},
+					"db2": &cluster.DB{
+						UID:        "db2",
+						Generation: 1,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID:              "keeper2",
+							RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout},
+							MaxStandbys:            cluster.DefaultMaxStandbys,
+							AdditionalWalSenders:   cluster.DefaultAdditionalWalSenders,
+							InitMode:               cluster.DBInitModeNone,
+							SynchronousReplication: false,
+							Role:      common.RoleStandby,
+							Followers: []string{},
+							FollowConfig: &cluster.FollowConfig{
+								Type:  cluster.FollowTypeInternal,
+								DBUID: "db1",
+							},
+							SynchronousStandbys:         nil,
+							ExternalSynchronousStandbys: nil,
+						},
+						Status: cluster.DBStatus{
+							Healthy:           false,
+							CurrentGeneration: 1,
+						},
+					},
+					"db3": &cluster.DB{
+						UID:        "db3",
+						Generation: 1,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID:              "keeper2",
+							RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout},
+							MaxStandbys:            cluster.DefaultMaxStandbys,
+							AdditionalWalSenders:   cluster.DefaultAdditionalWalSenders,
+							InitMode:               cluster.DBInitModeNone,
+							SynchronousReplication: false,
+							Role:      common.RoleStandby,
+							Followers: []string{},
+							FollowConfig: &cluster.FollowConfig{
+								Type:  cluster.FollowTypeInternal,
+								DBUID: "db1",
+							},
+							SynchronousStandbys:         nil,
+							ExternalSynchronousStandbys: nil,
+						},
+						Status: cluster.DBStatus{
+							Healthy:           true,
+							CurrentGeneration: 1,
+						},
+					},
+				},
+				Proxy: &cluster.Proxy{
+					Generation: 1,
+					Spec: cluster.ProxySpec{
+						MasterDBUID:    "db1",
+						EnabledProxies: []string{},
+					},
+				},
+			},
+			outcd: &cluster.ClusterData{
+				Cluster: &cluster.Cluster{
+					UID:        "cluster1",
+					Generation: 1,
+					Spec: &cluster.ClusterSpec{
+						ConvergenceTimeout:     &cluster.Duration{Duration: cluster.DefaultConvergenceTimeout},
+						InitTimeout:            &cluster.Duration{Duration: cluster.DefaultInitTimeout},
+						SyncTimeout:            &cluster.Duration{Duration: cluster.DefaultSyncTimeout},
+						MaxStandbysPerSender:   cluster.Uint16P(cluster.DefaultMaxStandbysPerSender),
+						SynchronousReplication: cluster.BoolP(true),
+					},
+					Status: cluster.ClusterStatus{
+						CurrentGeneration: 1,
+						Phase:             cluster.ClusterPhaseNormal,
+						Master:            "db1",
+					},
+				},
+				Keepers: cluster.Keepers{
+					"keeper1": &cluster.Keeper{
+						UID:  "keeper1",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy:         true,
+							LastHealthyTime: now,
+						},
+					},
+					"keeper2": &cluster.Keeper{
+						UID:  "keeper2",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy:         true,
+							LastHealthyTime: now,
+						},
+					},
+				},
+				DBs: cluster.DBs{
+					"db1": &cluster.DB{
+						UID:        "db1",
+						Generation: 2,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID:              "keeper1",
+							RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout},
+							MaxStandbys:            cluster.DefaultMaxStandbys,
+							AdditionalWalSenders:   cluster.DefaultAdditionalWalSenders,
+							InitMode:               cluster.DBInitModeNone,
+							SynchronousReplication: true,
+							Role:                        common.RoleMaster,
+							Followers:                   []string{"db2", "db3"},
+							SynchronousStandbys:         []string{"db2", "db3"},
+							ExternalSynchronousStandbys: []string{},
+						},
+						Status: cluster.DBStatus{
+							Healthy:             false,
+							CurrentGeneration:   1,
+							SynchronousStandbys: []string{"db2"},
+						},
+					},
+					"db2": &cluster.DB{
+						UID:        "db2",
+						Generation: 1,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID:              "keeper2",
+							RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout},
+							MaxStandbys:            cluster.DefaultMaxStandbys,
+							AdditionalWalSenders:   cluster.DefaultAdditionalWalSenders,
+							InitMode:               cluster.DBInitModeNone,
+							SynchronousReplication: false,
+							Role:      common.RoleStandby,
+							Followers: []string{},
+							FollowConfig: &cluster.FollowConfig{
+								Type:  cluster.FollowTypeInternal,
+								DBUID: "db1",
+							},
+							SynchronousStandbys:         nil,
+							ExternalSynchronousStandbys: nil,
+						},
+						Status: cluster.DBStatus{
+							Healthy:           false,
+							CurrentGeneration: 1,
+						},
+					},
+					"db3": &cluster.DB{
+						UID:        "db3",
+						Generation: 1,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID:              "keeper2",
+							RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout},
+							MaxStandbys:            cluster.DefaultMaxStandbys,
+							AdditionalWalSenders:   cluster.DefaultAdditionalWalSenders,
+							InitMode:               cluster.DBInitModeNone,
+							SynchronousReplication: false,
+							Role:      common.RoleStandby,
+							Followers: []string{},
+							FollowConfig: &cluster.FollowConfig{
+								Type:  cluster.FollowTypeInternal,
+								DBUID: "db1",
+							},
+							SynchronousStandbys:         nil,
+							ExternalSynchronousStandbys: nil,
+						},
+						Status: cluster.DBStatus{
+							Healthy:           true,
+							CurrentGeneration: 1,
+						},
+					},
+				},
+				Proxy: &cluster.Proxy{
+					Generation: 1,
+					Spec: cluster.ProxySpec{
+						MasterDBUID:    "db1",
+						EnabledProxies: []string{},
+					},
+				},
+			},
+		},
+		// #21 From #19. master have reported the new sync standbys (db2, db3).
+		// db2 will be removed from synchronousStandbys
+		{
+			cd: &cluster.ClusterData{
+				Cluster: &cluster.Cluster{
+					UID:        "cluster1",
+					Generation: 1,
+					Spec: &cluster.ClusterSpec{
+						ConvergenceTimeout:     &cluster.Duration{Duration: cluster.DefaultConvergenceTimeout},
+						InitTimeout:            &cluster.Duration{Duration: cluster.DefaultInitTimeout},
+						SyncTimeout:            &cluster.Duration{Duration: cluster.DefaultSyncTimeout},
+						MaxStandbysPerSender:   cluster.Uint16P(cluster.DefaultMaxStandbysPerSender),
+						SynchronousReplication: cluster.BoolP(true),
+					},
+					Status: cluster.ClusterStatus{
+						CurrentGeneration: 1,
+						Phase:             cluster.ClusterPhaseNormal,
+						Master:            "db1",
+					},
+				},
+				Keepers: cluster.Keepers{
+					"keeper1": &cluster.Keeper{
+						UID:  "keeper1",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy:         true,
+							LastHealthyTime: now,
+						},
+					},
+					"keeper2": &cluster.Keeper{
+						UID:  "keeper2",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy:         true,
+							LastHealthyTime: now,
+						},
+					},
+				},
+				DBs: cluster.DBs{
+					"db1": &cluster.DB{
+						UID:        "db1",
+						Generation: 2,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID:              "keeper1",
+							RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout},
+							MaxStandbys:            cluster.DefaultMaxStandbys,
+							AdditionalWalSenders:   cluster.DefaultAdditionalWalSenders,
+							InitMode:               cluster.DBInitModeNone,
+							SynchronousReplication: true,
+							Role:                        common.RoleMaster,
+							Followers:                   []string{"db2", "db3"},
+							SynchronousStandbys:         []string{"db2", "db3"},
+							ExternalSynchronousStandbys: []string{},
+						},
+						Status: cluster.DBStatus{
+							Healthy:             true,
+							CurrentGeneration:   2,
+							SynchronousStandbys: []string{"db2", "db3"},
+						},
+					},
+					"db2": &cluster.DB{
+						UID:        "db2",
+						Generation: 1,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID:              "keeper2",
+							RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout},
+							MaxStandbys:            cluster.DefaultMaxStandbys,
+							AdditionalWalSenders:   cluster.DefaultAdditionalWalSenders,
+							InitMode:               cluster.DBInitModeNone,
+							SynchronousReplication: false,
+							Role:      common.RoleStandby,
+							Followers: []string{},
+							FollowConfig: &cluster.FollowConfig{
+								Type:  cluster.FollowTypeInternal,
+								DBUID: "db1",
+							},
+							SynchronousStandbys:         nil,
+							ExternalSynchronousStandbys: nil,
+						},
+						Status: cluster.DBStatus{
+							Healthy:           false,
+							CurrentGeneration: 1,
+						},
+					},
+					"db3": &cluster.DB{
+						UID:        "db3",
+						Generation: 1,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID:              "keeper2",
+							RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout},
+							MaxStandbys:            cluster.DefaultMaxStandbys,
+							AdditionalWalSenders:   cluster.DefaultAdditionalWalSenders,
+							InitMode:               cluster.DBInitModeNone,
+							SynchronousReplication: false,
+							Role:      common.RoleStandby,
+							Followers: []string{},
+							FollowConfig: &cluster.FollowConfig{
+								Type:  cluster.FollowTypeInternal,
+								DBUID: "db1",
+							},
+							SynchronousStandbys:         nil,
+							ExternalSynchronousStandbys: nil,
+						},
+						Status: cluster.DBStatus{
+							Healthy:           true,
+							CurrentGeneration: 1,
+						},
+					},
+				},
+				Proxy: &cluster.Proxy{
+					Generation: 1,
+					Spec: cluster.ProxySpec{
+						MasterDBUID:    "db1",
+						EnabledProxies: []string{},
+					},
+				},
+			},
+			outcd: &cluster.ClusterData{
+				Cluster: &cluster.Cluster{
+					UID:        "cluster1",
+					Generation: 1,
+					Spec: &cluster.ClusterSpec{
+						ConvergenceTimeout:     &cluster.Duration{Duration: cluster.DefaultConvergenceTimeout},
+						InitTimeout:            &cluster.Duration{Duration: cluster.DefaultInitTimeout},
+						SyncTimeout:            &cluster.Duration{Duration: cluster.DefaultSyncTimeout},
+						MaxStandbysPerSender:   cluster.Uint16P(cluster.DefaultMaxStandbysPerSender),
+						SynchronousReplication: cluster.BoolP(true),
+					},
+					Status: cluster.ClusterStatus{
+						CurrentGeneration: 1,
+						Phase:             cluster.ClusterPhaseNormal,
+						Master:            "db1",
+					},
+				},
+				Keepers: cluster.Keepers{
+					"keeper1": &cluster.Keeper{
+						UID:  "keeper1",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy:         true,
+							LastHealthyTime: now,
+						},
+					},
+					"keeper2": &cluster.Keeper{
+						UID:  "keeper2",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy:         true,
+							LastHealthyTime: now,
+						},
+					},
+				},
+				DBs: cluster.DBs{
+					"db1": &cluster.DB{
+						UID:        "db1",
+						Generation: 3,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID:              "keeper1",
+							RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout},
+							MaxStandbys:            cluster.DefaultMaxStandbys,
+							AdditionalWalSenders:   cluster.DefaultAdditionalWalSenders,
+							InitMode:               cluster.DBInitModeNone,
+							SynchronousReplication: true,
+							Role:                        common.RoleMaster,
+							Followers:                   []string{"db2", "db3"},
+							SynchronousStandbys:         []string{"db3"},
+							ExternalSynchronousStandbys: []string{},
+						},
+						Status: cluster.DBStatus{
+							Healthy:             true,
+							CurrentGeneration:   2,
+							SynchronousStandbys: []string{"db2", "db3"},
+						},
+					},
+					"db2": &cluster.DB{
+						UID:        "db2",
+						Generation: 1,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID:              "keeper2",
+							RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout},
+							MaxStandbys:            cluster.DefaultMaxStandbys,
+							AdditionalWalSenders:   cluster.DefaultAdditionalWalSenders,
+							InitMode:               cluster.DBInitModeNone,
+							SynchronousReplication: false,
+							Role:      common.RoleStandby,
+							Followers: []string{},
+							FollowConfig: &cluster.FollowConfig{
+								Type:  cluster.FollowTypeInternal,
+								DBUID: "db1",
+							},
+							SynchronousStandbys:         nil,
+							ExternalSynchronousStandbys: nil,
+						},
+						Status: cluster.DBStatus{
+							Healthy:           false,
+							CurrentGeneration: 1,
+						},
+					},
+					"db3": &cluster.DB{
+						UID:        "db3",
+						Generation: 1,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID:              "keeper2",
+							RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout},
+							MaxStandbys:            cluster.DefaultMaxStandbys,
+							AdditionalWalSenders:   cluster.DefaultAdditionalWalSenders,
+							InitMode:               cluster.DBInitModeNone,
+							SynchronousReplication: false,
+							Role:      common.RoleStandby,
+							Followers: []string{},
+							FollowConfig: &cluster.FollowConfig{
+								Type:  cluster.FollowTypeInternal,
+								DBUID: "db1",
+							},
+							SynchronousStandbys:         nil,
+							ExternalSynchronousStandbys: nil,
+						},
+						Status: cluster.DBStatus{
+							Healthy:           true,
+							CurrentGeneration: 1,
+						},
+					},
+				},
+				Proxy: &cluster.Proxy{
+					Generation: 1,
+					Spec: cluster.ProxySpec{
+						MasterDBUID:    "db1",
+						EnabledProxies: []string{},
+					},
+				},
+			},
+		},
+		// #22 From previous.
+		// master db is not healty. db3 is the unique in common between the
+		// reported (db2, db3) and the required in the spec (db3) so it'll be
+		// elected as new master.
+		{
+			cd: &cluster.ClusterData{
+				Cluster: &cluster.Cluster{
+					UID:        "cluster1",
+					Generation: 1,
+					Spec: &cluster.ClusterSpec{
+						ConvergenceTimeout:     &cluster.Duration{Duration: cluster.DefaultConvergenceTimeout},
+						InitTimeout:            &cluster.Duration{Duration: cluster.DefaultInitTimeout},
+						SyncTimeout:            &cluster.Duration{Duration: cluster.DefaultSyncTimeout},
+						MaxStandbysPerSender:   cluster.Uint16P(cluster.DefaultMaxStandbysPerSender),
+						SynchronousReplication: cluster.BoolP(true),
+					},
+					Status: cluster.ClusterStatus{
+						CurrentGeneration: 1,
+						Phase:             cluster.ClusterPhaseNormal,
+						Master:            "db1",
+					},
+				},
+				Keepers: cluster.Keepers{
+					"keeper1": &cluster.Keeper{
+						UID:  "keeper1",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy:         true,
+							LastHealthyTime: now,
+						},
+					},
+					"keeper2": &cluster.Keeper{
+						UID:  "keeper2",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy:         true,
+							LastHealthyTime: now,
+						},
+					},
+				},
+				DBs: cluster.DBs{
+					"db1": &cluster.DB{
+						UID:        "db1",
+						Generation: 3,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID:              "keeper1",
+							RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout},
+							MaxStandbys:            cluster.DefaultMaxStandbys,
+							AdditionalWalSenders:   cluster.DefaultAdditionalWalSenders,
+							InitMode:               cluster.DBInitModeNone,
+							SynchronousReplication: true,
+							Role:                        common.RoleMaster,
+							Followers:                   []string{"db2", "db3"},
+							SynchronousStandbys:         []string{"db3"},
+							ExternalSynchronousStandbys: []string{},
+						},
+						Status: cluster.DBStatus{
+							Healthy:             false,
+							CurrentGeneration:   2,
+							SynchronousStandbys: []string{"db2", "db3"},
+						},
+					},
+					"db2": &cluster.DB{
+						UID:        "db2",
+						Generation: 1,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID:              "keeper2",
+							RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout},
+							MaxStandbys:            cluster.DefaultMaxStandbys,
+							AdditionalWalSenders:   cluster.DefaultAdditionalWalSenders,
+							InitMode:               cluster.DBInitModeNone,
+							SynchronousReplication: false,
+							Role:      common.RoleStandby,
+							Followers: []string{},
+							FollowConfig: &cluster.FollowConfig{
+								Type:  cluster.FollowTypeInternal,
+								DBUID: "db1",
+							},
+							SynchronousStandbys:         nil,
+							ExternalSynchronousStandbys: nil,
+						},
+						Status: cluster.DBStatus{
+							Healthy:           false,
+							CurrentGeneration: 1,
+						},
+					},
+					"db3": &cluster.DB{
+						UID:        "db3",
+						Generation: 1,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID:              "keeper2",
+							RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout},
+							MaxStandbys:            cluster.DefaultMaxStandbys,
+							AdditionalWalSenders:   cluster.DefaultAdditionalWalSenders,
+							InitMode:               cluster.DBInitModeNone,
+							SynchronousReplication: false,
+							Role:      common.RoleStandby,
+							Followers: []string{},
+							FollowConfig: &cluster.FollowConfig{
+								Type:  cluster.FollowTypeInternal,
+								DBUID: "db1",
+							},
+							SynchronousStandbys:         nil,
+							ExternalSynchronousStandbys: nil,
+						},
+						Status: cluster.DBStatus{
+							Healthy:           true,
+							CurrentGeneration: 1,
+						},
+					},
+				},
+				Proxy: &cluster.Proxy{
+					Generation: 1,
+					Spec: cluster.ProxySpec{
+						MasterDBUID:    "db1",
+						EnabledProxies: []string{},
+					},
+				},
+			},
+			outcd: &cluster.ClusterData{
+				Cluster: &cluster.Cluster{
+					UID:        "cluster1",
+					Generation: 1,
+					Spec: &cluster.ClusterSpec{
+						ConvergenceTimeout:     &cluster.Duration{Duration: cluster.DefaultConvergenceTimeout},
+						InitTimeout:            &cluster.Duration{Duration: cluster.DefaultInitTimeout},
+						SyncTimeout:            &cluster.Duration{Duration: cluster.DefaultSyncTimeout},
+						MaxStandbysPerSender:   cluster.Uint16P(cluster.DefaultMaxStandbysPerSender),
+						SynchronousReplication: cluster.BoolP(true),
+					},
+					Status: cluster.ClusterStatus{
+						CurrentGeneration: 1,
+						Phase:             cluster.ClusterPhaseNormal,
+						Master:            "db3",
+					},
+				},
+				Keepers: cluster.Keepers{
+					"keeper1": &cluster.Keeper{
+						UID:  "keeper1",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy:         true,
+							LastHealthyTime: now,
+						},
+					},
+					"keeper2": &cluster.Keeper{
+						UID:  "keeper2",
+						Spec: &cluster.KeeperSpec{},
+						Status: cluster.KeeperStatus{
+							Healthy:         true,
+							LastHealthyTime: now,
+						},
+					},
+				},
+				DBs: cluster.DBs{
+					"db1": &cluster.DB{
+						UID:        "db1",
+						Generation: 4,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID:              "keeper1",
+							RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout},
+							MaxStandbys:            cluster.DefaultMaxStandbys,
+							AdditionalWalSenders:   cluster.DefaultAdditionalWalSenders,
+							InitMode:               cluster.DBInitModeNone,
+							SynchronousReplication: true,
+							Role:                        common.RoleMaster,
+							Followers:                   []string{},
+							SynchronousStandbys:         []string{"db3"},
+							ExternalSynchronousStandbys: []string{},
+						},
+						Status: cluster.DBStatus{
+							Healthy:             false,
+							CurrentGeneration:   2,
+							SynchronousStandbys: []string{"db2", "db3"},
+						},
+					},
+					"db2": &cluster.DB{
+						UID:        "db2",
+						Generation: 1,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID:              "keeper2",
+							RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout},
+							MaxStandbys:            cluster.DefaultMaxStandbys,
+							AdditionalWalSenders:   cluster.DefaultAdditionalWalSenders,
+							InitMode:               cluster.DBInitModeNone,
+							SynchronousReplication: false,
+							Role:      common.RoleStandby,
+							Followers: []string{},
+							FollowConfig: &cluster.FollowConfig{
+								Type:  cluster.FollowTypeInternal,
+								DBUID: "db1",
+							},
+							SynchronousStandbys:         nil,
+							ExternalSynchronousStandbys: nil,
+						},
+						Status: cluster.DBStatus{
+							Healthy:           false,
+							CurrentGeneration: 1,
+						},
+					},
+					"db3": &cluster.DB{
+						UID:        "db3",
+						Generation: 2,
+						ChangeTime: time.Time{},
+						Spec: &cluster.DBSpec{
+							KeeperUID:              "keeper2",
+							RequestTimeout:         cluster.Duration{Duration: cluster.DefaultRequestTimeout},
+							MaxStandbys:            cluster.DefaultMaxStandbys,
+							AdditionalWalSenders:   cluster.DefaultAdditionalWalSenders,
+							InitMode:               cluster.DBInitModeNone,
+							SynchronousReplication: true,
+							Role:                        common.RoleMaster,
+							Followers:                   []string{},
+							SynchronousStandbys:         []string{"db1"},
+							ExternalSynchronousStandbys: []string{},
+						},
+						Status: cluster.DBStatus{
+							Healthy:           true,
+							CurrentGeneration: 1,
+						},
+					},
+				},
+				Proxy: &cluster.Proxy{
+					Generation: 2,
+					Spec: cluster.ProxySpec{
+						MasterDBUID:    "",
+						EnabledProxies: []string{},
+					},
+				},
+			},
+		},
 	}
 
 	for i, tt := range tests {
