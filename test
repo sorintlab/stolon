@@ -123,7 +123,7 @@ if [ -n "$INTEGRATION" ]; then
 	fi
 
 	[ -z "$PARALLEL" ] && PARALLEL=4
-	go test -timeout 20m $@ -v -parallel ${PARALLEL} ${REPO_PATH}/tests/integration
+	go test -timeout 20m $@ -v -count 1 -parallel ${PARALLEL} ${REPO_PATH}/tests/integration
 fi
 
 echo "Success"
