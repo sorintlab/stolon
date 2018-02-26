@@ -141,6 +141,11 @@ func TestParseBinaryVersion(t *testing.T) {
 			min: 5,
 		},
 		{
+			in:  "postgres (PostgreSQL) 9.6.7\n",
+			maj: 9,
+			min: 6,
+		},
+		{
 			in:  "postgres (PostgreSQL) 10beta1",
 			maj: 10,
 			min: 0,
