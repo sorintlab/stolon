@@ -14,7 +14,6 @@ These parameters, if defined in the cluster specification, will be ignored since
 listen_addresses
 port
 unix_socket_directories
-wal_level
 wal_keep_segments
 wal_log_hints
 hot_standby
@@ -23,10 +22,17 @@ max_wal_senders
 synchronous_standby_names
 ```
 
+## Special cases
+
+### wal_level
+
+since stolon requires a `wal_level` value of at least `replica` (or `hot_standby` for pg < 9.6) if you leave it unspecificed in the `pgParameters` or if you specify a wrong `wal_level` or a value lesser than `replica` or `hot_standby` (like `minimal`) it'll be overridden by the minimal working value (`replica` or `hot_standby`).
+
+i.e. if you want to also save logical replication information in the wal files you can specify a `wal_level` set to `logical`.
+
 ## Parameters validity checks
 
 Actually stolon doesn't do any check on the provided configurations, so, if the provided parameters are wrong this won't create problems at instance reload (just some warning in the postgresql logs) but at the next instance restart, it'll probably fail making the instance not available (thus triggering failover if it's the master or other changes in the clusterview).
-
 
 ## Initialization parameters
 
