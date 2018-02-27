@@ -44,7 +44,7 @@ var updateOpts updateOptions
 
 func init() {
 	cmdUpdate.PersistentFlags().BoolVarP(&updateOpts.patch, "patch", "p", false, "patch the current cluster specification instead of replacing it")
-	cmdUpdate.PersistentFlags().StringVarP(&updateOpts.file, "file", "f", "", "file contaning a complete cluster specification or a patch to apply to the current cluster specification")
+	cmdUpdate.PersistentFlags().StringVarP(&updateOpts.file, "file", "f", "", "file containing a complete cluster specification or a patch to apply to the current cluster specification")
 
 	CmdStolonCtl.AddCommand(cmdUpdate)
 }

@@ -51,23 +51,24 @@ const (
 
 	DefaultDBNotIncreasingXLogPosTimes = 10
 
-	DefaultSleepInterval                         = 5 * time.Second
-	DefaultRequestTimeout                        = 10 * time.Second
-	DefaultConvergenceTimeout                    = 30 * time.Second
-	DefaultInitTimeout                           = 5 * time.Minute
-	DefaultSyncTimeout                           = 30 * time.Minute
-	DefaultFailInterval                          = 20 * time.Second
-	DefaultDeadKeeperRemovalInterval             = 48 * time.Hour
-	DefaultMaxStandbys               uint16      = 20
-	DefaultMaxStandbysPerSender      uint16      = 3
-	DefaultMaxStandbyLag                         = 1024 * 1204
-	DefaultSynchronousReplication                = false
-	DefaultMinSynchronousStandbys    uint16      = 1
-	DefaultMaxSynchronousStandbys    uint16      = 1
-	DefaultAdditionalWalSenders                  = 5
-	DefaultUsePgrewind                           = false
-	DefaultMergePGParameter                      = true
-	DefaultRole                      ClusterRole = ClusterRoleMaster
+	DefaultSleepInterval                              = 5 * time.Second
+	DefaultRequestTimeout                             = 10 * time.Second
+	DefaultConvergenceTimeout                         = 30 * time.Second
+	DefaultInitTimeout                                = 5 * time.Minute
+	DefaultSyncTimeout                                = 30 * time.Minute
+	DefaultFailInterval                               = 20 * time.Second
+	DefaultDeadKeeperRemovalInterval                  = 48 * time.Hour
+	DefaultMaxStandbys               uint16           = 20
+	DefaultMaxStandbysPerSender      uint16           = 3
+	DefaultMaxStandbyLag                              = 1024 * 1204
+	DefaultSynchronousReplication                     = false
+	DefaultMinSynchronousStandbys    uint16           = 1
+	DefaultMaxSynchronousStandbys    uint16           = 1
+	DefaultAdditionalWalSenders                       = 5
+	DefaultUsePgrewind                                = false
+	DefaultMergePGParameter                           = true
+	DefaultRole                      ClusterRole      = ClusterRoleMaster
+	DefaultSUReplAccess              SUReplAccessMode = SUReplAccessAll
 )
 
 const (
@@ -183,6 +184,19 @@ type StandbySettings struct {
 	RecoveryMinApplyDelay string `json:"recoveryMinApplyDelay,omitempty"`
 }
 
+type SUReplAccessMode string
+
+const (
+	// Allow access from every host
+	SUReplAccessAll SUReplAccessMode = "all"
+	// Allow access from standby server IPs only
+	SUReplAccessStrict SUReplAccessMode = "strict"
+)
+
+func SUReplAccessModeP(s SUReplAccessMode) *SUReplAccessMode {
+	return &s
+}
+
 type ClusterSpec struct {
 	// Interval to wait before next check
 	SleepInterval *Duration `json:"sleepInterval,omitempty"`
@@ -248,6 +262,10 @@ type ClusterSpec struct {
 	ExistingConfig *ExistingConfig `json:"existingConfig,omitempty"`
 	// Standby setting when role is standby
 	StandbySettings *StandbySettings `json:"standbySettings,omitempty"`
+	// Define the mode of the default hba rules needed for replication by standby keepers (the su and repl auth methods will be the one provided in the keeper command line options)
+	// Values can be "all" or "strict", "all" allow access from all ips, "strict" restrict master access to standby servers ips.
+	// Default is "all"
+	DefaultSUReplAccessMode *SUReplAccessMode `json:"defaultSUReplAccessMode,omitempty"`
 	// Map of postgres parameters
 	PGParameters PGParameters `json:"pgParameters,omitempty"`
 	// Additional pg_hba.conf entries
@@ -353,6 +371,10 @@ func (os *ClusterSpec) WithDefaults() *ClusterSpec {
 	if s.MergePgParameters == nil {
 		s.MergePgParameters = BoolP(DefaultMergePGParameter)
 	}
+	if s.DefaultSUReplAccessMode == nil {
+		v := DefaultSUReplAccess
+		s.DefaultSUReplAccessMode = &v
+	}
 	if s.Role == nil {
 		v := DefaultRole
 		s.Role = &v
@@ -437,6 +459,13 @@ func (os *ClusterSpec) Validate() error {
 	default:
 		return fmt.Errorf("unknown initMode: %q", *s.InitMode)
 
+	}
+
+	switch *s.DefaultSUReplAccessMode {
+	case SUReplAccessAll:
+	case SUReplAccessStrict:
+	default:
+		return fmt.Errorf("unknown defaultSUReplAccessMode: %q", *s.DefaultSUReplAccessMode)
 	}
 
 	switch *s.Role {

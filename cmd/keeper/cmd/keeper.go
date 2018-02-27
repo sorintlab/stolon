@@ -946,7 +946,8 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 		return
 	}
 
-	pgm.SetHba(db.Spec.PGHBA)
+	// Dynamicly generate hba auth from clusterData
+	pgm.SetHba(p.generateHBA(cd, db))
 
 	var pgParameters common.Parameters
 
@@ -1578,9 +1579,11 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 		log.Infow("postgres parameters not changed")
 	}
 
-	if !reflect.DeepEqual(db.Spec.PGHBA, pgm.CurHba()) {
+	// Dynamicly generate hba auth from clusterData
+	newHBA := p.generateHBA(cd, db)
+	if !reflect.DeepEqual(newHBA, pgm.CurHba()) {
 		log.Infow("postgres hba entries changed, reloading postgres instance")
-		pgm.SetHba(db.Spec.PGHBA)
+		pgm.SetHba(newHBA)
 		needsReload = true
 	} else {
 		// for tests
@@ -1652,6 +1655,76 @@ func (p *PostgresKeeper) saveDBLocalState() error {
 		return err
 	}
 	return common.WriteFileAtomic(p.dbLocalStateFilePath(), sj, 0600)
+}
+
+// IsMaster return if the db is the cluster master db.
+// A master is a db that:
+// * Has a master db role
+// or
+// * Has a standby db role with followtype external
+func IsMaster(db *cluster.DB) bool {
+	switch db.Spec.Role {
+	case common.RoleMaster:
+		return true
+	case common.RoleStandby:
+		if db.Spec.FollowConfig.Type == cluster.FollowTypeExternal {
+			return true
+		}
+		return false
+	default:
+		panic("invalid db role in db Spec")
+	}
+}
+
+// generateHBA generates the instance hba entries depending on the value of DefaultSUReplAccessMode.
+func (p *PostgresKeeper) generateHBA(cd *cluster.ClusterData, db *cluster.DB) []string {
+	// Minimal entries for local normal and replication connections needed by the stolon keeper
+	// Matched local connections are for postgres database and suUsername user with md5 auth
+	// Matched local replication connections are for replUsername user with md5 auth
+	computedHBA := []string{
+		fmt.Sprintf("local postgres %s %s", p.pgSUUsername, p.pgSUAuthMethod),
+		fmt.Sprintf("local replication %s %s", p.pgReplUsername, p.pgReplAuthMethod),
+	}
+
+	switch *cd.Cluster.DefSpec().DefaultSUReplAccessMode {
+	case cluster.SUReplAccessAll:
+		// all the keepers will accept connections from every host
+		computedHBA = append(
+			computedHBA,
+			fmt.Sprintf("host all %s %s %s", p.pgSUUsername, "0.0.0.0/0", p.pgSUAuthMethod),
+			fmt.Sprintf("host all %s %s %s", p.pgSUUsername, "::0/0", p.pgSUAuthMethod),
+			fmt.Sprintf("host replication %s %s %s", p.pgReplUsername, "0.0.0.0/0", p.pgReplAuthMethod),
+			fmt.Sprintf("host replication %s %s %s", p.pgReplUsername, "::0/0", p.pgReplAuthMethod),
+		)
+	case cluster.SUReplAccessStrict:
+		// only the master keeper (primary instance or standby of a remote primary when in standby cluster mode) will accept connections only from the other standby keepers IPs
+		if IsMaster(db) {
+			for _, dbElt := range cd.DBs {
+				if dbElt.UID != db.UID {
+					computedHBA = append(
+						computedHBA,
+						fmt.Sprintf("host all %s %s/32 %s", p.pgSUUsername, db.Status.ListenAddress, p.pgReplAuthMethod),
+						fmt.Sprintf("host replication %s %s/32 %s", p.pgReplUsername, db.Status.ListenAddress, p.pgReplAuthMethod),
+					)
+				}
+			}
+		}
+	}
+
+	// By default, if no custom pg_hba entries are provided, accept
+	// connections for all databases and users with md5 auth
+	if db.Spec.PGHBA != nil {
+		computedHBA = append(computedHBA, db.Spec.PGHBA...)
+	} else {
+		computedHBA = append(
+			computedHBA,
+			"host all all 0.0.0.0/0 md5",
+			"host all all ::0/0 md5",
+		)
+	}
+
+	// return generated Hba merged with user Hba
+	return computedHBA
 }
 
 func sigHandler(sigs chan os.Signal, cancel context.CancelFunc) {

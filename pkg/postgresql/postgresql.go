@@ -776,32 +776,10 @@ func (p *Manager) writePgHba() error {
 	}
 	defer f.Close()
 
-	// Minimal entries for local normal and replication connections needed by the stolon keeper
-	// Matched local connections are for postgres database and suUsername user with md5 auth
-	// Matched local replicaton connections are for replUsername user with md5 auth
-	f.WriteString(fmt.Sprintf("local postgres %s %s\n", p.suUsername, p.suAuthMethod))
-	f.WriteString(fmt.Sprintf("local replication %s %s\n", p.replUsername, p.replAuthMethod))
-
-	// By default accept all connections for the superuser suUsername with md5 auth
-	// Used for pg_rewind resyncronization
-	// TODO(sgotti) Configure this dynamically based on our followers provided by the clusterview
-	f.WriteString(fmt.Sprintf("host all %s %s %s\n", p.suUsername, "0.0.0.0/0", p.suAuthMethod))
-	f.WriteString(fmt.Sprintf("host all %s %s %s\n", p.suUsername, "::0/0", p.suAuthMethod))
-
-	// By default accept all replication connections for the replication user with md5 auth
-	// TODO(sgotti) Configure this dynamically based on our followers provided by the clusterview
-	f.WriteString(fmt.Sprintf("host replication %s %s %s\n", p.replUsername, "0.0.0.0/0", p.replAuthMethod))
-	f.WriteString(fmt.Sprintf("host replication %s %s %s\n", p.replUsername, "::0/0", p.replAuthMethod))
-
 	if p.hba != nil {
 		for _, e := range p.hba {
 			f.WriteString(e + "\n")
 		}
-	} else {
-		// By default, if no custom pg_hba entries are provided, accept
-		// connections for all databases and users with md5 auth
-		f.WriteString("host all all 0.0.0.0/0 md5\n")
-		f.WriteString("host all all ::0/0 md5\n")
 	}
 
 	if err = os.Rename(f.Name(), filepath.Join(p.dataDir, "pg_hba.conf")); err != nil {
