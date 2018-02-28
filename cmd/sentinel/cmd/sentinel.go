@@ -1266,27 +1266,6 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 							addedCount++
 						}
 
-						// If there're some missing standbys to reach
-						// MinSynchronousStandbys, keep previous sync standbys,
-						// also if not in a good state. In this way we have more
-						// possibilities to choose a sync standby to replace a
-						// failed master if they becoe healthy again
-						ac = int(*clusterSpec.MinSynchronousStandbys) - len(synchronousStandbys)
-						addedCount = 0
-						for _, db := range newcd.DBs {
-							if addedCount >= ac {
-								break
-							}
-							if _, ok := synchronousStandbys[db.UID]; ok {
-								continue
-							}
-							if _, ok := prevSynchronousStandbys[db.UID]; ok {
-								log.Infow("adding previous synchronous standby to reach MinSynchronousStandbys", "masterDB", masterDB.UID, "synchronousStandbyDB", db.UID, "keeper", db.Spec.KeeperUID)
-								synchronousStandbys[db.UID] = struct{}{}
-								addedCount++
-							}
-						}
-
 						// if some of the new synchronousStandbys are not inside
 						// the prevSynchronousStandbys then also add all
 						// the prevSynchronousStandbys. In this way when there's
@@ -1321,6 +1300,17 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 						}
 
 						// If there're not enough real synchronous standbys add a fake synchronous standby because we have to be strict and make the master block transactions until MinSynchronousStandbys real standbys are available
+						if len(synchronousStandbys) < int(*clusterSpec.MinSynchronousStandbys) {
+							c := len(synchronousStandbys)
+							for _, es := range clusterSpec.ExternalFallbackSyncStandbys {
+								externalSynchronousStandbys[es] = struct{}{}
+								c++
+								if c == int(*clusterSpec.MinSynchronousStandbys) {
+									break
+								}
+							}
+						}
+
 						if len(synchronousStandbys)+len(externalSynchronousStandbys) < int(*clusterSpec.MinSynchronousStandbys) {
 							log.Infow("using a fake synchronous standby since there are not enough real standbys available", "masterDB", masterDB.UID, "required", int(*clusterSpec.MinSynchronousStandbys))
 							addFakeStandby = true
