@@ -76,7 +76,9 @@ type config struct {
 	dataDir                 string
 	debug                   bool
 	pgListenAddress         string
+	pgAdvertiseAddress      string
 	pgPort                  string
+	pgAdvertisePort         string
 	pgBinPath               string
 	pgReplAuthMethod        string
 	pgReplUsername          string
@@ -103,8 +105,10 @@ func init() {
 	CmdKeeper.PersistentFlags().StringVar(&cfg.uid, "id", "", "keeper uid (must be unique in the cluster and can contain only lower-case letters, numbers and the underscore character). If not provided a random uid will be generated.")
 	CmdKeeper.PersistentFlags().StringVar(&cfg.uid, "uid", "", "keeper uid (must be unique in the cluster and can contain only lower-case letters, numbers and the underscore character). If not provided a random uid will be generated.")
 	CmdKeeper.PersistentFlags().StringVar(&cfg.dataDir, "data-dir", "", "data directory")
-	CmdKeeper.PersistentFlags().StringVar(&cfg.pgListenAddress, "pg-listen-address", "", "postgresql instance listening address")
+	CmdKeeper.PersistentFlags().StringVar(&cfg.pgListenAddress, "pg-listen-address", "", "postgresql instance listening address, local address used for the postgres instance. For all network interface, you can set the value to '*'.")
+	CmdKeeper.PersistentFlags().StringVar(&cfg.pgAdvertiseAddress, "pg-advertise-address", "", "postgresql instance address from outside. Use it to expose ip different than local ip with a NAT networking config")
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgPort, "pg-port", "5432", "postgresql instance listening port")
+	CmdKeeper.PersistentFlags().StringVar(&cfg.pgAdvertisePort, "pg-advertise-port", "", "postgresql instance port from outside. Use it to expose port different than local port with a PAT networking config")
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgBinPath, "pg-bin-path", "", "absolute path to postgresql binaries. If empty they will be searched in the current PATH")
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgReplAuthMethod, "pg-repl-auth-method", "md5", "postgres replication user auth method. Default is md5.")
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgReplUsername, "pg-repl-username", "", "postgres replication user name. Required. It'll be created on db initialization. Must be the same for all keepers.")
@@ -288,7 +292,7 @@ func (p *PostgresKeeper) createPGParameters(db *cluster.DB) common.Parameters {
 		parameters[k] = v
 	}
 
-	parameters["listen_addresses"] = fmt.Sprintf("127.0.0.1,%s", p.pgListenAddress)
+	parameters["listen_addresses"] = p.pgListenAddress
 
 	parameters["port"] = p.pgPort
 	// TODO(sgotti) max_replication_slots needs to be at least the
@@ -399,7 +403,9 @@ type PostgresKeeper struct {
 	listenAddress       string
 	port                string
 	pgListenAddress     string
+	pgAdvertiseAddress  string
 	pgPort              string
+	pgAdvertisePort     string
 	pgBinPath           string
 	pgReplAuthMethod    string
 	pgReplUsername      string
@@ -445,7 +451,9 @@ func NewPostgresKeeper(cfg *config, end chan error) (*PostgresKeeper, error) {
 		dataDir: dataDir,
 
 		pgListenAddress:     cfg.pgListenAddress,
+		pgAdvertiseAddress:  cfg.pgAdvertiseAddress,
 		pgPort:              cfg.pgPort,
+		pgAdvertisePort:     cfg.pgAdvertisePort,
 		pgBinPath:           cfg.pgBinPath,
 		pgReplAuthMethod:    cfg.pgReplAuthMethod,
 		pgReplUsername:      cfg.pgReplUsername,
@@ -591,8 +599,8 @@ func (p *PostgresKeeper) GetPGState(pctx context.Context) (*cluster.PostgresStat
 	pgState.Generation = p.dbLocalState.Generation
 	p.localStateMutex.Unlock()
 
-	pgState.ListenAddress = p.pgListenAddress
-	pgState.Port = p.pgPort
+	pgState.ListenAddress = p.pgAdvertiseAddress
+	pgState.Port = p.pgAdvertisePort
 
 	initialized, err := p.pgm.IsInitialized()
 	if err != nil {
@@ -1776,7 +1784,11 @@ func Execute() {
 }
 
 func keeper(c *cobra.Command, args []string) {
-	var err error
+	var (
+		err           error
+		listenAddFlag = "pg-advertise-address"
+	)
+
 	validAuthMethods := make(map[string]struct{})
 	validAuthMethods["trust"] = struct{}{}
 	validAuthMethods["md5"] = struct{}{}
@@ -1816,20 +1828,27 @@ func keeper(c *cobra.Command, args []string) {
 		die("--pg-listen-address is required")
 	}
 
-	ip := net.ParseIP(cfg.pgListenAddress)
-	if ip == nil {
-		log.Warnf("provided --pgListenAddress %q: is not an ip address but a hostname. This will be advertized to the other components and may have undefined behaviors if resolved differently by other hosts", cfg.pgListenAddress)
+	if cfg.pgAdvertiseAddress == "" {
+		listenAddFlag = "pg-listen-address"
+		cfg.pgAdvertiseAddress = cfg.pgListenAddress
 	}
-	ipAddr, err := net.ResolveIPAddr("ip", cfg.pgListenAddress)
+
+	if cfg.pgAdvertisePort == "" {
+		cfg.pgAdvertisePort = cfg.pgPort
+	}
+
+	ip := net.ParseIP(cfg.pgAdvertiseAddress)
+	if ip == nil {
+		log.Warnf("provided --%s %q: is not an ip address but a hostname. This will be advertized to the other components and may have undefined behaviors if resolved differently by other hosts", listenAddFlag, cfg.pgAdvertiseAddress)
+	}
+
+	ipAddr, err := net.ResolveIPAddr("ip", cfg.pgAdvertiseAddress)
 	if err != nil {
-		log.Warnf("cannot resolve provided --pgListenAddress %q: %v", cfg.pgListenAddress, err)
+		log.Warnf("cannot resolve provided --%s %q: %v", listenAddFlag, cfg.pgAdvertiseAddress, err)
 	} else {
 		if ipAddr.IP.IsLoopback() {
-			log.Warnf("provided --pgListenAddress %q is a loopback ip. This will be advertized to the other components and communication will fail if they are on different hosts", cfg.pgListenAddress)
+			log.Warnf("provided --%s %q is a loopback ip. This will be advertized to the other components and communication will fail if they are on different hosts", listenAddFlag, cfg.pgAdvertiseAddress)
 		}
-	}
-	if cfg.pgListenAddress == "" {
-		die("--pg-listen-address is required")
 	}
 
 	if _, ok := validAuthMethods[cfg.pgReplAuthMethod]; !ok {
