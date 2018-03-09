@@ -389,7 +389,7 @@ func NewKubeElection(kubecli *kubernetes.Clientset, podName, namespace, clusterN
 		kubecli.CoreV1(),
 		resourcelock.ResourceLockConfig{
 			Identity:      candidateUID,
-			EventRecorder: createRecorder(kubecli, "stolon-sentinel", "default"),
+			EventRecorder: createRecorder(kubecli, "stolon-sentinel", namespace),
 		})
 	if err != nil {
 		return nil, fmt.Errorf("error creating lock: %v", err)
