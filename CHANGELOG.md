@@ -1,3 +1,17 @@
+### v0.10.0
+
+#### New features
+
+* Initial support for native kubernetes store ([#433](https://github.com/sorintlab/stolon/pull/433))
+* Improved sync standby management ([#444](https://github.com/sorintlab/stolon/pull/444))
+* Ability to use strict and dynamic hba entries for keeper replication ([#412](https://github.com/sorintlab/stolon/pull/412))
+* Ability to define additional replication slots for external clients ([#434](https://github.com/sorintlab/stolon/pull/434))
+* Improved wal level selection ([#450](https://github.com/sorintlab/stolon/pull/450))
+
+Thanks to everybody who contributed to this release:
+
+Pierre Alexandre Assouad, Arun Babu Neelicattu, Sergey Kim
+
 ### v0.9.0
 
 #### New features
