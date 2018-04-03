@@ -2,7 +2,7 @@
 # fine tuned and split per component.
 # The required permission per component should be:
 # keeper/proxy/sentinel: update their own pod annotations
-# sentinel/stolonctl: get, create, update endpoints
+# sentinel/stolonctl: get, create, update configmaps
 # sentinel/stolonctl: list components pods
 # sentinel/stolonctl: get components pods annotations
 
@@ -16,6 +16,6 @@ rules:
   - ""
   resources:
   - pods
-  - endpoints
+  - configmaps
   verbs:
   - "*"
