@@ -11,7 +11,7 @@ spec:
   template:
     metadata:
       labels:
-        app: stolon-keeper
+        component: stolon-keeper
         stolon-cluster: kube-stolon
       annotations:
         pod.alpha.kubernetes.io/initialized: "true"

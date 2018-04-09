@@ -7,5 +7,5 @@ spec:
     - port: 5432
       targetPort: 5432
   selector:
-    app: stolon-proxy
+    component: stolon-proxy
     stolon-cluster: kube-stolon

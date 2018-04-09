@@ -53,7 +53,7 @@ To store the clusterdata and handle sentinel leader election a configmap resourc
 
 To discovery stolon components (keepers, proxies, sentinels) a lookup with specific label selectors is executed. These labels must be correctly set on the pod definition (see the [kubernetes example](/examples/kubernetes)). They are:
 
-`app` set to the component type: `stolon-keeper`, `stolon-sentinel`, `stolon-proxy`
+`component` set to the component type: `stolon-keeper`, `stolon-sentinel`, `stolon-proxy`
 `stolon-cluster` set to the stolon cluster name
 
 Every components also saves its state in an annotation of their own pod called `stolon-status`
