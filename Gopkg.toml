@@ -50,6 +50,10 @@
   name = "k8s.io/client-go"
   version = "kubernetes-1.8.2"
 
+[[constraint]]
+  name = "github.com/prometheus/client_golang"
+  version = "v0.8.0"
+
 ## Required for
 ## https://github.com/kubernetes/client-go/blob/059133e3e3ab5ede57dea5063a16b3fdc729b64f/tools/clientcmd/client_config.go#L160
 ## that relies on an old mergo version behavior
