@@ -803,6 +803,12 @@ func (p *Manager) createPostgresqlAutoConf() error {
 }
 
 func (p *Manager) SyncFromFollowedPGRewind(followedConnParams ConnParams, password string) error {
+	// Remove postgresql.auto.conf since pg_rewind will error if it's a symlink to /dev/null
+	pgAutoConfPath := filepath.Join(p.dataDir, postgresAutoConf)
+	if err := os.Remove(pgAutoConfPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("error removing postgresql.auto.conf file: %v", err)
+	}
+
 	// ioutil.Tempfile already creates files with 0600 permissions
 	pgpass, err := ioutil.TempFile("", "pgpass")
 	if err != nil {
