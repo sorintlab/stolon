@@ -39,7 +39,7 @@ import (
 type ComponentLabelValue string
 
 const (
-	DefaultComponentLabel = "app"
+	DefaultComponentLabel = "component"
 
 	KeeperLabelValue   ComponentLabelValue = "stolon-keeper"
 	SentinelLabelValue ComponentLabelValue = "stolon-sentinel"

@@ -1,3 +1,11 @@
+### v0.11.0
+
+* In the k8s store backend, stolon components discovery now uses the `component` label instead of the `app` label.
+
+## Upgrades notes.
+
+In the k8s store backend, the label that defines the kind of stolon component has changed from `app` to `component`. When upgrading you should update the various resource descriptors setting the k8s component name (`stolon-keeper`, `stolon-sentinel`, `stolon-proxy`) inside the `component` label instead of the `app` label.
+
 ### v0.10.0
 
 #### New features

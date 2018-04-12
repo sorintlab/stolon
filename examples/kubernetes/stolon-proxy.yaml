@@ -7,7 +7,7 @@ spec:
   template:
     metadata:
       labels:
-        app: stolon-proxy
+        component: stolon-proxy
         stolon-cluster: kube-stolon
     spec:
       containers:
