@@ -9,6 +9,9 @@ spec:
       labels:
         component: stolon-sentinel
         stolon-cluster: kube-stolon
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
     spec:
       containers:
       - name: stolon-sentinel
@@ -30,6 +33,10 @@ spec:
             value: "kubernetes"
           - name: STSENTINEL_KUBE_RESOURCE_KIND
             value: "configmap"
+          - name: STSENTINEL_METRICS_LISTEN_ADDRESS
+            value: "0.0.0.0:8080"
           ## Uncomment this to enable debug logs
           #- name: STSENTINEL_DEBUG
           #  value: "true"
+        ports:
+          - containerPort: 8080

@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -41,6 +42,7 @@ import (
 	"github.com/sorintlab/stolon/pkg/util"
 
 	"github.com/davecgh/go-spew/spew"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 )
@@ -1924,6 +1926,17 @@ func keeper(c *cobra.Command, args []string) {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	go sigHandler(sigs, cancel)
+
+	if cfg.MetricsListenAddress != "" {
+		http.Handle("/metrics", promhttp.Handler())
+		go func() {
+			err = http.ListenAndServe(cfg.MetricsListenAddress, nil)
+			if err != nil {
+				log.Errorw("metrics http server error", zap.Error(err))
+				cancel()
+			}
+		}()
+	}
 
 	p, err := NewPostgresKeeper(&cfg, end)
 	if err != nil {
