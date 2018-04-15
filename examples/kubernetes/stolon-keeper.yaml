@@ -37,9 +37,10 @@ spec:
             valueFrom:
               fieldRef:
                 fieldPath: metadata.name
-          # TODO(sgotti) Get cluster name from "stolon-cluster" label using a downward volume api instead of duplicating the name here
           - name: STKEEPER_CLUSTER_NAME
-            value: "kube-stolon"
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.labels['stolon-cluster']
           - name: STKEEPER_STORE_BACKEND
             value: "kubernetes"
           - name: STKEEPER_KUBE_RESOURCE_KIND

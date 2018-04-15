@@ -24,8 +24,9 @@ spec:
               fieldRef:
                 fieldPath: metadata.name
           - name: STPROXY_CLUSTER_NAME
-          # TODO(sgotti) Get cluster name from "stolon-cluster" label using a downward volume api instead of duplicating the name here
-            value: "kube-stolon"
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.labels['stolon-cluster']
           - name: STPROXY_STORE_BACKEND
             value: "kubernetes"
           - name: STPROXY_KUBE_RESOURCE_KIND
