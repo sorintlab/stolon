@@ -17,5 +17,6 @@ rules:
   resources:
   - pods
   - configmaps
+  - events
   verbs:
   - "*"
