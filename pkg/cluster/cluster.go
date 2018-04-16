@@ -690,11 +690,12 @@ type ClusterData struct {
 	// version and do upgrade. Needs to be bumped when a non
 	// backward compatible change is done to the other struct
 	// members.
-	FormatVersion uint64
-	Cluster       *Cluster
-	Keepers       Keepers
-	DBs           DBs
-	Proxy         *Proxy
+	FormatVersion uint64    `json:"formatVersion"`
+	ChangeTime    time.Time `json:"changeTime"`
+	Cluster       *Cluster  `json:"cluster"`
+	Keepers       Keepers   `json:"keepers"`
+	DBs           DBs       `json:"dbs"`
+	Proxy         *Proxy    `json:"proxy"`
 }
 
 func NewClusterData(c *Cluster) *ClusterData {

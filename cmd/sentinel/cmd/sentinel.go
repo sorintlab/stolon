@@ -784,7 +784,6 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 				db := &cluster.DB{
 					UID:        s.UIDFn(),
 					Generation: cluster.InitialGeneration,
-					ChangeTime: time.Now(),
 					Spec: &cluster.DBSpec{
 						KeeperUID:     k.UID,
 						InitMode:      cluster.DBInitModeNew,
@@ -844,7 +843,6 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 				db := &cluster.DB{
 					UID:        s.UIDFn(),
 					Generation: cluster.InitialGeneration,
-					ChangeTime: time.Now(),
 					Spec: &cluster.DBSpec{
 						KeeperUID:     k.UID,
 						InitMode:      cluster.DBInitModeExisting,
@@ -897,7 +895,6 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 				db := &cluster.DB{
 					UID:        s.UIDFn(),
 					Generation: cluster.InitialGeneration,
-					ChangeTime: time.Now(),
 					Spec: &cluster.DBSpec{
 						KeeperUID:     k.UID,
 						InitMode:      cluster.DBInitModePITR,
@@ -947,6 +944,7 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 		default:
 			return nil, fmt.Errorf("unknown init mode %q", clusterSpec.InitMode)
 		}
+
 	case cluster.ClusterPhaseNormal:
 		// Remove old keepers
 		keepersToRemove := []*cluster.Keeper{}
@@ -1057,7 +1055,6 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 				// Tell proxies that there's currently no active master
 				newcd.Proxy.Spec.MasterDBUID = ""
 				newcd.Proxy.Generation++
-				newcd.Proxy.ChangeTime = time.Now()
 			}
 
 			// Setup synchronous standbys to the one of the previous master (replacing ourself with the previous master)
@@ -1102,7 +1099,6 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 					// Tell proxy that there's a new active master
 					newcd.Proxy.Spec.MasterDBUID = wantedMasterDBUID
 					newcd.Proxy.Generation++
-					newcd.Proxy.ChangeTime = time.Now()
 				}
 			} else {
 				// if we have Proxy.Spec.MasterDBUID != "" then we have waited for
@@ -1116,7 +1112,6 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 				if !reflect.DeepEqual(newcd.Proxy.Spec.EnabledProxies, enabledProxies) {
 					newcd.Proxy.Spec.EnabledProxies = enabledProxies
 					newcd.Proxy.Generation++
-					newcd.Proxy.ChangeTime = time.Now()
 				}
 			}
 
@@ -1407,7 +1402,6 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 						db := &cluster.DB{
 							UID:        s.UIDFn(),
 							Generation: cluster.InitialGeneration,
-							ChangeTime: time.Now(),
 							Spec: &cluster.DBSpec{
 								KeeperUID:    freeKeeper.UID,
 								InitMode:     cluster.DBInitModeResync,
@@ -1475,7 +1469,6 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 		if !reflect.DeepEqual(db.Spec, prevDB.Spec) {
 			log.Debugw("db spec changed, updating generation", "prevDB", spew.Sdump(prevDB.Spec), "db", spew.Sdump(db.Spec))
 			db.Generation++
-			db.ChangeTime = time.Now()
 		}
 	}
 
@@ -1484,6 +1477,40 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 		return nil, fmt.Errorf("cd was changed in updateCluster, this shouldn't happen!")
 	}
 	return newcd, nil
+}
+
+func (s *Sentinel) updateChangeTimes(cd, newcd *cluster.ClusterData) {
+	newcd.ChangeTime = time.Now()
+
+	if !reflect.DeepEqual(newcd.Cluster, cd.Cluster) {
+		newcd.Cluster.ChangeTime = time.Now()
+	}
+
+	for dbUID, db := range newcd.DBs {
+		prevDB, ok := cd.DBs[dbUID]
+		if !ok {
+			db.ChangeTime = time.Now()
+			continue
+		}
+		if !reflect.DeepEqual(db, prevDB) {
+			db.ChangeTime = time.Now()
+		}
+	}
+
+	for keeperUID, keeper := range newcd.Keepers {
+		prevKeeper, ok := cd.Keepers[keeperUID]
+		if !ok {
+			keeper.ChangeTime = time.Now()
+			continue
+		}
+		if !reflect.DeepEqual(keeper, prevKeeper) {
+			keeper.ChangeTime = time.Now()
+		}
+	}
+
+	if !reflect.DeepEqual(newcd.Proxy, cd.Proxy) {
+		newcd.Proxy.ChangeTime = time.Now()
+	}
 }
 
 type ConvergenceState uint
@@ -1818,6 +1845,7 @@ func (s *Sentinel) clusterSentinelCheck(pctx context.Context) {
 	log.Debugf("newcd dump after updateCluster: %s", spew.Sdump(newcd))
 
 	if newcd != nil {
+		s.updateChangeTimes(cd, newcd)
 		if _, err := e.AtomicPutClusterData(pctx, newcd, prevCDPair); err != nil {
 			log.Errorw("error saving clusterdata", zap.Error(err))
 		}
