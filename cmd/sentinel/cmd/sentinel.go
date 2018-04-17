@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math/rand"
+	"net/http"
 	"os"
 	"os/signal"
 	"reflect"
@@ -29,6 +30,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sorintlab/stolon/cmd"
 	"github.com/sorintlab/stolon/common"
 	"github.com/sorintlab/stolon/pkg/cluster"
@@ -1905,6 +1907,17 @@ func sentinel(c *cobra.Command, args []string) {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	go sigHandler(sigs, cancel)
+
+	if cfg.MetricsListenAddress != "" {
+		http.Handle("/metrics", promhttp.Handler())
+		go func() {
+			err := http.ListenAndServe(cfg.MetricsListenAddress, nil)
+			if err != nil {
+				log.Errorw("metrics http server error", zap.Error(err))
+				cancel()
+			}
+		}()
+	}
 
 	s, err := NewSentinel(uid, &cfg, end)
 	if err != nil {

@@ -15,6 +15,8 @@ spec:
         stolon-cluster: kube-stolon
       annotations:
         pod.alpha.kubernetes.io/initialized: "true"
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
     spec:
       terminationGracePeriodSeconds: 10
       containers:
@@ -54,11 +56,14 @@ spec:
             value: "stolon"
           - name: STKEEPER_PG_SU_PASSWORDFILE
             value: "/etc/secrets/stolon/password"
+          - name: STKEEPER_METRICS_LISTEN_ADDRESS
+            value: "0.0.0.0:8080"
           # Uncomment this to enable debug logs
           #- name: STKEEPER_DEBUG
           #  value: "true"
         ports:
           - containerPort: 5432
+          - containerPort: 8080
         volumeMounts:
         - mountPath: /stolon-data
           name: data

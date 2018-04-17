@@ -18,11 +18,13 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sorintlab/stolon/cmd"
 	"github.com/sorintlab/stolon/common"
 	"github.com/sorintlab/stolon/pkg/cluster"
@@ -379,6 +381,16 @@ func proxy(c *cobra.Command, args []string) {
 
 	uid := common.UID()
 	log.Infow("proxy uid", "uid", uid)
+
+	if cfg.MetricsListenAddress != "" {
+		http.Handle("/metrics", promhttp.Handler())
+		go func() {
+			err := http.ListenAndServe(cfg.MetricsListenAddress, nil)
+			if err != nil {
+				die("metrics http server error", zap.Error(err))
+			}
+		}()
+	}
 
 	clusterChecker, err := NewClusterChecker(uid, cfg)
 	if err != nil {
