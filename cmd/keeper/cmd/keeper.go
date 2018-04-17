@@ -299,7 +299,7 @@ func (p *PostgresKeeper) createPGParameters(db *cluster.DB) common.Parameters {
 	parameters["max_replication_slots"] = strconv.FormatUint(uint64(db.Spec.MaxStandbys), 10)
 	// Add some more wal senders, since also the keeper will use them
 	// TODO(sgotti) changing max_wal_senders requires an instance restart.
-	parameters["max_wal_senders"] = strconv.FormatUint(uint64(db.Spec.MaxStandbys+2+db.Spec.AdditionalWalSenders), 10)
+	parameters["max_wal_senders"] = strconv.FormatUint(uint64((db.Spec.MaxStandbys*2)+2+db.Spec.AdditionalWalSenders), 10)
 
 	// required by pg_rewind (if data checksum is enabled it's ignored)
 	if db.Spec.UsePgrewind {
@@ -780,6 +780,16 @@ func (p *PostgresKeeper) resync(db, followedDB *cluster.DB, tryPgrewind bool) er
 		}
 	}
 
+	maj, min, err := p.pgm.BinaryVersion()
+	if err != nil {
+		// in case we fail to parse the binary version then log it and just don't use replSlot
+		log.Warnf("failed to get postgres binary version: %v", err)
+	}
+	replSlot := ""
+	if (maj == 9 && min >= 6) || maj > 10 {
+		replSlot = common.StolonName(db.UID)
+	}
+
 	if err := pgm.RemoveAll(); err != nil {
 		return fmt.Errorf("failed to remove the postgres data dir: %v", err)
 	}
@@ -788,7 +798,8 @@ func (p *PostgresKeeper) resync(db, followedDB *cluster.DB, tryPgrewind bool) er
 	} else {
 		log.Infow("syncing from followed db", "followedDB", followedDB.UID, "keeper", followedDB.Spec.KeeperUID)
 	}
-	if err := pgm.SyncFromFollowed(replConnParams); err != nil {
+
+	if err := pgm.SyncFromFollowed(replConnParams, replSlot); err != nil {
 		return fmt.Errorf("sync error: %v", err)
 	}
 	log.Infow("sync succeeded")
