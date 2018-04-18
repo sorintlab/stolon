@@ -843,7 +843,7 @@ func (p *Manager) SyncFromFollowedPGRewind(followedConnParams ConnParams, passwo
 	return nil
 }
 
-func (p *Manager) SyncFromFollowed(followedConnParams ConnParams) error {
+func (p *Manager) SyncFromFollowed(followedConnParams ConnParams, replSlot string) error {
 	fcp := followedConnParams.Copy()
 
 	// ioutil.Tempfile already creates files with 0600 permissions
@@ -871,7 +871,12 @@ func (p *Manager) SyncFromFollowed(followedConnParams ConnParams) error {
 
 	log.Infow("running pg_basebackup")
 	name := filepath.Join(p.pgBinPath, "pg_basebackup")
-	cmd := exec.Command(name, "-R", "-Xf", "-D", p.dataDir, "-d", followedConnString)
+	args := []string{"-R", "-Xs", "-D", p.dataDir, "-d", followedConnString}
+	if replSlot != "" {
+		args = append(args, "--slot", replSlot)
+	}
+	cmd := exec.Command(name, args...)
+
 	cmd.Env = append(os.Environ(), fmt.Sprintf("PGPASSFILE=%s", pgpass.Name()))
 	log.Debugw("execing cmd", "cmd", cmd)
 
