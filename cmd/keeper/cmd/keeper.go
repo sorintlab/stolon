@@ -80,6 +80,7 @@ type config struct {
 	pgListenAddress         string
 	pgPort                  string
 	pgBinPath               string
+	pgDataDir               string
 	pgReplAuthMethod        string
 	pgReplUsername          string
 	pgReplPassword          string
@@ -108,6 +109,7 @@ func init() {
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgListenAddress, "pg-listen-address", "", "postgresql instance listening address")
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgPort, "pg-port", "5432", "postgresql instance listening port")
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgBinPath, "pg-bin-path", "", "absolute path to postgresql binaries. If empty they will be searched in the current PATH")
+	CmdKeeper.PersistentFlags().StringVar(&cfg.pgDataDir, "pg-data-dir", "", "postgres data directory. If empty, will create a postgres subdirectory at the data directory path.")
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgReplAuthMethod, "pg-repl-auth-method", "md5", "postgres replication user auth method. Default is md5.")
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgReplUsername, "pg-repl-username", "", "postgres replication user name. Required. It'll be created on db initialization. Must be the same for all keepers.")
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgReplPassword, "pg-repl-password", "", "postgres replication user password. Only one of --pg-repl-password or --pg-repl-passwordfile must be provided. Must be the same for all keepers.")
@@ -403,6 +405,7 @@ type PostgresKeeper struct {
 	pgListenAddress     string
 	pgPort              string
 	pgBinPath           string
+	pgDataDir           string
 	pgReplAuthMethod    string
 	pgReplUsername      string
 	pgReplPassword      string
@@ -438,6 +441,14 @@ func NewPostgresKeeper(cfg *config, end chan error) (*PostgresKeeper, error) {
 	if err != nil {
 		return nil, fmt.Errorf("cannot get absolute datadir path for %q: %v", cfg.dataDir, err)
 	}
+	pgDataDir := cfg.pgDataDir
+	if pgDataDir == "" {
+		pgDataDir = filepath.Join(dataDir, "postgres")
+	}
+	pgDataDir, err = filepath.Abs(pgDataDir)
+	if err != nil {
+		return nil, fmt.Errorf("cannot get absolute postgres datadir path for %q: %v", pgDataDir, err)
+	}
 
 	p := &PostgresKeeper{
 		cfg: cfg,
@@ -449,6 +460,7 @@ func NewPostgresKeeper(cfg *config, end chan error) (*PostgresKeeper, error) {
 		pgListenAddress:     cfg.pgListenAddress,
 		pgPort:              cfg.pgPort,
 		pgBinPath:           cfg.pgBinPath,
+		pgDataDir:           cfg.pgDataDir,
 		pgReplAuthMethod:    cfg.pgReplAuthMethod,
 		pgReplUsername:      cfg.pgReplUsername,
 		pgReplPassword:      cfg.pgReplPassword,
@@ -706,7 +718,7 @@ func (p *PostgresKeeper) Start(ctx context.Context) {
 
 	// TODO(sgotti) reconfigure the various configurations options
 	// (RequestTimeout) after a changed cluster config
-	pgm := postgresql.NewManager(p.pgBinPath, p.dataDir, p.getLocalConnParams(), p.getLocalReplConnParams(), p.pgSUAuthMethod, p.pgSUUsername, p.pgSUPassword, p.pgReplAuthMethod, p.pgReplUsername, p.pgReplPassword, p.requestTimeout)
+	pgm := postgresql.NewManager(p.pgBinPath, p.pgDataDir, p.getLocalConnParams(), p.getLocalReplConnParams(), p.pgSUAuthMethod, p.pgSUUsername, p.pgSUPassword, p.pgReplAuthMethod, p.pgReplUsername, p.pgReplPassword, p.requestTimeout)
 	p.pgm = pgm
 
 	p.pgm.StopIfStarted(true)
