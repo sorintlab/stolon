@@ -351,9 +351,8 @@ func NewKVBackedElection(kvStore KVStore, path, candidateUID string) Election {
 	switch kvStore.(type) {
 	case *libKVStore:
 		s := kvStore.(*libKVStore)
-		electionPath := filepath.Join(path, common.SentinelLeaderKey)
-		candidate := leadership.NewCandidate(s.store, electionPath, candidateUID, MinTTL)
-		return &libkvElection{store: s, path: electionPath, candidate: candidate}
+		candidate := leadership.NewCandidate(s.store, path, candidateUID, MinTTL)
+		return &libkvElection{store: s, path: path, candidate: candidate}
 	case *etcdV3Store:
 		etcdV3Store := kvStore.(*etcdV3Store)
 		return &etcdv3Election{

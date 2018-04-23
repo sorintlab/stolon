@@ -4,7 +4,8 @@
 
 ## Upgrades notes.
 
-In the k8s store backend, the label that defines the kind of stolon component has changed from `app` to `component`. When upgrading you should update the various resource descriptors setting the k8s component name (`stolon-keeper`, `stolon-sentinel`, `stolon-proxy`) inside the `component` label instead of the `app` label.
+* In the k8s store backend, the label that defines the kind of stolon component has changed from `app` to `component`. When upgrading you should update the various resource descriptors setting the k8s component name (`stolon-keeper`, `stolon-sentinel`, `stolon-proxy`) inside the `component` label instead of the `app` label.
+* When using the etcdv2 store, due to a wrong leader election path introduced in the last release and now fixed, if your sentinel returns an election error like `election loop error {"error": "102: Not a file ...` you should stop all the sentinels and remove the wrong dir using `etcdctl rmdir /stolon/cluster/$STOLONCLUSTER/sentinel-leader` where `$STOLONCLUSTER` should be substituted with the stolon cluster name (remember to set `ETCDCTL_API=2`).
 
 ### v0.10.0
 
