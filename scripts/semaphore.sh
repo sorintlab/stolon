@@ -46,7 +46,7 @@ sudo /bin/sh -c 'echo "32000 1024000000 500 32000" > /proc/sys/kernel/sem'
 rm -rf ~/.rbenv
 
 export INTEGRATION=1
-export PARALLEL=20
+export PARALLEL=10
 
 # Test with postgresql 9.5
 echo "===== Testing with postgreSQL 9.5 ====="
