@@ -21,6 +21,8 @@ The `etc/init-spec.json` file provides a minimal default Stolon cluster specific
 
 A convenient `build` target is provided in the Makefile to build all the components' image and generate the needed secrets.
 
+At first - you need run ``` ./build.sh``` in the project root for  files generation in ``` /bin``` and others initial.
+
 ## Local Cluster
 This example sets up a Stolon cluster of 1 Sentinel instance, 3 Keeper instances, 1 Proxy instance and 3 etcd instances in your local environment. All containers are connected to a user-defined bridge network, named `stolon-network`.
 
