@@ -1,0 +1,90 @@
+version: '3.4'
+
+secrets:
+  pgsql:
+    file: ./etc/secrets/pgsql
+  pgsql_repl:
+    file: ./etc/secrets/pgsql_repl
+
+services:
+  sentinel:
+    image: sorintlab/master-pg10:latest
+    command: gosu stolon stolon-sentinel --cluster-name stolon-cluster --store-backend=etcdv3 --store-endpoints http://etcd-00:2379,http://etcd-01:2379,http://etcd-02:2379 --log-level debug
+    networks:
+      - etcd_etcd
+      - pgdb
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 30s
+        order: stop-first
+        failure_action: pause
+
+  keeper1:
+    image: sorintlab/master-pg10:latest
+    hostname: keeper1
+    environment:
+      - PGDATA=/var/lib/postgresql/data
+    volumes:
+      - pgkeeper1:/var/lib/postgresql/data
+    secrets:
+      - pgsql
+      - pgsql_repl
+    command: gosu stolon stolon-keeper --pg-listen-address keeper1 --pg-repl-username replication --uid keeper1 --pg-su-username postgres --pg-su-passwordfile /run/secrets/pgsql --pg-repl-passwordfile /run/secrets/pgsql_repl --data-dir /var/lib/postgresql/data --cluster-name stolon-cluster --store-backend=etcdv3 --store-endpoints http://etcd-00:2379,http://etcd-01:2379,http://etcd-02:2379 --log-level debug
+    networks:
+      - etcd_etcd
+      - pgdb
+    deploy:
+      replicas: 1
+#      placement:
+#        constraints: [node.labels.nodename == node1]
+
+  keeper2:
+    image: sorintlab/master-pg10:latest
+    hostname: keeper2
+    environment:
+      - PGDATA=/var/lib/postgresql/data
+    volumes:
+      - pgkeeper2:/var/lib/postgresql/data
+    secrets:
+      - pgsql
+    command: gosu stolon stolon-keeper --pg-listen-address keeper2 --pg-repl-username replication --uid keeper2 --pg-su-username postgres --pg-su-passwordfile /run/secrets/pgsql --pg-repl-passwordfile /run/secrets/pgsql --data-dir /var/lib/postgresql/data --cluster-name stolon-cluster --store-backend=etcdv3 --store-endpoints http://etcd-00:2379,http://etcd-01:2379,http://etcd-02:2379 --log-level debug
+    networks:
+      - etcd_etcd
+      - pgdb
+    deploy:
+      replicas: 1
+#      placement:
+#        constraints: [node.labels.nodename == node2]
+
+  proxy:
+    image: sorintlab/master-pg10:latest
+    command: gosu stolon stolon-proxy --listen-address 0.0.0.0 --cluster-name stolon-cluster --store-backend=etcdv3 --store-endpoints http://etcd-00:2379,http://etcd-01:2379,http://etcd-02:2379 --log-level info
+    networks:
+      - etcd_etcd
+      - pgdb
+    ports:
+      - 5432:5432
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 30s
+        order: stop-first
+        failure_action: rollback
+
+volumes:
+  pgkeeper1:
+    driver: local
+  pgkeeper2:
+    driver: local
+
+networks:
+  etcd_etcd:
+    external: true
+  pgdb:
+    driver: overlay
+    driver_opts:
+      encrypted: "true"
+    internal: true
