@@ -98,7 +98,7 @@ cp ${GOPATH}/bin/keeper ${BINDIR}/stolon-keeper
 
 # Copy binaries to Dockerfile image directories
 declare -a DOCKERFILE_PATHS
-DOCKERFILE_PATHS=(${BASEDIR}/examples/kubernetes/image/docker ${BASEDIR}/examples/docker)
+DOCKERFILE_PATHS=(${BASEDIR}/examples/kubernetes/image/docker)
 for path in "${DOCKERFILE_PATHS[@]}"
 do
   rm -rf $path/bin/

@@ -1,0 +1,82 @@
+version: '3.4'
+
+services:
+  etcd-00:
+    image: quay.io/coreos/etcd:v3.2.17
+    hostname: etcd-00
+    command:
+      - etcd
+      - --name=etcd-00
+      - --data-dir=data.etcd
+      - --advertise-client-urls=http://etcd-00:2379
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --initial-advertise-peer-urls=http://etcd-00:2380
+      - --listen-peer-urls=http://0.0.0.0:2380
+      - --initial-cluster=etcd-00=http://etcd-00:2380,etcd-01=http://etcd-01:2380,etcd-02=http://etcd-02:2380
+      - --initial-cluster-state=new
+      - --initial-cluster-token=${ETCD_TOKEN}
+    volumes:
+      - etcd-00vol:/data.etcd
+    networks:
+      - etcd
+    ports:
+      - 2379:2379
+    deploy:
+      replicas: 1
+
+  etcd-01:
+    image: quay.io/coreos/etcd:v3.2.17
+    hostname: etcd-01
+    command:
+      - etcd
+      - --name=etcd-01
+      - --data-dir=data.etcd
+      - --advertise-client-urls=http://etcd-01:2379
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --initial-advertise-peer-urls=http://etcd-01:2380
+      - --listen-peer-urls=http://0.0.0.0:2380
+      - --initial-cluster=etcd-00=http://etcd-00:2380,etcd-01=http://etcd-01:2380,etcd-02=http://etcd-02:2380
+      - --initial-cluster-state=new
+      - --initial-cluster-token=${ETCD_TOKEN}
+    volumes:
+      - etcd-01vol:/data.etcd
+    networks:
+      - etcd
+    deploy:
+      replicas: 1
+
+  etcd-02:
+    image: quay.io/coreos/etcd:v3.2.17
+    hostname: etcd-02
+    command:
+      - etcd
+      - --name=etcd-02
+      - --data-dir=data.etcd
+      - --advertise-client-urls=http://etcd-02:2379
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --initial-advertise-peer-urls=http://etcd-02:2380
+      - --listen-peer-urls=http://0.0.0.0:2380
+      - --initial-cluster=etcd-00=http://etcd-00:2380,etcd-01=http://etcd-01:2380,etcd-02=http://etcd-02:2380
+      - --initial-cluster-state=new
+      - --initial-cluster-token=${ETCD_TOKEN}
+    volumes:
+      - etcd-02vol:/data.etcd
+    networks:
+      - etcd
+    deploy:
+      replicas: 1
+
+volumes:
+  etcd-00vol:
+    driver: local
+  etcd-01vol:
+    driver: local
+  etcd-02vol:
+    driver: local
+
+networks:
+  etcd:
+    driver: overlay
+    driver_opts:
+      encrypted: "true"
+    internal: true
