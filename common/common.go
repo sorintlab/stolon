@@ -16,6 +16,7 @@ package common
 
 import (
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path"
@@ -72,18 +73,19 @@ func (s Parameters) Equals(is Parameters) bool {
 	return reflect.DeepEqual(s, is)
 }
 
-// WriteFileAtomic atoically writes a file, it achieves this by creating a
-// temporary file and then moving it.
+// WriteFileAtomicFunc atomically writes a file, it achieves this by creating a
+// temporary file and then moving it. writeFunc is the func that will write
+// data to the file.
 // This function is taken from
 //   https://github.com/youtube/vitess/blob/master/go/ioutil2/ioutil.go
 // Copyright 2012, Google Inc. BSD-license, see licenses/LICENSE-BSD-3-Clause
-func WriteFileAtomic(filename string, data []byte, perm os.FileMode) error {
+func WriteFileAtomicFunc(filename string, perm os.FileMode, writeFunc func(f io.Writer) error) error {
 	dir, name := path.Split(filename)
 	f, err := ioutil.TempFile(dir, name)
 	if err != nil {
 		return err
 	}
-	_, err = f.Write(data)
+	err = writeFunc(f)
 	if err == nil {
 		err = f.Sync()
 	}
@@ -101,4 +103,13 @@ func WriteFileAtomic(filename string, data []byte, perm os.FileMode) error {
 		os.Remove(f.Name())
 	}
 	return err
+}
+
+// WriteFileAtomic atomically writes a file
+func WriteFileAtomic(filename string, perm os.FileMode, data []byte) error {
+	return WriteFileAtomicFunc(filename, perm,
+		func(f io.Writer) error {
+			_, err := f.Write(data)
+			return err
+		})
 }
