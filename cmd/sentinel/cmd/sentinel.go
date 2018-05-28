@@ -304,8 +304,6 @@ func (s *Sentinel) updateKeepersStatus(cd *cluster.ClusterData, keepersInfo clus
 			db.Status.TimelinesHistory = dbs.TimelinesHistory
 			db.Status.PGParameters = cluster.PGParameters(dbs.PGParameters)
 
-			// Sort synchronousStandbys so we can compare the slice regardless of its order
-			sort.Sort(sort.StringSlice(dbs.SynchronousStandbys))
 			db.Status.SynchronousStandbys = dbs.SynchronousStandbys
 
 			db.Status.OlderWalFile = dbs.OlderWalFile
@@ -1074,6 +1072,11 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 				if len(newMasterDB.Spec.SynchronousStandbys) == 0 {
 					newMasterDB.Spec.ExternalSynchronousStandbys = []string{fakeStandbyName}
 				}
+
+				// Just sort to always have them in the same order and avoid
+				// unneeded updates to synchronous_standby_names by the keeper.
+				sort.Sort(sort.StringSlice(newMasterDB.Spec.SynchronousStandbys))
+				sort.Sort(sort.StringSlice(newMasterDB.Spec.ExternalSynchronousStandbys))
 			} else {
 				newMasterDB.Spec.SynchronousReplication = false
 				newMasterDB.Spec.SynchronousStandbys = nil
@@ -1189,7 +1192,7 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 					// this way, when we have to choose a new master we are sure
 					// that there're no intermediate changes between the
 					// reported standbys and the required ones.
-					if !util.CompareStringSlice(masterDB.Status.SynchronousStandbys, masterDB.Spec.SynchronousStandbys) {
+					if !util.CompareStringSliceNoOrder(masterDB.Status.SynchronousStandbys, masterDB.Spec.SynchronousStandbys) {
 						log.Infof("won't update masterDB required synchronous standby since the latest master reported synchronous standbys are different from the db spec ones", "reported", curMasterDB.Status.SynchronousStandbys, "spec", curMasterDB.Spec.SynchronousStandbys)
 					} else {
 						addFakeStandby := false
@@ -1338,10 +1341,10 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 							masterDB.Spec.ExternalSynchronousStandbys = append(masterDB.Spec.ExternalSynchronousStandbys, fakeStandbyName)
 						}
 
-						// Sort synchronousStandbys so we can compare the slice regardless of its order
+						// Just sort to always have them in the same order and avoid
+						// unneeded updates to synchronous_standby_names by the keeper.
 						sort.Sort(sort.StringSlice(masterDB.Spec.SynchronousStandbys))
 						sort.Sort(sort.StringSlice(masterDB.Spec.ExternalSynchronousStandbys))
-
 					}
 				} else {
 					masterDB.Spec.SynchronousReplication = false

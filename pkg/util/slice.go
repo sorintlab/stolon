@@ -1,4 +1,4 @@
-// Copyright 2015 Sorint.lab
+// Copyright 2018 Sorint.lab
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,6 +14,8 @@
 
 package util
 
+import "sort"
+
 func StringInSlice(s []string, e string) bool {
 	for _, v := range s {
 		if v == e {
@@ -28,6 +30,29 @@ func CompareStringSlice(a []string, b []string) bool {
 	if len(a) != len(b) {
 		return false
 	}
+
+	for i, v := range a {
+		if v != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// CompareStringSliceNoOrder compares two slices of strings regardless of their order, a nil slice is considered an empty one
+func CompareStringSliceNoOrder(a []string, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	// This isn't the faster way but it's cleaner and enough for us
+
+	// Take a copy of the original slice
+	a = append([]string(nil), a...)
+	b = append([]string(nil), b...)
+
+	sort.Sort(sort.StringSlice(a))
+	sort.Sort(sort.StringSlice(b))
 
 	for i, v := range a {
 		if v != b[i] {
