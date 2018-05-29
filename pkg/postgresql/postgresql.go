@@ -19,6 +19,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -213,47 +214,49 @@ out:
 	return nil
 }
 
+// StartTmpMerged starts postgres with a conf file different than
+// postgresql.conf, including it at the start of the conf if it exists
 func (p *Manager) StartTmpMerged() error {
-	// start postgres with a conf file different then postgresql.conf so we don't have to touch it
-	f, err := os.Create(filepath.Join(p.dataDir, tmpPostgresConf))
-	if err != nil {
-		return err
-	}
-	defer f.Close()
+	tmpPostgresConfPath := filepath.Join(p.dataDir, tmpPostgresConf)
 
-	// include postgresql.conf if it exists
-	_, err = os.Stat(filepath.Join(p.dataDir, postgresConf))
-	if err != nil && !os.IsNotExist(err) {
-		return err
-	}
-	if !os.IsNotExist(err) {
-		f.WriteString(fmt.Sprintf("include '%s'\n", postgresConf))
-	}
-	for k, v := range p.parameters {
-		// Single quotes needs to be doubled
-		ev := strings.Replace(v, `'`, `''`, -1)
-		_, err = f.WriteString(fmt.Sprintf("%s = '%s'\n", k, ev))
-		if err != nil {
-			os.Remove(f.Name())
-			return err
-		}
-	}
-	if err = f.Sync(); err != nil {
-		return err
+	err := common.WriteFileAtomicFunc(tmpPostgresConfPath, 0600,
+		func(f io.Writer) error {
+			// include postgresql.conf if it exists
+			_, err := os.Stat(filepath.Join(p.dataDir, postgresConf))
+			if err != nil && !os.IsNotExist(err) {
+				return err
+			}
+			if !os.IsNotExist(err) {
+				if _, err := f.Write([]byte(fmt.Sprintf("include '%s'\n", postgresConf))); err != nil {
+					return err
+				}
+			}
+			for k, v := range p.parameters {
+				// Single quotes needs to be doubled
+				ev := strings.Replace(v, `'`, `''`, -1)
+				if _, err := f.Write([]byte(fmt.Sprintf("%s = '%s'\n", k, ev))); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+	if err != nil {
+		return fmt.Errorf("error writing %s file: %v", tmpPostgresConf, err)
 	}
 
 	if err := p.writePgHba(); err != nil {
-		return fmt.Errorf("error writing conf file: %v", err)
+		return fmt.Errorf("error writing pg_hba.conf file: %v", err)
 	}
-	return p.start("-c", fmt.Sprintf("config_file=%s", f.Name()))
+
+	return p.start("-c", fmt.Sprintf("config_file=%s", tmpPostgresConfPath))
 }
 
 func (p *Manager) Start() error {
 	if err := p.WriteConf(); err != nil {
-		return fmt.Errorf("error writing conf file: %v", err)
+		return fmt.Errorf("error writing %s file: %v", postgresConf, err)
 	}
 	if err := p.writePgHba(); err != nil {
-		return fmt.Errorf("error writing conf file: %v", err)
+		return fmt.Errorf("error writing pg_hba.conf file: %v", err)
 	}
 	return p.start()
 }
@@ -384,10 +387,10 @@ func (p *Manager) IsStarted() (bool, error) {
 func (p *Manager) Reload() error {
 	log.Infow("reloading database configuration")
 	if err := p.WriteConf(); err != nil {
-		return fmt.Errorf("error writing conf file: %v", err)
+		return fmt.Errorf("error writing %s file: %v", postgresConf, err)
 	}
 	if err := p.writePgHba(); err != nil {
-		return fmt.Errorf("error writing conf file: %v", err)
+		return fmt.Errorf("error writing pg_hba.conf file: %v", err)
 	}
 	name := filepath.Join(p.pgBinPath, "pg_ctl")
 	cmd := exec.Command(name, "reload", "-D", p.dataDir, "-o", "-c unix_socket_directories="+common.PgUnixSocketDirectories)
@@ -721,72 +724,43 @@ func (p *Manager) HasConnParams() (bool, error) {
 }
 
 func (p *Manager) WriteConf() error {
-	f, err := ioutil.TempFile(p.dataDir, postgresConf)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	for k, v := range p.parameters {
-		// Single quotes needs to be doubled
-		ev := strings.Replace(v, `'`, `''`, -1)
-		_, err = f.WriteString(fmt.Sprintf("%s = '%s'\n", k, ev))
-		if err != nil {
-			os.Remove(f.Name())
-			return err
-		}
-	}
-	if err = f.Sync(); err != nil {
-		return err
-	}
-	if err = os.Rename(f.Name(), filepath.Join(p.dataDir, postgresConf)); err != nil {
-		os.Remove(f.Name())
-		return err
-	}
-
-	return nil
+	return common.WriteFileAtomicFunc(filepath.Join(p.dataDir, postgresConf), 0600,
+		func(f io.Writer) error {
+			for k, v := range p.parameters {
+				// Single quotes needs to be doubled
+				ev := strings.Replace(v, `'`, `''`, -1)
+				if _, err := f.Write([]byte(fmt.Sprintf("%s = '%s'\n", k, ev))); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
 }
 
 func (p *Manager) WriteRecoveryConf(recoveryParameters common.Parameters) error {
-	f, err := ioutil.TempFile(p.dataDir, "recovery.conf")
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	for n, v := range recoveryParameters {
-		f.WriteString(fmt.Sprintf("%s = '%s'\n", n, v))
-	}
-
-	if err = f.Sync(); err != nil {
-		return err
-	}
-
-	if err = os.Rename(f.Name(), filepath.Join(p.dataDir, "recovery.conf")); err != nil {
-		os.Remove(f.Name())
-		return err
-	}
-	return nil
+	return common.WriteFileAtomicFunc(filepath.Join(p.dataDir, "recovery.conf"), 0600,
+		func(f io.Writer) error {
+			for n, v := range recoveryParameters {
+				if _, err := f.Write([]byte(fmt.Sprintf("%s = '%s'\n", n, v))); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
 }
 
 func (p *Manager) writePgHba() error {
-	f, err := ioutil.TempFile(p.dataDir, "pg_hba.conf")
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	if p.hba != nil {
-		for _, e := range p.hba {
-			f.WriteString(e + "\n")
-		}
-	}
-
-	if err = os.Rename(f.Name(), filepath.Join(p.dataDir, "pg_hba.conf")); err != nil {
-		os.Remove(f.Name())
-		return err
-	}
-	return nil
+	return common.WriteFileAtomicFunc(filepath.Join(p.dataDir, "pg_hba.conf"), 0600,
+		func(f io.Writer) error {
+			if p.hba != nil {
+				for _, e := range p.hba {
+					if _, err := f.Write([]byte(e + "\n")); err != nil {
+						return err
+					}
+				}
+			}
+			return nil
+		})
 }
 
 // createPostgresqlAutoConf creates postgresql.auto.conf as a symlink to

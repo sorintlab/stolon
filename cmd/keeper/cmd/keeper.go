@@ -1678,7 +1678,7 @@ func (p *PostgresKeeper) saveKeeperLocalState() error {
 	if err != nil {
 		return err
 	}
-	return common.WriteFileAtomic(p.keeperLocalStateFilePath(), sj, 0600)
+	return common.WriteFileAtomic(p.keeperLocalStateFilePath(), 0600, sj)
 }
 
 func (p *PostgresKeeper) dbLocalStateFilePath() string {
@@ -1703,7 +1703,7 @@ func (p *PostgresKeeper) saveDBLocalState() error {
 	if err != nil {
 		return err
 	}
-	return common.WriteFileAtomic(p.dbLocalStateFilePath(), sj, 0600)
+	return common.WriteFileAtomic(p.dbLocalStateFilePath(), 0600, sj)
 }
 
 // IsMaster return if the db is the cluster master db.
