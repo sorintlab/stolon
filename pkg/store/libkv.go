@@ -32,6 +32,8 @@ func fromLibKVStoreErr(err error) error {
 	switch err {
 	case libkvstore.ErrKeyNotFound:
 		return ErrKeyNotFound
+	case libkvstore.ErrKeyModified:
+		return ErrKeyModified
 	}
 	return err
 }
