@@ -49,6 +49,8 @@ type CommonConfig struct {
 	KubeNamespace        string
 }
 
+var deprecatedKeyFile string
+
 func AddCommonFlags(cmd *cobra.Command, cfg *CommonConfig) {
 	cmd.PersistentFlags().StringVar(&cfg.ClusterName, "cluster-name", "", "cluster name")
 	cmd.PersistentFlags().StringVar(&cfg.StoreBackend, "store-backend", "", "store backend type (etcdv2/etcd, etcdv3, consul or kubernetes)")
@@ -56,13 +58,10 @@ func AddCommonFlags(cmd *cobra.Command, cfg *CommonConfig) {
 	cmd.PersistentFlags().StringVar(&cfg.StorePrefix, "store-prefix", common.StorePrefix, "the store base prefix")
 	cmd.PersistentFlags().StringVar(&cfg.StoreCertFile, "store-cert-file", "", "certificate file for client identification to the store")
 
-	cmd.PersistentFlags().StringVar(&cfg.StoreKeyFile, "store-key", "", "private key file for client identification to the store")
+	cmd.PersistentFlags().StringVar(&deprecatedKeyFile, "store-key", "", "private key file for client identification to the store")
 	cmd.PersistentFlags().MarkHidden("store-key")
 	cmd.PersistentFlags().MarkDeprecated("store-key", "use --store-key-file instead")
-
-	if !cmd.PersistentFlags().Changed("store-key") {
-		cmd.PersistentFlags().StringVar(&cfg.StoreKeyFile, "store-key-file", "", "private key file for client identification to the store")
-	}
+	cmd.PersistentFlags().StringVar(&cfg.StoreKeyFile, "store-key-file", "", "private key file for client identification to the store")
 
 	cmd.PersistentFlags().BoolVar(&cfg.StoreSkipTlsVerify, "store-skip-tls-verify", false, "skip store certificate verification (insecure!!!)")
 	cmd.PersistentFlags().StringVar(&cfg.StoreCAFile, "store-ca-file", "", "verify certificates of HTTPS-enabled store servers using this CA bundle")
@@ -82,7 +81,11 @@ func AddCommonFlags(cmd *cobra.Command, cfg *CommonConfig) {
 	}
 }
 
-func CheckCommonConfig(cfg *CommonConfig) error {
+func CheckCommonConfig(cmd *cobra.Command, cfg *CommonConfig) error {
+	if cmd.PersistentFlags().Changed("store-key") {
+		cfg.StoreKeyFile = deprecatedKeyFile
+	}
+
 	if cfg.ClusterName == "" {
 		return fmt.Errorf("cluster name required")
 	}

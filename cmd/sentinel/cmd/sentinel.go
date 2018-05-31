@@ -1898,7 +1898,7 @@ func sentinel(c *cobra.Command, args []string) {
 		postgresql.SetLogger(log)
 	}
 
-	if err := cmd.CheckCommonConfig(&cfg.CommonConfig); err != nil {
+	if err := cmd.CheckCommonConfig(c, &cfg.CommonConfig); err != nil {
 		die(err.Error())
 	}
 
