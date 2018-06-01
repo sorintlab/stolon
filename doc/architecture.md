@@ -41,6 +41,10 @@ If etcd or consul becomes partitioned (network partition or store nodes dead/wit
 
 Every stolon executable has a `--store-prefix` option (defaulting to `stolon/cluster`) to set the store path prefix. For etcdv3 and consul, if not provided, a starting `/` will be automatically added since they have a directory based layout. Instead, for etcdv3, the prefix will be kept as provided (etcdv3 has a flat namespace and for this reason two prefixes with and without a starting `/` are different and both valid).
 
+#### etcdv3 compaction
+
+When using etcdv3 you must periodically compact the keyspace to avoid storage space exhaustion. Stolon doesn't need historical key values but won't compact the etcdv3 store since this operation is global and the etcd cluster could be shared with other products that requires historical values. Compaction could be triggered in multiple ways. If possible we suggest to just enable automatic compaction (see etcd options). Please refer to the [official etcd doc](https://coreos.com/etcd/docs/latest/op-guide/maintenance.html).
+
 ### kubernetes store backend
 
 The kubernetes store relies on the kubernetes api server and uses kubernetes resources to save the clusterdata, components discovery and status report.
