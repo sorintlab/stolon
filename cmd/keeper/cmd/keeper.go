@@ -220,7 +220,8 @@ func (p *PostgresKeeper) getSUConnParams(db, followedDB *cluster.DB) pg.ConnPara
 		"port":             followedDB.Status.Port,
 		"application_name": common.StolonName(db.UID),
 		"dbname":           "postgres",
-		"sslmode":          "disable",
+		// prefer ssl if available (already the default for postgres libpq but not for golang lib pq)
+		"sslmode": "prefer",
 	}
 	if p.pgSUAuthMethod != "trust" {
 		cp.Set("password", p.pgSUPassword)
@@ -234,7 +235,8 @@ func (p *PostgresKeeper) getReplConnParams(db, followedDB *cluster.DB) pg.ConnPa
 		"host":             followedDB.Status.ListenAddress,
 		"port":             followedDB.Status.Port,
 		"application_name": common.StolonName(db.UID),
-		"sslmode":          "disable",
+		// prefer ssl if available (already the default for postgres libpq but not for golang lib pq)
+		"sslmode": "prefer",
 	}
 	if p.pgReplAuthMethod != "trust" {
 		cp.Set("password", p.pgReplPassword)
@@ -244,11 +246,11 @@ func (p *PostgresKeeper) getReplConnParams(db, followedDB *cluster.DB) pg.ConnPa
 
 func (p *PostgresKeeper) getLocalConnParams() pg.ConnParams {
 	cp := pg.ConnParams{
-		"user":    p.pgSUUsername,
-		"host":    common.PgUnixSocketDirectories,
-		"port":    p.pgPort,
-		"dbname":  "postgres",
-		"sslmode": "disable",
+		"user":   p.pgSUUsername,
+		"host":   common.PgUnixSocketDirectories,
+		"port":   p.pgPort,
+		"dbname": "postgres",
+		// no sslmode defined since it's not needed and supported over unix sockets
 	}
 	if p.pgSUAuthMethod != "trust" {
 		cp.Set("password", p.pgSUPassword)
@@ -262,7 +264,7 @@ func (p *PostgresKeeper) getLocalReplConnParams() pg.ConnParams {
 		"password": p.pgReplPassword,
 		"host":     common.PgUnixSocketDirectories,
 		"port":     p.pgPort,
-		"sslmode":  "disable",
+		// no sslmode defined since it's not needed and supported over unix sockets
 	}
 	if p.pgReplAuthMethod != "trust" {
 		cp.Set("password", p.pgReplPassword)
