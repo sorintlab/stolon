@@ -40,9 +40,11 @@ import (
 )
 
 const (
-	postgresConf     = "postgresql.conf"
-	postgresAutoConf = "postgresql.auto.conf"
-	tmpPostgresConf  = "stolon-temp-postgresql.conf"
+	postgresConf       = "postgresql.conf"
+	postgresAutoConf   = "postgresql.auto.conf"
+	tmpPostgresConf    = "stolon-temp-postgresql.conf"
+	defaultSocketGroup = "postgres"
+	defaultSocketPerms = "0777"
 
 	startTimeout = 60 * time.Second
 )
@@ -55,6 +57,7 @@ var log = slog.S()
 
 type Manager struct {
 	pgBinPath       string
+	pgSockPath      string
 	dataDir         string
 	parameters      common.Parameters
 	hba             []string
@@ -93,9 +96,18 @@ func SetLogger(l *zap.SugaredLogger) {
 	log = l
 }
 
-func NewManager(pgBinPath string, dataDir string, localConnParams, replConnParams ConnParams, suAuthMethod, suUsername, suPassword, replAuthMethod, replUsername, replPassword string, requestTimeout time.Duration) *Manager {
+func NewManager(pgBinPath string, dataDir, socketPath string, localConnParams, replConnParams ConnParams, suAuthMethod, suUsername, suPassword, replAuthMethod, replUsername, replPassword string, requestTimeout time.Duration) *Manager {
+	if socketPath == "" {
+		log.Infof("Checking Socket Path Dir: '%s', using default value : '%s'", socketPath, common.PgUnixSocketDirectories)
+		socketPath = common.PgUnixSocketDirectories
+	} else if _, err := os.Stat(socketPath); err != nil {
+		log.Infof("Checking Socket Path dir '%s', error : '%v', using default value : '%s'", socketPath, err, common.PgUnixSocketDirectories)
+		socketPath = common.PgUnixSocketDirectories
+	}
+
 	return &Manager{
 		pgBinPath:       pgBinPath,
+		pgSockPath:      socketPath,
 		dataDir:         filepath.Join(dataDir, "postgres"),
 		parameters:      make(common.Parameters),
 		curParameters:   make(common.Parameters),
@@ -109,6 +121,10 @@ func NewManager(pgBinPath string, dataDir string, localConnParams, replConnParam
 		replPassword:    replPassword,
 		requestTimeout:  requestTimeout,
 	}
+}
+
+func (p Manager) Socket() string {
+	return p.pgSockPath
 }
 
 func (p *Manager) SetParameters(parameters common.Parameters) {
@@ -286,7 +302,7 @@ func (p *Manager) start(args ...string) error {
 
 	log.Infow("starting database")
 	name := filepath.Join(p.pgBinPath, "postgres")
-	args = append([]string{"-D", p.dataDir, "-c", "unix_socket_directories=" + common.PgUnixSocketDirectories}, args...)
+	args = append([]string{"-D", p.dataDir, "-c", "unix_socket_directories=" + p.Socket()}, args...)
 	cmd := exec.Command(name, args...)
 	log.Debugw("execing cmd", "cmd", cmd)
 	// Pipe command's std[err|out] to parent.
@@ -350,7 +366,7 @@ func (p *Manager) start(args ...string) error {
 func (p *Manager) Stop(fast bool) error {
 	log.Infow("stopping database")
 	name := filepath.Join(p.pgBinPath, "pg_ctl")
-	cmd := exec.Command(name, "stop", "-w", "-D", p.dataDir, "-o", "-c unix_socket_directories="+common.PgUnixSocketDirectories)
+	cmd := exec.Command(name, "stop", "-w", "-D", p.dataDir, "-o", "-c unix_socket_directories="+p.Socket())
 	if fast {
 		cmd.Args = append(cmd.Args, "-m", "fast")
 	}
@@ -367,7 +383,7 @@ func (p *Manager) Stop(fast bool) error {
 
 func (p *Manager) IsStarted() (bool, error) {
 	name := filepath.Join(p.pgBinPath, "pg_ctl")
-	cmd := exec.Command(name, "status", "-D", p.dataDir, "-o", "-c unix_socket_directories="+common.PgUnixSocketDirectories)
+	cmd := exec.Command(name, "status", "-D", p.dataDir, "-o", "-c unix_socket_directories="+p.Socket())
 	_, err := cmd.CombinedOutput()
 	if err != nil {
 		if _, ok := err.(*exec.ExitError); ok {
@@ -393,7 +409,7 @@ func (p *Manager) Reload() error {
 		return fmt.Errorf("error writing pg_hba.conf file: %v", err)
 	}
 	name := filepath.Join(p.pgBinPath, "pg_ctl")
-	cmd := exec.Command(name, "reload", "-D", p.dataDir, "-o", "-c unix_socket_directories="+common.PgUnixSocketDirectories)
+	cmd := exec.Command(name, "reload", "-D", p.dataDir, "-o", "-c unix_socket_directories="+p.Socket())
 	log.Debugw("execing cmd", "cmd", cmd)
 
 	// Pipe command's std[err|out] to parent.
