@@ -794,7 +794,10 @@ func (p *Manager) SyncFromFollowedPGRewind(followedConnParams ConnParams, passwo
 	host := followedConnParams.Get("host")
 	port := followedConnParams.Get("port")
 	user := followedConnParams.Get("user")
+	sslmode := followedConnParams.Get("sslmode")
 	pgpass.WriteString(fmt.Sprintf("%s:%s:*:%s:%s\n", host, port, user, password))
+
+	log.Debugf("sync From : host: %s, port: %s, user:%s, ssl: %s", host, port, user, sslmode)
 
 	// Disable synchronous commits. pg_rewind needs to create a
 	// temporary table on the master but if synchronous replication is
@@ -805,7 +808,8 @@ func (p *Manager) SyncFromFollowedPGRewind(followedConnParams ConnParams, passwo
 	log.Infow("running pg_rewind")
 	name := filepath.Join(p.pgBinPath, "pg_rewind")
 	cmd := exec.Command(name, "--debug", "-D", p.dataDir, "--source-server="+followedConnString)
-	cmd.Env = append(os.Environ(), fmt.Sprintf("PGPASSFILE=%s", pgpass.Name()))
+	cmd.Env = append(os.Environ(), fmt.Sprintf("PGPASSFILE=%s", pgpass.Name()), fmt.Sprintf("PGSSLMODE=%s", sslmode))
+
 	log.Debugw("execing cmd", "cmd", cmd)
 
 	// Pipe command's std[err|out] to parent.
@@ -832,7 +836,10 @@ func (p *Manager) SyncFromFollowed(followedConnParams ConnParams, replSlot strin
 	port := fcp.Get("port")
 	user := fcp.Get("user")
 	password := fcp.Get("password")
+	sslmode := fcp.Get("sslmode")
 	pgpass.WriteString(fmt.Sprintf("%s:%s:*:%s:%s\n", host, port, user, password))
+
+	log.Debugf("sync From : host: %s, port: %s, user:%s, ssl: %s", host, port, user, sslmode)
 
 	// Remove password from the params passed to pg_basebackup
 	fcp.Del("password")
@@ -851,7 +858,7 @@ func (p *Manager) SyncFromFollowed(followedConnParams ConnParams, replSlot strin
 	}
 	cmd := exec.Command(name, args...)
 
-	cmd.Env = append(os.Environ(), fmt.Sprintf("PGPASSFILE=%s", pgpass.Name()))
+	cmd.Env = append(os.Environ(), fmt.Sprintf("PGPASSFILE=%s", pgpass.Name()), fmt.Sprintf("PGSSLMODE=%s", sslmode))
 	log.Debugw("execing cmd", "cmd", cmd)
 
 	// Pipe command's std[err|out] to parent.

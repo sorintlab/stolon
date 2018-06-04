@@ -87,6 +87,7 @@ type PostgresState struct {
 
 	ListenAddress string `json:"listenAddress,omitempty"`
 	Port          string `json:"port,omitempty"`
+	SSL           string `json:"ssl,omitempty"`
 
 	Healthy bool `json:"healthy,omitempty"`
 
@@ -112,6 +113,20 @@ func (p *PostgresState) DeepCopy() *PostgresState {
 		panic("not equal")
 	}
 	return np.(*PostgresState)
+}
+
+func (pgs *PostgresState) SSLMode(value string) string {
+	if value != "" {
+		pgs.SSL = value
+	} else if pgs.SSL == SSLModeEnable {
+		pgs.SSL = SSLModeEnable
+	} else if ssl, ok := pgs.PGParameters["ssl"]; !ok {
+		pgs.SSL = DefaultSSLMode
+	} else if ssl == SSLConfigEnable {
+		pgs.SSL = SSLModeEnable
+	}
+
+	return pgs.SSL
 }
 
 type SentinelsInfo []*SentinelInfo

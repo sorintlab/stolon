@@ -40,6 +40,9 @@ func BoolP(b bool) *bool {
 
 const (
 	CurrentCDFormatVersion uint64 = 1
+	SSLModeEnable                 = "allow"
+	SSLConfigEnable               = "on"
+	SSLConfigDisable              = "off"
 )
 
 const (
@@ -69,6 +72,7 @@ const (
 	DefaultMergePGParameter                           = true
 	DefaultRole                      ClusterRole      = ClusterRoleMaster
 	DefaultSUReplAccess              SUReplAccessMode = SUReplAccessAll
+	DefaultSSLMode                                    = "disable"
 )
 
 const (
@@ -616,6 +620,7 @@ type DBStatus struct {
 
 	ListenAddress string `json:"listenAddress,omitempty"`
 	Port          string `json:"port,omitempty"`
+	SSL           string `json:"ssl,omitempty"`
 
 	SystemID         string                   `json:"systemdID,omitempty"`
 	TimelineID       uint64                   `json:"timelineID,omitempty"`
@@ -726,4 +731,21 @@ func (cd *ClusterData) FindDB(keeper *Keeper) *DB {
 		}
 	}
 	return nil
+}
+
+func (db DB) SSLMode() string {
+	if db.Status.SSL != "" {
+		if db.Status.SSL != SSLModeEnable {
+			return DefaultSSLMode
+		}
+		return SSLModeEnable
+	}
+
+	if ssl, ok := db.Spec.PGParameters["ssl"]; !ok {
+		return DefaultSSLMode
+	} else if ssl == SSLConfigEnable {
+		return SSLModeEnable
+	}
+
+	return DefaultSSLMode
 }

@@ -220,7 +220,7 @@ func (p *PostgresKeeper) getSUConnParams(db, followedDB *cluster.DB) pg.ConnPara
 		"port":             followedDB.Status.Port,
 		"application_name": common.StolonName(db.UID),
 		"dbname":           "postgres",
-		"sslmode":          "disable",
+		"sslmode":          followedDB.SSLMode(),
 	}
 	if p.pgSUAuthMethod != "trust" {
 		cp.Set("password", p.pgSUPassword)
@@ -234,7 +234,7 @@ func (p *PostgresKeeper) getReplConnParams(db, followedDB *cluster.DB) pg.ConnPa
 		"host":             followedDB.Status.ListenAddress,
 		"port":             followedDB.Status.Port,
 		"application_name": common.StolonName(db.UID),
-		"sslmode":          "disable",
+		"sslmode":          followedDB.SSLMode(),
 	}
 	if p.pgReplAuthMethod != "trust" {
 		cp.Set("password", p.pgReplPassword)
@@ -248,7 +248,7 @@ func (p *PostgresKeeper) getLocalConnParams() pg.ConnParams {
 		"host":    common.PgUnixSocketDirectories,
 		"port":    p.pgPort,
 		"dbname":  "postgres",
-		"sslmode": "disable",
+		"sslmode": p.SSLMode(),
 	}
 	if p.pgSUAuthMethod != "trust" {
 		cp.Set("password", p.pgSUPassword)
@@ -262,12 +262,26 @@ func (p *PostgresKeeper) getLocalReplConnParams() pg.ConnParams {
 		"password": p.pgReplPassword,
 		"host":     common.PgUnixSocketDirectories,
 		"port":     p.pgPort,
-		"sslmode":  "disable",
+		"sslmode":  p.SSLMode(),
 	}
 	if p.pgReplAuthMethod != "trust" {
 		cp.Set("password", p.pgReplPassword)
 	}
 	return cp
+}
+
+func (p *PostgresKeeper) SSLMode() string {
+	if p.pgm == nil {
+		return cluster.DefaultSSLMode
+	} else if pgl, err := p.pgm.GetConfigFilePGParameters(); err != nil {
+		return cluster.DefaultSSLMode
+	} else if mod, ok := pgl["ssl"]; !ok {
+		return cluster.DefaultSSLMode
+	} else if mod != cluster.SSLConfigEnable {
+		return cluster.DefaultSSLMode
+	}
+
+	return cluster.SSLModeEnable
 }
 
 func (p *PostgresKeeper) createPGParameters(db *cluster.DB) common.Parameters {
@@ -340,6 +354,32 @@ func (p *PostgresKeeper) createPGParameters(db *cluster.DB) common.Parameters {
 		}
 	} else {
 		parameters["synchronous_standby_names"] = ""
+	}
+
+	if ssl, ok := parameters["ssl"]; ok && ssl == cluster.SSLConfigEnable {
+		// ssl_cert_file must be a valid readable file
+		// ssl_key_file must be a valid readable file
+		// cipher cannot be empty, default is HIGH:MEDIUM:+3DES:!aNULL
+		// CA can be empty to not verify peer certificate, but if specify it must be readable
+
+		cert, okc := parameters["ssl_cert_file"]
+		key, okk := parameters["ssl_key_file"]
+
+		if okc && okk {
+			if cert == "" || key == "" {
+				log.Errorf("SSL Check Error : certificates '%s' and key '%s' files must exists and be readable", cert, key)
+				parameters["ssl"] = cluster.SSLConfigDisable
+			} else if t, e := common.NewTLSConfig(cert, key, parameters["ssl_ca_file"], false); e != nil {
+				log.Errorf("SSL Check Error : %v", e)
+				parameters["ssl"] = cluster.SSLConfigDisable
+			} else if t == nil {
+				parameters["ssl"] = cluster.SSLConfigDisable
+			}
+		} else {
+			parameters["ssl"] = cluster.SSLConfigDisable
+		}
+	} else {
+		parameters["ssl"] = cluster.SSLConfigDisable
 	}
 
 	return parameters
@@ -595,6 +635,8 @@ func (p *PostgresKeeper) GetPGState(pctx context.Context) (*cluster.PostgresStat
 
 	pgState.ListenAddress = p.pgListenAddress
 	pgState.Port = p.pgPort
+
+	pgState.SSLMode(p.SSLMode())
 
 	initialized, err := p.pgm.IsInitialized()
 	if err != nil {
