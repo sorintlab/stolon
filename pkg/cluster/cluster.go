@@ -67,6 +67,7 @@ const (
 	DefaultAdditionalWalSenders                       = 5
 	DefaultUsePgrewind                                = false
 	DefaultMergePGParameter                           = true
+	DefaultNoDefaultAccessRules                       = false
 	DefaultRole                      ClusterRole      = ClusterRoleMaster
 	DefaultSUReplAccess              SUReplAccessMode = SUReplAccessAll
 )
@@ -266,6 +267,12 @@ type ClusterSpec struct {
 	// Values can be "all" or "strict", "all" allow access from all ips, "strict" restrict master access to standby servers ips.
 	// Default is "all"
 	DefaultSUReplAccessMode *SUReplAccessMode `json:"defaultSUReplAccessMode,omitempty"`
+	// NoDefaultAccessRules, if enabled, stolon won't add default pg_hba.conf
+	// rules to permit access from the other instances for replication. Is up
+	// to the user to define them in the pgHBA entries. Only the rules to
+	// permit the keeper to talk with the local managed postgres instance will
+	// be added.
+	NoDefaultAccessRules *bool `json:"noDefaultAccessRules,omitempty"`
 	// Map of postgres parameters
 	PGParameters PGParameters `json:"pgParameters,omitempty"`
 	// Additional pg_hba.conf entries
@@ -374,6 +381,9 @@ func (os *ClusterSpec) WithDefaults() *ClusterSpec {
 	if s.DefaultSUReplAccessMode == nil {
 		v := DefaultSUReplAccess
 		s.DefaultSUReplAccessMode = &v
+	}
+	if s.NoDefaultAccessRules == nil {
+		s.NoDefaultAccessRules = BoolP(DefaultNoDefaultAccessRules)
 	}
 	if s.Role == nil {
 		v := DefaultRole

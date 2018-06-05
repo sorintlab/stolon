@@ -1737,6 +1737,14 @@ func (p *PostgresKeeper) generateHBA(cd *cluster.ClusterData, db *cluster.DB) []
 		fmt.Sprintf("local replication %s %s", p.pgReplUsername, p.pgReplAuthMethod),
 	}
 
+	if *cd.Cluster.DefSpec().NoDefaultAccessRules {
+		if db.Spec.PGHBA != nil {
+			computedHBA = append(computedHBA, db.Spec.PGHBA...)
+		}
+
+		return computedHBA
+	}
+
 	switch *cd.Cluster.DefSpec().DefaultSUReplAccessMode {
 	case cluster.SUReplAccessAll:
 		// all the keepers will accept connections from every host
