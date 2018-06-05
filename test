@@ -6,13 +6,8 @@
 # ./test
 # ./test -v
 #
-# Run tests for one package
-#
-# PKG=./wal ./test
-# PKG=snap ./test
-#
 # Run also integration tests
-# INTEGRATION=1 ./test
+# INTEGRATION=1 STOLON_TEST_STORE_BACKEND=etcdv3 ./test
 #
 set -e
 
@@ -23,58 +18,49 @@ if [ $PWD != $BASEDIR ]; then
 	cd $BASEDIR
 fi
 
-source ./build
+ORG_PATH="github.com/sorintlab"
+REPO_PATH="${ORG_PATH}/stolon"
 
-TESTABLE="cmd/keeper cmd/sentinel cmd/proxy pkg/cluster pkg/store pkg/flagutil pkg/postgresql pkg/util"
+./build
 
-# user has not provided PKG override
-if [ -z "$PKG" ]; then
-	TEST=$TESTABLE
-	FMT=$TESTABLE
+# Hack to be sure that:
+# * all the dependencies are vendored
+# * if cloned as another repo name it will compile anyway
+export GOPATH=${PWD}/gopath
 
-# user has provided PKG override
-else
-	# strip out leading dotslashes and trailing slashes from PKG=./foo/
-	TEST=${PKG/#./}
-	TEST=${TEST/#\//}
-	TEST=${TEST/%\//}
+# test all packages excluding integration tests
+IGNORE_PKGS="(vendor/|tests/integration)"
+PACKAGES=$(find . -name \*_test.go | while read -r a; do dirname "$a"; done | sort | uniq | grep -vE "$IGNORE_PKGS" | sed "s|\./||g")
 
-	FMT=$TEST
-fi
-
-# split TEST into an array and prepend REPO_PATH to each local package
-split=(${TEST// / })
-TEST=${split[@]/#/${REPO_PATH}/}
-split=(${NO_RACE_TEST// / })
-NO_RACE_TEST=${split[@]/#/${REPO_PATH}/}
+# prepend REPO_PATH to each local package
+split=$PACKAGES
+PACKAGES=""
+for a in $split; do PACKAGES="$PACKAGES ${REPO_PATH}/${a}"; done
 
 echo "Running tests..."
 
-# Invoke ./cover for HTML output
 COVER=${COVER:-"-cover"}
 
 echo "Checking gofmt..."
-fmtRes=$(gofmt -l $FMT)
+fmtRes=$(gofmt -l $(find . -type f -name '*.go' ! -path './vendor/*'))
 if [ -n "${fmtRes}" ]; then
 	echo -e "gofmt checking failed:\n${fmtRes}"
 	exit 255
 fi
 
 echo "Checking govet..."
-vetRes=$(go vet $TEST)
+vetRes=$(go vet ${PACKAGES})
 if [ -n "${vetRes}" ]; then
 	echo -e "govet checking failed:\n${vetRes}"
 	exit 255
 fi
 
 echo "Checking govet -shadow ..."
-for path in $FMT; do
-	vetRes=$(go tool vet -shadow ${path})
-	if [ -n "${vetRes}" ]; then
-		echo -e "govet checking ${path} failed:\n${vetRes}"
-		exit 255
-	fi
-done
+vetRes=$(go vet -shadow ${PACKAGES})
+if [ -n "${vetRes}" ]; then
+	echo -e "govet checking ${path} failed:\n${vetRes}"
+	exit 255
+fi
 
 echo "Checking for license header..."
 licRes=$(for file in $(find . -type f -iname '*.go' ! -path './vendor/*'); do
@@ -85,7 +71,7 @@ if [ -n "${licRes}" ]; then
 	exit 255
 fi
 
-go test -timeout 3m ${COVER} $@ ${TEST} ${RACE}
+go test -timeout 3m ${COVER} $@ ${PACKAGES} ${RACE}
 
 if [ -n "$INTEGRATION" ]; then
 	echo "Running integration tests..."

@@ -33,6 +33,9 @@ fi
 ORG_PATH="github.com/sorintlab"
 REPO_PATH="${ORG_PATH}/stolon"
 
+# Hack to be sure that:
+# * all the dependencies are vendored
+# * if cloned as another repo name it will compile anyway
 export GOPATH=${PWD}/gopath
 
 rm -f $GOPATH/src/${REPO_PATH}

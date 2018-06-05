@@ -120,11 +120,11 @@ func update(cmd *cobra.Command, args []string) {
 				die("failed to patch cluster spec: %v", err)
 			}
 		} else {
-			if err := json.Unmarshal(data, &newcs); err != nil {
+			if err = json.Unmarshal(data, &newcs); err != nil {
 				die("failed to unmarshal cluster spec: %v", err)
 			}
 		}
-		if err := cd.Cluster.UpdateSpec(newcs); err != nil {
+		if err = cd.Cluster.UpdateSpec(newcs); err != nil {
 			die("Cannot update cluster spec: %v", err)
 		}
 
