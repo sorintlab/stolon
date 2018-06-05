@@ -19,9 +19,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/sorintlab/stolon/common"
-	"github.com/sorintlab/stolon/pkg/store"
-	"github.com/sorintlab/stolon/pkg/util"
+	"github.com/sorintlab/stolon/internal/common"
+	"github.com/sorintlab/stolon/internal/store"
+	"github.com/sorintlab/stolon/internal/util"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/mattn/go-isatty"

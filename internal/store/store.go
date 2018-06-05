@@ -19,7 +19,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/sorintlab/stolon/pkg/cluster"
+	"github.com/sorintlab/stolon/internal/cluster"
 )
 
 var (

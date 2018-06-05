@@ -17,7 +17,7 @@ package cluster
 import (
 	"reflect"
 
-	"github.com/sorintlab/stolon/common"
+	"github.com/sorintlab/stolon/internal/common"
 
 	"github.com/mitchellh/copystructure"
 )

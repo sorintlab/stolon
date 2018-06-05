@@ -14,7 +14,7 @@
 
 package v0
 
-import "github.com/sorintlab/stolon/common"
+import "github.com/sorintlab/stolon/internal/common"
 
 type KeepersInfo map[string]*KeeperInfo
 
