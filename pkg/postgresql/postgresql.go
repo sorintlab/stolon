@@ -96,7 +96,7 @@ func SetLogger(l *zap.SugaredLogger) {
 func NewManager(pgBinPath string, dataDir string, localConnParams, replConnParams ConnParams, suAuthMethod, suUsername, suPassword, replAuthMethod, replUsername, replPassword string, requestTimeout time.Duration) *Manager {
 	return &Manager{
 		pgBinPath:       pgBinPath,
-		dataDir:         filepath.Join(dataDir, "postgres"),
+		dataDir:         dataDir,
 		parameters:      make(common.Parameters),
 		curParameters:   make(common.Parameters),
 		replConnParams:  replConnParams,
@@ -179,7 +179,7 @@ func (p *Manager) Init(initConfig *InitConfig) error {
 	}
 	// remove the dataDir, so we don't end with an half initialized database
 	if err != nil {
-		os.RemoveAll(p.dataDir)
+		removeDirContents(p.dataDir)
 		return err
 	}
 	return nil
@@ -208,7 +208,7 @@ func (p *Manager) Restore(command string) error {
 	// On every error remove the dataDir, so we don't end with an half initialized database
 out:
 	if err != nil {
-		os.RemoveAll(p.dataDir)
+		removeDirContents(p.dataDir)
 		return err
 	}
 	return nil
@@ -879,7 +879,7 @@ func (p *Manager) RemoveAll() error {
 	if started {
 		return fmt.Errorf("cannot remove postregsql database. Instance is active")
 	}
-	return os.RemoveAll(p.dataDir)
+	return removeDirContents(p.dataDir)
 }
 
 func (p *Manager) GetSystemData() (*SystemData, error) {
