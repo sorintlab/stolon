@@ -79,7 +79,7 @@ func promote(cmd *cobra.Command, args []string) {
 		}
 		cd.Cluster.Spec.Role = cluster.ClusterRoleP(cluster.ClusterRoleMaster)
 
-		if err := cd.Cluster.UpdateSpec(cd.Cluster.Spec); err != nil {
+		if err = cd.Cluster.UpdateSpec(cd.Cluster.Spec); err != nil {
 			die("Cannot update cluster spec: %v", err)
 		}
 
