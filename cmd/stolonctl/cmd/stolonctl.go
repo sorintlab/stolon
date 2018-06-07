@@ -22,9 +22,9 @@ import (
 	"strings"
 
 	"github.com/sorintlab/stolon/cmd"
-	"github.com/sorintlab/stolon/pkg/cluster"
-	"github.com/sorintlab/stolon/pkg/flagutil"
-	"github.com/sorintlab/stolon/pkg/store"
+	"github.com/sorintlab/stolon/internal/cluster"
+	"github.com/sorintlab/stolon/internal/flagutil"
+	"github.com/sorintlab/stolon/internal/store"
 
 	"github.com/spf13/cobra"
 )

@@ -22,8 +22,8 @@ import (
 	"os"
 
 	cmdcommon "github.com/sorintlab/stolon/cmd"
-	"github.com/sorintlab/stolon/pkg/cluster"
-	"github.com/sorintlab/stolon/pkg/store"
+	"github.com/sorintlab/stolon/internal/cluster"
+	"github.com/sorintlab/stolon/internal/store"
 
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/util/strategicpatch"
