@@ -43,7 +43,7 @@ popd
 
 pushd examples/kubernetes
 
-sed -i 's#sorintlab/stolon:master-pg9.6#stolon:master-pg10#' *.yaml
+sed -i 's#sorintlab/stolon:master-pg10#stolon:master-pg10#' *.yaml
 
 for i in secret.yaml stolon-sentinel.yaml stolon-keeper.yaml stolon-proxy.yaml stolon-proxy-service.yaml ; do
 	kubectl apply -f $i
