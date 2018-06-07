@@ -29,3 +29,12 @@ Set MinSynchronousStandbys/MaxSynchronousStandbys to a value different than 1 on
 ```
 stolonctl --cluster-name=mycluster --store-backend=etcd update --patch '{ "synchronousReplication" : true, "minSynchronousStandbys": 2, "maxSynchronousStandbys": 3 }'
 ```
+
+## Use PostgreSQL instances not included into Stolon cluster as possible synchronous standbys
+Sometimes it is necessary to use an external PostgreSQL instance as a synchronous standby, and this instance due to some 
+reasons is not included into the Stolon cluster. For instance it can be the Barman that is desired to be the synchronous
+with the primary PostgreSQL instance which is hosted by the Stolon cluster.
+In order to do this specify externalFallbackSyncStandbys attribute.
+```
+stolonctl --cluster-name=mycluster --store-backend=etcd update --patch --patch '{ "externalFallbackSyncStandbys" : ["my_external_standby"] }' update
+```

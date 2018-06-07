@@ -25,6 +25,7 @@ import (
 	"github.com/mitchellh/copystructure"
 	"github.com/sorintlab/stolon/common"
 	util "github.com/sorintlab/stolon/pkg/postgresql"
+	"regexp"
 )
 
 func Uint16P(u uint16) *uint16 {
@@ -244,6 +245,10 @@ type ClusterSpec struct {
 	// here will be dropped from the master instance (i.e. manually created
 	// replication slots will be removed).
 	AdditionalMasterReplicationSlots []string `json:"additionalMasterReplicationSlots"`
+	// ExternalFallbackSyncStandbys is used to specify external (not included into stolon cluster)
+	// postgresql instances which can be used as synchronous standby-s when there are not enough
+	// synchronous standbys according to the parameter MinSynchronousStandbys
+	ExternalFallbackSyncStandbys []string `json:"externalFallbackSyncStandbys"`
 	// Whether to use pg_rewind
 	UsePgrewind *bool `json:"usePgrewind,omitempty"`
 	// InitMode defines the cluster initialization mode. Current modes are: new, existing, pitr
@@ -424,6 +429,11 @@ func (os *ClusterSpec) Validate() error {
 	if s.InitMode == nil {
 		return fmt.Errorf("initMode undefined")
 	}
+	for _, externalSyncStandbyName := range s.ExternalFallbackSyncStandbys {
+		if err := validateExternalSyncStandby(externalSyncStandbyName); err != nil {
+			return err
+		}
+	}
 	for _, replicationSlot := range s.AdditionalMasterReplicationSlots {
 		if err := validateReplicationSlot(replicationSlot); err != nil {
 			return err
@@ -480,6 +490,23 @@ func (os *ClusterSpec) Validate() error {
 	default:
 		return fmt.Errorf("unknown role: %q", *s.InitMode)
 	}
+	return nil
+}
+
+func validateExternalSyncStandby(externalSyncStandbyName string) error {
+	correctSymbolsNameFilter := regexp.MustCompile("[_0-9A-Za-z]")
+
+	if trimmedStandbyName := strings.TrimSpace(externalSyncStandbyName); len(trimmedStandbyName) == 0 ||
+		len(correctSymbolsNameFilter.ReplaceAllString(trimmedStandbyName, "")) > 0 ||
+		strings.Contains(externalSyncStandbyName, "\n") ||
+		len(trimmedStandbyName) != len(externalSyncStandbyName) {
+		return fmt.Errorf("external fallback synchronous standby name \"%s\" has an incorrect format, it may only contain letters, numbers, and the underscore character", externalSyncStandbyName)
+	}
+
+	if common.IsStolonName(externalSyncStandbyName) {
+		return fmt.Errorf("external fallback synchronous standby name \"%s\" has an incorrect format, it should not have prefix 'stolon_'", externalSyncStandbyName)
+	}
+
 	return nil
 }
 
