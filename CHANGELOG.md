@@ -1,6 +1,22 @@
 ### v0.11.0
 
-* In the k8s store backend, stolon components discovery now uses the `component` label instead of the `app` label.
+#### New features
+
+* In the k8s store backend, stolon components discovery now uses the `component` label instead of the `app` label (See Upgrade Notes) ([#469](https://github.com/sorintlab/stolon/pull/469))
+* Improved docker swarm examples to resemble the k8s one ([#482](https://github.com/sorintlab/stolon/pull/482))
+* If the user enabled ssl/tls use it also for replication/pg_rewind connections ([#501](https://github.com/sorintlab/stolon/pull/501))
+* Remove final newline from example base64 password in k8s example ([#505](https://github.com/sorintlab/stolon/pull/505))
+
+#### Bug Fixes
+
+* Fixed wrong libkv store election path (See Upgrade Notes) ([#479](https://github.com/sorintlab/stolon/pull/479))
+* Fixed a check in synchronous replication that will block future synchronous standbys updates under some circumstances ([#494](https://github.com/sorintlab/stolon/pull/494))
+* Fixed atomic writes of postgresql genenerated files ([#495](https://github.com/sorintlab/stolon/pull/495))
+
+Thanks to everybody who contributed to this release:
+
+Bill Helgeson, Niklas Hambüchen, Sylvere Richard, Tyler Kellen
+
 
 ## Upgrades notes.
 
@@ -27,7 +43,6 @@ Pierre Alexandre Assouad, Arun Babu Neelicattu, Sergey Kim
 
 * The logs will be colored only when on a tty or when `--log-color` is provided ([#416](https://github.com/sorintlab/stolon/pull/416))
 * Now the store prefix is configurable `--store-prefix` ([#425](https://github.com/sorintlab/stolon/pull/425))
-
 
 #### BugFixes
 
