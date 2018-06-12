@@ -31,6 +31,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/mitchellh/copystructure"
 	"github.com/sorintlab/stolon/cmd"
 	"github.com/sorintlab/stolon/internal/cluster"
 	"github.com/sorintlab/stolon/internal/common"
@@ -69,6 +70,21 @@ type DBLocalState struct {
 	// InitPGParameters contains the postgres parameter after the
 	// initialization
 	InitPGParameters common.Parameters
+}
+
+func (s *DBLocalState) DeepCopy() *DBLocalState {
+	if s == nil {
+		return nil
+	}
+	ns, err := copystructure.Copy(s)
+	if err != nil {
+		panic(err)
+	}
+	// paranoid test
+	if !reflect.DeepEqual(s, ns) {
+		panic("not equal")
+	}
+	return ns.(*DBLocalState)
 }
 
 type config struct {
@@ -276,8 +292,9 @@ func (p *PostgresKeeper) createPGParameters(db *cluster.DB) common.Parameters {
 	parameters := common.Parameters{}
 
 	// Include init parameters if include config is required
+	dbls := p.dbLocalStateCopy()
 	if db.Spec.IncludeConfig {
-		for k, v := range p.dbLocalState.InitPGParameters {
+		for k, v := range dbls.InitPGParameters {
 			parameters[k] = v
 		}
 	}
@@ -496,6 +513,12 @@ func NewPostgresKeeper(cfg *config, end chan error) (*PostgresKeeper, error) {
 	return p, nil
 }
 
+func (p *PostgresKeeper) dbLocalStateCopy() *DBLocalState {
+	p.localStateMutex.Lock()
+	defer p.localStateMutex.Unlock()
+	return p.dbLocalState.DeepCopy()
+}
+
 func (p *PostgresKeeper) usePgrewind(db *cluster.DB) bool {
 	return p.pgSUUsername != "" && p.pgSUPassword != "" && db.Spec.UsePgrewind
 }
@@ -590,10 +613,9 @@ func (p *PostgresKeeper) GetPGState(pctx context.Context) (*cluster.PostgresStat
 	// Just get one pgstate at a time to avoid exausting available connections
 	pgState := &cluster.PostgresState{}
 
-	p.localStateMutex.Lock()
-	pgState.UID = p.dbLocalState.UID
-	pgState.Generation = p.dbLocalState.Generation
-	p.localStateMutex.Unlock()
+	dbls := p.dbLocalStateCopy()
+	pgState.UID = dbls.UID
+	pgState.Generation = dbls.Generation
 
 	pgState.ListenAddress = p.pgListenAddress
 	pgState.Port = p.pgPort
@@ -1002,7 +1024,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 
 	var pgParameters common.Parameters
 
-	dbls := p.dbLocalState
+	dbls := p.dbLocalStateCopy()
 	if dbls.Initializing {
 		// If we are here this means that the db initialization or
 		// resync has failed so we have to clean up stale data
@@ -1019,12 +1041,12 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 			return
 		}
 		// Reset current db local state since it's not valid anymore
-		p.localStateMutex.Lock()
-		dbls.UID = ""
-		dbls.Generation = cluster.NoGeneration
-		dbls.Initializing = false
-		p.localStateMutex.Unlock()
-		if err = p.saveDBLocalState(); err != nil {
+		ndbls := &DBLocalState{
+			UID:          "",
+			Generation:   cluster.NoGeneration,
+			Initializing: false,
+		}
+		if err = p.saveDBLocalState(ndbls); err != nil {
 			log.Errorw("failed to save db local state", zap.Error(err))
 			return
 		}
@@ -1048,15 +1070,15 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 		log.Debugw("db status", "initialized", false, "started", false)
 	}
 
+	dbls = p.dbLocalStateCopy()
 	// if the db is initialized but there isn't a db local state then generate a new one
 	if initialized && dbls.UID == "" {
-		p.localStateMutex.Lock()
-		dbls.UID = common.UID()
-		dbls.Generation = cluster.NoGeneration
-		dbls.InitPGParameters = nil
-		dbls.Initializing = false
-		p.localStateMutex.Unlock()
-		if err = p.saveDBLocalState(); err != nil {
+		ndbls := &DBLocalState{
+			UID:          common.UID(),
+			Generation:   cluster.NoGeneration,
+			Initializing: false,
+		}
+		if err = p.saveDBLocalState(ndbls); err != nil {
 			log.Errorw("failed to save db local state", zap.Error(err))
 			return
 		}
@@ -1067,14 +1089,13 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 		switch db.Spec.InitMode {
 		case cluster.DBInitModeNew:
 			log.Infow("initializing the database cluster")
-			p.localStateMutex.Lock()
-			dbls.UID = db.UID
-			// Set a no generation since we aren't already converged.
-			dbls.Generation = cluster.NoGeneration
-			dbls.InitPGParameters = nil
-			dbls.Initializing = true
-			p.localStateMutex.Unlock()
-			if err = p.saveDBLocalState(); err != nil {
+			ndbls := &DBLocalState{
+				UID: db.UID,
+				// Set a no generation since we aren't already converged.
+				Generation:   cluster.NoGeneration,
+				Initializing: true,
+			}
+			if err = p.saveDBLocalState(ndbls); err != nil {
 				log.Errorw("failed to save db local state", zap.Error(err))
 				return
 			}
@@ -1106,30 +1127,23 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 			}
 			initialized = true
 
+			if err = pgm.StartTmpMerged(); err != nil {
+				log.Errorw("failed to start instance", zap.Error(err))
+				return
+			}
+			if err = pgm.WaitReady(cluster.DefaultDBWaitReadyTimeout); err != nil {
+				log.Errorw("timeout waiting for instance to be ready", zap.Error(err))
+				return
+			}
 			if db.Spec.IncludeConfig {
-				if err = pgm.StartTmpMerged(); err != nil {
-					log.Errorw("failed to start instance", zap.Error(err))
-					return
-				}
-				if err = pgm.WaitReady(cluster.DefaultDBWaitReadyTimeout); err != nil {
-					log.Errorw("timeout waiting for instance to be ready", zap.Error(err))
-					return
-				}
 				pgParameters, err = pgm.GetConfigFilePGParameters()
 				if err != nil {
 					log.Errorw("failed to retrieve postgres parameters", zap.Error(err))
 					return
 				}
-				p.localStateMutex.Lock()
-				dbls.InitPGParameters = pgParameters
-				p.localStateMutex.Unlock()
-			} else {
-				if err = pgm.StartTmpMerged(); err != nil {
-					log.Errorw("failed to start instance", zap.Error(err))
-					return
-				}
-				if err = pgm.WaitReady(cluster.DefaultDBWaitReadyTimeout); err != nil {
-					log.Errorw("timeout waiting for instance to be ready", zap.Error(err))
+				ndbls.InitPGParameters = pgParameters
+				if err = p.saveDBLocalState(ndbls); err != nil {
+					log.Errorw("failed to save db local state", zap.Error(err))
 					return
 				}
 			}
@@ -1140,24 +1154,19 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				return
 			}
 
-			if err = p.saveDBLocalState(); err != nil {
-				log.Errorw("failed to save db local state", zap.Error(err))
-				return
-			}
 			if err = pgm.StopIfStarted(true); err != nil {
 				log.Errorw("failed to stop pg instance", zap.Error(err))
 				return
 			}
 		case cluster.DBInitModePITR:
 			log.Infow("restoring the database cluster")
-			p.localStateMutex.Lock()
-			dbls.UID = db.UID
-			// Set a no generation since we aren't already converged.
-			dbls.Generation = cluster.NoGeneration
-			dbls.InitPGParameters = nil
-			dbls.Initializing = true
-			p.localStateMutex.Unlock()
-			if err = p.saveDBLocalState(); err != nil {
+			ndbls := &DBLocalState{
+				UID: db.UID,
+				// Set a no generation since we aren't already converged.
+				Generation:   cluster.NoGeneration,
+				Initializing: true,
+			}
+			if err = p.saveDBLocalState(ndbls); err != nil {
 				log.Errorw("failed to save db local state", zap.Error(err))
 				return
 			}
@@ -1211,31 +1220,28 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 					log.Errorw("failed to retrieve postgres parameters", zap.Error(err))
 					return
 				}
-				p.localStateMutex.Lock()
-				dbls.InitPGParameters = pgParameters
-				p.localStateMutex.Unlock()
+				ndbls.InitPGParameters = pgParameters
+				if err = p.saveDBLocalState(ndbls); err != nil {
+					log.Errorw("failed to save db local state", zap.Error(err))
+					return
+				}
 			}
 			initialized = true
 
-			if err = p.saveDBLocalState(); err != nil {
-				log.Errorw("failed to save db local state", zap.Error(err))
-				return
-			}
 			if err = pgm.StopIfStarted(true); err != nil {
 				log.Errorw("failed to stop pg instance", zap.Error(err))
 				return
 			}
 		case cluster.DBInitModeResync:
 			log.Infow("resyncing the database cluster")
-			// replace our current db uid with the required one.
-			p.localStateMutex.Lock()
-			dbls.UID = db.UID
-			// Set a no generation since we aren't already converged.
-			dbls.Generation = cluster.NoGeneration
-			dbls.InitPGParameters = nil
-			dbls.Initializing = true
-			p.localStateMutex.Unlock()
-			if err = p.saveDBLocalState(); err != nil {
+			ndbls := &DBLocalState{
+				// replace our current db uid with the required one.
+				UID: db.UID,
+				// Set a no generation since we aren't already converged.
+				Generation:   cluster.NoGeneration,
+				Initializing: true,
+			}
+			if err = p.saveDBLocalState(ndbls); err != nil {
 				log.Errorw("failed to save db local state", zap.Error(err))
 				return
 			}
@@ -1332,14 +1338,14 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 			initialized = true
 
 		case cluster.DBInitModeExisting:
-			// replace our current db uid with the required one.
-			p.localStateMutex.Lock()
-			dbls.UID = db.UID
-			// Set a no generation since we aren't already converged.
-			dbls.Generation = cluster.NoGeneration
-			dbls.InitPGParameters = nil
-			p.localStateMutex.Unlock()
-			if err = p.saveDBLocalState(); err != nil {
+			ndbls := &DBLocalState{
+				// replace our current db uid with the required one.
+				UID: db.UID,
+				// Set a no generation since we aren't already converged.
+				Generation:   cluster.NoGeneration,
+				Initializing: false,
+			}
+			if err = p.saveDBLocalState(ndbls); err != nil {
 				log.Errorw("failed to save db local state", zap.Error(err))
 				return
 			}
@@ -1353,55 +1359,39 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				log.Errorw("failed to stop pg instance", zap.Error(err))
 				return
 			}
+			if err = pgm.StartTmpMerged(); err != nil {
+				log.Errorw("failed to start instance", zap.Error(err))
+				return
+			}
+			if err = pgm.WaitReady(cluster.DefaultDBWaitReadyTimeout); err != nil {
+				log.Errorw("timeout waiting for instance to be ready", zap.Error(err))
+				return
+			}
 			if db.Spec.IncludeConfig {
-				if err = pgm.StartTmpMerged(); err != nil {
-					log.Errorw("failed to start instance", zap.Error(err))
-					return
-				}
-				if err = pgm.WaitReady(cluster.DefaultDBWaitReadyTimeout); err != nil {
-					log.Errorw("timeout waiting for instance to be ready", zap.Error(err))
-					return
-				}
 				pgParameters, err = pgm.GetConfigFilePGParameters()
 				if err != nil {
 					log.Errorw("failed to retrieve postgres parameters", zap.Error(err))
 					return
 				}
-				p.localStateMutex.Lock()
-				dbls.InitPGParameters = pgParameters
-				p.localStateMutex.Unlock()
-			} else {
-				if err = pgm.StartTmpMerged(); err != nil {
-					log.Errorw("failed to start instance", zap.Error(err))
+				ndbls.InitPGParameters = pgParameters
+				if err = p.saveDBLocalState(ndbls); err != nil {
+					log.Errorw("failed to save db local state", zap.Error(err))
 					return
 				}
-				if err = pgm.WaitReady(cluster.DefaultDBWaitReadyTimeout); err != nil {
-					log.Errorw("timeout waiting for instance to be ready", zap.Error(err))
-					return
-				}
-			}
-			log.Infow("updating our db UID with the cluster data provided db UID")
-			// replace our current db uid with the required one.
-			p.localStateMutex.Lock()
-			dbls.InitPGParameters = pgParameters
-			p.localStateMutex.Unlock()
-			if err = p.saveDBLocalState(); err != nil {
-				log.Errorw("failed to save db local state", zap.Error(err))
-				return
 			}
 			if err = pgm.StopIfStarted(true); err != nil {
 				log.Errorw("failed to stop pg instance", zap.Error(err))
 				return
 			}
 		case cluster.DBInitModeNone:
-			// replace our current db uid with the required one.
-			p.localStateMutex.Lock()
-			dbls.UID = db.UID
-			// Set a no generation since we aren't already converged.
-			dbls.Generation = cluster.NoGeneration
-			dbls.InitPGParameters = nil
-			p.localStateMutex.Unlock()
-			if err = p.saveDBLocalState(); err != nil {
+			ndbls := &DBLocalState{
+				// replace our current db uid with the required one.
+				UID: db.UID,
+				// Set a no generation since we aren't already converged.
+				Generation:   cluster.NoGeneration,
+				Initializing: false,
+			}
+			if err = p.saveDBLocalState(ndbls); err != nil {
 				log.Errorw("failed to save db local state", zap.Error(err))
 				return
 			}
@@ -1648,11 +1638,10 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 	}
 
 	// If we are here, then all went well and we can update the db generation and save it locally
-	p.localStateMutex.Lock()
-	dbls.Generation = db.Generation
-	dbls.Initializing = false
-	p.localStateMutex.Unlock()
-	if err := p.saveDBLocalState(); err != nil {
+	ndbls := p.dbLocalStateCopy()
+	ndbls.Generation = db.Generation
+	ndbls.Initializing = false
+	if err := p.saveDBLocalState(ndbls); err != nil {
 		log.Errorw("failed to save db local state", zap.Error(err))
 		return
 	}
@@ -1700,12 +1689,22 @@ func (p *PostgresKeeper) loadDBLocalState() error {
 	return nil
 }
 
-func (p *PostgresKeeper) saveDBLocalState() error {
-	sj, err := json.Marshal(p.dbLocalState)
+// saveDBLocalState saves on disk the dbLocalState and only if successfull
+// updates the current in memory state
+func (p *PostgresKeeper) saveDBLocalState(dbls *DBLocalState) error {
+	sj, err := json.Marshal(dbls)
 	if err != nil {
 		return err
 	}
-	return common.WriteFileAtomic(p.dbLocalStateFilePath(), 0600, sj)
+	if err = common.WriteFileAtomic(p.dbLocalStateFilePath(), 0600, sj); err != nil {
+		return err
+	}
+
+	p.localStateMutex.Lock()
+	p.dbLocalState = dbls.DeepCopy()
+	p.localStateMutex.Unlock()
+
+	return nil
 }
 
 // IsMaster return if the db is the cluster master db.
