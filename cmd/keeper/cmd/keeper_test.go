@@ -217,7 +217,7 @@ func TestGenerateHBA(t *testing.T) {
 		db := cd.DBs[tt.dbUID]
 		db.Spec.PGHBA = tt.pgHBA
 
-		out := p.generateHBA(cd, db)
+		out := p.generateHBA(cd, db, false)
 
 		if !reflect.DeepEqual(out, tt.out) {
 			var b bytes.Buffer
