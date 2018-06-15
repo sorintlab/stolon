@@ -95,6 +95,11 @@ type FollowConfig struct {
 	StandbySettings *StandbySettings `json:"standbySettings,omitempty"`
 }
 
+type PostgresBinaryVersion struct {
+	Maj int
+	Min int
+}
+
 type ClusterPhase string
 
 const (
@@ -530,6 +535,8 @@ type KeeperStatus struct {
 	LastHealthyTime time.Time `json:"lastHealthyTime,omitempty"`
 
 	BootUUID string `json:"bootUUID,omitempty"`
+
+	PostgresBinaryVersion PostgresBinaryVersion `json:"postgresBinaryVersion,omitempty"`
 }
 
 type Keeper struct {
