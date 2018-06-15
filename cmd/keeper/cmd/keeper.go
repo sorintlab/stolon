@@ -1052,40 +1052,15 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 		}
 	}
 
-	initialized, err := pgm.IsInitialized()
-	if err != nil {
-		log.Errorw("failed to detect if instance is initialized", zap.Error(err))
-		return
-	}
-
-	if initialized {
-		var started bool
-		started, err = pgm.IsStarted()
+	if p.dbLocalState.UID != db.UID {
+		var initialized bool
+		initialized, err = pgm.IsInitialized()
 		if err != nil {
-			// log error getting instance state but go ahead.
-			log.Errorw("failed to retrieve instance status", zap.Error(err))
-		}
-		log.Debugw("db status", "initialized", true, "started", started)
-	} else {
-		log.Debugw("db status", "initialized", false, "started", false)
-	}
-
-	dbls = p.dbLocalStateCopy()
-	// if the db is initialized but there isn't a db local state then generate a new one
-	if initialized && dbls.UID == "" {
-		ndbls := &DBLocalState{
-			UID:          common.UID(),
-			Generation:   cluster.NoGeneration,
-			Initializing: false,
-		}
-		if err = p.saveDBLocalState(ndbls); err != nil {
-			log.Errorw("failed to save db local state", zap.Error(err))
+			log.Errorw("failed to detect if instance is initialized", zap.Error(err))
 			return
 		}
-	}
+		log.Infow("current db UID different than cluster data db UID", "db", p.dbLocalState.UID, "cdDB", db.UID)
 
-	if dbls.UID != db.UID {
-		log.Infow("current db UID different than cluster data db UID", "db", dbls.UID, "cdDB", db.UID)
 		switch db.Spec.InitMode {
 		case cluster.DBInitModeNew:
 			log.Infow("initializing the database cluster")
@@ -1125,7 +1100,6 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				log.Errorw("failed to initialize postgres database cluster", zap.Error(err))
 				return
 			}
-			initialized = true
 
 			if err = pgm.StartTmpMerged(); err != nil {
 				log.Errorw("failed to start instance", zap.Error(err))
@@ -1226,7 +1200,6 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 					return
 				}
 			}
-			initialized = true
 
 			if err = pgm.StopIfStarted(true); err != nil {
 				log.Errorw("failed to stop pg instance", zap.Error(err))
@@ -1335,7 +1308,6 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 					}
 				}
 			}
-			initialized = true
 
 		case cluster.DBInitModeExisting:
 			ndbls := &DBLocalState{
@@ -1384,22 +1356,30 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				return
 			}
 		case cluster.DBInitModeNone:
-			ndbls := &DBLocalState{
-				// replace our current db uid with the required one.
-				UID: db.UID,
-				// Set a no generation since we aren't already converged.
-				Generation:   cluster.NoGeneration,
-				Initializing: false,
-			}
-			if err = p.saveDBLocalState(ndbls); err != nil {
-				log.Errorw("failed to save db local state", zap.Error(err))
-				return
-			}
+			log.Errorw("different local dbUID but init mode is none, this shouldn't happen. Something bad happened to the keeper data. Check that keeper data is on a persistent volume and that the keeper state files weren't removed")
 			return
 		default:
 			log.Errorw("unknown db init mode", "initMode", string(db.Spec.InitMode))
 			return
 		}
+	}
+
+	initialized, err := pgm.IsInitialized()
+	if err != nil {
+		log.Errorw("failed to detect if instance is initialized", zap.Error(err))
+		return
+	}
+
+	if initialized {
+		var started bool
+		started, err = pgm.IsStarted()
+		if err != nil {
+			// log error getting instance state but go ahead.
+			log.Errorw("failed to retrieve instance status", zap.Error(err))
+		}
+		log.Debugw("db status", "initialized", true, "started", started)
+	} else {
+		log.Debugw("db status", "initialized", false, "started", false)
 	}
 
 	// create postgres parameteres

@@ -1710,3 +1710,86 @@ func TestStandbyCantSync(t *testing.T) {
 		t.Fatalf("expected different dbuid for standbys[0]: got the same: %q", newStandby0DBUID)
 	}
 }
+
+// TestDisappearedKeeperData tests that, if keeper data disappears (at least
+// dbstate file is missing) and there's not init mode defined in the db spec, it'll
+// return en error
+func TestDisappearedKeeperData(t *testing.T) {
+	t.Parallel()
+
+	dir, err := ioutil.TempDir("", "stolon")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer os.RemoveAll(dir)
+
+	clusterName := uuid.NewV4().String()
+
+	tks, tss, tp, tstore := setupServers(t, clusterName, dir, 2, 1, false, false, nil)
+	defer shutdown(tks, tss, tp, tstore)
+
+	storePath := filepath.Join(common.StorePrefix, clusterName)
+	sm := store.NewKVBackedStore(tstore.store, storePath)
+
+	master, standbys := waitMasterStandbysReady(t, sm, tks)
+	standby := standbys[0]
+
+	if err := populate(t, master); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := write(t, master, 1, 1); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// get the master XLogPos
+	xLogPos, err := GetXLogPos(master)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	// wait for the keepers to have reported their state
+	if err := WaitClusterSyncedXLogPos([]*TestKeeper{master, standby}, xLogPos, sm, 20*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// the proxy should connect to the right master
+	if err := tp.WaitRightMaster(master, 3*cluster.DefaultProxyCheckInterval); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// Stop the master keeper
+	t.Logf("Stopping current master keeper: %s", master.uid)
+	master.Stop()
+
+	// Remove master data
+	if err := os.RemoveAll(master.dataDir); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// restart master
+	t.Logf("Starting current master keeper: %s", master.uid)
+	master.Start()
+	waitKeeperReady(t, sm, master)
+
+	// master shouldn't start its postgres instance and standby should be elected as new master
+
+	// Wait for cluster data containing standby as master
+	if err := WaitClusterDataMaster(standby.uid, sm, 30*time.Second); err != nil {
+		t.Fatalf("expected master %q in cluster view", standby.uid)
+	}
+	if err := standby.WaitDBRole(common.RoleMaster, nil, 30*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	c, err := getLines(t, standby)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if c != 1 {
+		t.Fatalf("wrong number of lines, want: %d, got: %d", 1, c)
+	}
+
+	// the proxy should connect to the right master
+	if err := tp.WaitRightMaster(standby, 3*cluster.DefaultProxyCheckInterval); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+}
