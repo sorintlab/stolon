@@ -248,6 +248,8 @@ func (s *Sentinel) updateKeepersStatus(cd *cluster.ClusterData, keepersInfo clus
 			s.CleanKeeperError(keeperUID)
 			// Update keeper status infos
 			k.Status.BootUUID = ki.BootUUID
+			k.Status.PostgresBinaryVersion.Maj = ki.PostgresBinaryVersion.Maj
+			k.Status.PostgresBinaryVersion.Min = ki.PostgresBinaryVersion.Min
 		}
 	}
 

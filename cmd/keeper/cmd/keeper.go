@@ -336,12 +336,6 @@ func (p *PostgresKeeper) createPGParameters(db *cluster.DB) common.Parameters {
 		for _, synchronousStandby := range db.Spec.ExternalSynchronousStandbys {
 			synchronousStandbys = append(synchronousStandbys, synchronousStandby)
 		}
-		// TODO(sgotti) Find a way to detect the pg major version also
-		// when the instance is empty. Parsing the postgres --version
-		// is not always reliable (for example we can get `10devel` for
-		// development version).
-		// Now this will lead to problems starting the instance (or
-		// warning reloading the parameters) with postgresql < 9.6
 
 		// We deliberately don't use postgres FIRST or ANY methods with N
 		// different than len(synchronousStandbys) because we need that all the
@@ -533,11 +527,21 @@ func (p *PostgresKeeper) updateKeeperInfo() error {
 		return nil
 	}
 
+	maj, min, err := p.pgm.BinaryVersion()
+	if err != nil {
+		// in case we fail to parse the binary version then log it and just report maj and min as 0
+		log.Warnf("failed to get postgres binary version: %v", err)
+	}
+
 	keeperInfo := &cluster.KeeperInfo{
-		InfoUID:       common.UID(),
-		UID:           keeperUID,
-		ClusterUID:    clusterUID,
-		BootUUID:      p.bootUUID,
+		InfoUID:    common.UID(),
+		UID:        keeperUID,
+		ClusterUID: clusterUID,
+		BootUUID:   p.bootUUID,
+		PostgresBinaryVersion: cluster.PostgresBinaryVersion{
+			Maj: maj,
+			Min: min,
+		},
 		PostgresState: p.getLastPGState(),
 	}
 

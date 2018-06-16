@@ -47,6 +47,8 @@ type KeeperInfo struct {
 	ClusterUID string `json:"clusterUID,omitempty"`
 	BootUUID   string `json:"bootUUID,omitempty"`
 
+	PostgresBinaryVersion PostgresBinaryVersion `json:"postgresBinaryVersion,omitempty"`
+
 	PostgresState *PostgresState `json:"postgresState,omitempty"`
 }
 
