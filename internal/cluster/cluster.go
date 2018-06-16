@@ -631,10 +631,17 @@ type DBStatus struct {
 
 	PGParameters PGParameters `json:"pgParameters,omitempty"`
 
-	// DBUIDs of the internal standbys set as synchronous
+	// DBUIDs of the internal standbys currently reported as in sync by the instance
+	CurSynchronousStandbys []string `json:"-"`
+
+	// DBUIDs of the internal standbys that we know are in sync.
+	// They could be currently down but we know that they were reported as in
+	// sync in the past and they are defined inside synchronous_standby_names
+	// so the instance will wait for acknowledge from them.
+	SynchronousStandbys []string `json:"synchronousStandbys"`
+
 	// NOTE(sgotti) we currently don't report the external synchronous standbys.
 	// If/when needed lets add a new ExternalSynchronousStandbys field
-	SynchronousStandbys []string `json:"synchronousStandbys"`
 
 	OlderWalFile string `json:"olderWalFile,omitempty"`
 }

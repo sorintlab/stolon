@@ -231,6 +231,34 @@ func getRole(ctx context.Context, connParams ConnParams) (common.Role, error) {
 	return "", fmt.Errorf("no rows returned")
 }
 
+func getSyncStandbys(ctx context.Context, connParams ConnParams) ([]string, error) {
+	db, err := sql.Open("postgres", connParams.ConnString())
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+
+	rows, err := query(ctx, db, "select application_name, sync_state from pg_stat_replication")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	syncStandbys := []string{}
+	for rows.Next() {
+		var applicationName, syncState string
+		if err := rows.Scan(&applicationName, &syncState); err != nil {
+			return nil, err
+		}
+
+		if syncState == "sync" {
+			syncStandbys = append(syncStandbys, applicationName)
+		}
+	}
+
+	return syncStandbys, nil
+}
+
 func PGLsnToInt(lsn string) (uint64, error) {
 	parts := strings.Split(lsn, "/")
 	if len(parts) != 2 {

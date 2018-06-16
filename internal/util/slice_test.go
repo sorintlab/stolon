@@ -67,3 +67,33 @@ func TestCompareStringSliceNoOrder(t *testing.T) {
 		}
 	}
 }
+
+func TestDifference(t *testing.T) {
+	tests := []struct {
+		a []string
+		b []string
+		r []string
+	}{
+		{[]string{}, []string{}, []string{}},
+		{[]string{"", ""}, []string{""}, []string{}},
+		{[]string{"", ""}, []string{"", ""}, []string{}},
+		{[]string{"", ""}, []string{"a", "", "b"}, []string{}},
+		{[]string{"a", "b"}, []string{"a", "b"}, []string{}},
+		{[]string{"a", "b"}, []string{"b", "a"}, []string{}},
+		{[]string{"a", "b", "c"}, []string{}, []string{"a", "b", "c"}},
+		{[]string{"a", "b", "c"}, []string{"a", "b"}, []string{"c"}},
+		{[]string{"a", "b"}, []string{"a", "b", "c"}, []string{}},
+		{[]string{"a", "b"}, []string{"c", "a", "b"}, []string{}},
+		{[]string{"a", "b", "c"}, []string{"a", "b", "c"}, []string{}},
+		{[]string{"a", "b", "c"}, []string{"b", "c", "a"}, []string{}},
+		{[]string{"a", "b", "c", "a"}, []string{"a", "c", "b", "b"}, []string{}},
+		{[]string{"a", "b", "c", "a"}, []string{"a", "c", "b", "b"}, []string{}},
+	}
+
+	for i, tt := range tests {
+		r := Difference(tt.a, tt.b)
+		if !CompareStringSliceNoOrder(r, tt.r) {
+			t.Errorf("%d: got %v but wanted: %v a: %v, b: %v", i, r, tt.r, tt.a, tt.b)
+		}
+	}
+}
