@@ -306,7 +306,7 @@ func (s *Sentinel) updateKeepersStatus(cd *cluster.ClusterData, keepersInfo clus
 			db.Status.TimelinesHistory = dbs.TimelinesHistory
 			db.Status.PGParameters = cluster.PGParameters(dbs.PGParameters)
 
-			db.Status.SynchronousStandbys = dbs.SynchronousStandbys
+			db.Status.CurSynchronousStandbys = dbs.SynchronousStandbys
 
 			db.Status.OlderWalFile = dbs.OlderWalFile
 		} else {
@@ -1202,13 +1202,50 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 						}
 					}
 
+					// if the current known in sync syncstandbys are different than the required ones wait for them and remove non good ones
+					if !util.CompareStringSliceNoOrder(masterDB.Status.SynchronousStandbys, masterDB.Spec.SynchronousStandbys) {
+
+						// remove old syncstandbys from current status
+						masterDB.Status.SynchronousStandbys = util.CommonElements(masterDB.Status.SynchronousStandbys, masterDB.Spec.SynchronousStandbys)
+
+						// add reported in sync syncstandbys to the current status
+						curSyncStandbys := util.CommonElements(masterDB.Status.CurSynchronousStandbys, masterDB.Spec.SynchronousStandbys)
+						toAddSyncStandbys := util.Difference(curSyncStandbys, masterDB.Status.SynchronousStandbys)
+						masterDB.Status.SynchronousStandbys = append(masterDB.Status.SynchronousStandbys, toAddSyncStandbys...)
+
+						// if some of the non yet in sync syncstandbys are failed, set Spec.SynchronousStandbys to the current in sync ones, se other could be added.
+						notInSyncSyncStandbys := util.Difference(masterDB.Spec.SynchronousStandbys, masterDB.Status.SynchronousStandbys)
+						update := false
+						for _, dbUID := range notInSyncSyncStandbys {
+							if _, ok := newcd.DBs[dbUID]; !ok {
+								log.Infow("one of the new synchronousStandbys has been removed", "db", dbUID, "inSyncStandbys", masterDB.Status.SynchronousStandbys, "synchronousStandbys", masterDB.Spec.SynchronousStandbys)
+								update = true
+								continue
+							}
+							if _, ok := goodStandbys[dbUID]; !ok {
+								log.Infow("one of the new synchronousStandbys is not in good state", "db", dbUID, "inSyncStandbys", masterDB.Status.SynchronousStandbys, "synchronousStandbys", masterDB.Spec.SynchronousStandbys)
+								update = true
+								continue
+							}
+						}
+						if update {
+							// Use the current known in sync syncStandbys as Spec.SynchronousStandbys
+							log.Infow("setting the expected sync-standbys to the current known in sync sync-standbys", "inSyncStandbys", masterDB.Status.SynchronousStandbys, "synchronousStandbys", masterDB.Spec.SynchronousStandbys)
+							masterDB.Spec.SynchronousStandbys = masterDB.Status.SynchronousStandbys
+
+							// Just sort to always have them in the same order and avoid
+							// unneeded updates to synchronous_standby_names by the keeper.
+							sort.Sort(sort.StringSlice(masterDB.Spec.SynchronousStandbys))
+						}
+					}
+
 					// update synchronousStandbys only if the reported
 					// SynchronousStandbys are the same as the required ones. In
 					// this way, when we have to choose a new master we are sure
 					// that there're no intermediate changes between the
 					// reported standbys and the required ones.
 					if !util.CompareStringSliceNoOrder(masterDB.Status.SynchronousStandbys, masterDB.Spec.SynchronousStandbys) {
-						log.Infof("won't update masterDB required synchronous standby since the latest master reported synchronous standbys are different from the db spec ones", "reported", curMasterDB.Status.SynchronousStandbys, "spec", curMasterDB.Spec.SynchronousStandbys)
+						log.Infow("waiting for new defined synchronous standbys to be in sync", "inSyncStandbys", curMasterDB.Status.SynchronousStandbys, "synchronousStandbys", curMasterDB.Spec.SynchronousStandbys)
 					} else {
 						addFakeStandby := false
 						externalSynchronousStandbys := map[string]struct{}{}
@@ -1358,6 +1395,9 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 							masterDB.Spec.ExternalSynchronousStandbys = append(masterDB.Spec.ExternalSynchronousStandbys, fakeStandbyName)
 						}
 
+						// remove old syncstandbys from current status
+						masterDB.Status.SynchronousStandbys = util.CommonElements(masterDB.Status.SynchronousStandbys, masterDB.Spec.SynchronousStandbys)
+
 						// Just sort to always have them in the same order and avoid
 						// unneeded updates to synchronous_standby_names by the keeper.
 						sort.Sort(sort.StringSlice(masterDB.Spec.SynchronousStandbys))
@@ -1367,6 +1407,8 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 					masterDB.Spec.SynchronousReplication = false
 					masterDB.Spec.SynchronousStandbys = nil
 					masterDB.Spec.ExternalSynchronousStandbys = nil
+
+					masterDB.Status.SynchronousStandbys = nil
 				}
 
 				// NotFailed != Good since there can be some dbs that are converging

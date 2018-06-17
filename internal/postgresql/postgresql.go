@@ -532,6 +532,12 @@ func (p *Manager) SetupRoles() error {
 	return nil
 }
 
+func (p *Manager) GetSyncStandbys() ([]string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), p.requestTimeout)
+	defer cancel()
+	return getSyncStandbys(ctx, p.localConnParams)
+}
+
 func (p *Manager) GetReplicationSlots() ([]string, error) {
 	maj, _, err := p.PGDataVersion()
 	if err != nil {

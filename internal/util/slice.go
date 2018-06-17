@@ -72,3 +72,14 @@ func CommonElements(a []string, b []string) []string {
 	}
 	return common
 }
+
+// Difference returns elements in a - b
+func Difference(a []string, b []string) []string {
+	diff := []string{}
+	for _, v := range a {
+		if !StringInSlice(b, v) {
+			diff = append(diff, v)
+		}
+	}
+	return diff
+}
