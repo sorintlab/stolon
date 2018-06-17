@@ -7,7 +7,7 @@ You can enable/disable synchronous replication at any time and the keepers will 
 
 ### Min and Max number of synchronous replication standbys
 
-In the cluster spec you can set the `MinSynchronousStandbys` and `MaxSynchronousStandbys` values (they both defaults to 1). Having multiple synchronous standbys is a feature provided starting from [PostgreSQL 9.6](https://www.postgresql.org/docs/9.6/static/warm-standby.html#SYNCHRONOUS-REPLICATION). Increasing these value above 1 for postgres versions below 9.6 will lead to errors starting the instance.
+In the cluster spec you can set the `MinSynchronousStandbys` and `MaxSynchronousStandbys` values (they both defaults to 1). Having multiple synchronous standbys is a feature provided starting from [PostgreSQL 9.6](https://www.postgresql.org/docs/9.6/static/warm-standby.html#SYNCHRONOUS-REPLICATION). Values different than 1 for postgres versions below 9.6 will be ignored.
 
 ## Enable synchronous replication.
 
@@ -24,7 +24,7 @@ stolonctl --cluster-name=mycluster --store-backend=etcd update --patch '{ "synch
 
 ## Set min and max number of synchronous replication standbys
 
-Set MinSynchronousStandbys/MaxSynchronousStandbys to a value different than 1 only when using PostgreSQL >= 9.6
+Set MinSynchronousStandbys/MaxSynchronousStandbys to a value greater than 1 (only when using PostgreSQL >= 9.6)
 
 ```
 stolonctl --cluster-name=mycluster --store-backend=etcd update --patch '{ "synchronousReplication" : true, "minSynchronousStandbys": 2, "maxSynchronousStandbys": 3 }'
