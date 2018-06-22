@@ -48,7 +48,7 @@ The stolon pros are the same of the above question and it'll let you avoid the n
 
 ## What happens if etcd/consul is partitioned?
 
-See [Stolon Architecture and Requirements](doc/architecture.md)
+See [Stolon Architecture and Requirements](architecture.md)
 
 ## How are backups handled with stolon?
 
