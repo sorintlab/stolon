@@ -127,17 +127,17 @@ func GetXLogPos(q Querier) (uint64, error) {
 
 // getReplicatinSlots return existing replication slots (also temporary
 // replication slots on PostgreSQL > 10)
-func getReplicationSlots(q Querier) ([]string, error) {
-	replSlots := []string{}
+func getReplicationSlots(q Querier) (pg.ReplicationSlots, error) {
+	replSlots := pg.ReplicationSlots{}
 
-	rows, err := q.Query("select slot_name from pg_replication_slots")
+	rows, err := q.Query("select slot_name, slot_type from pg_replication_slots")
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var slotName string
-		if err := rows.Scan(&slotName); err != nil {
+		var slotName pg.ReplicationSlot
+		if err := rows.Scan(&slotName.SlotName, &slotName.SlotType); err != nil {
 			return nil, err
 		}
 		replSlots = append(replSlots, slotName)
@@ -157,7 +157,7 @@ func waitReplicationSlots(q Querier, replSlots []string, timeout time.Duration) 
 		if err != nil {
 			goto end
 		}
-		sort.Sort(sort.StringSlice(curReplSlots))
+		sort.Sort(curReplSlots)
 		if reflect.DeepEqual(replSlots, curReplSlots) {
 			return nil
 		}
@@ -180,8 +180,8 @@ func waitNotStolonReplicationSlots(q Querier, replSlots []string, timeout time.D
 		}
 		curReplSlots = []string{}
 		for _, s := range allReplSlots {
-			if !common.IsStolonName(s) {
-				curReplSlots = append(curReplSlots, s)
+			if !common.IsStolonName(s.SlotName) {
+				curReplSlots = append(curReplSlots, s.SlotName)
 			}
 		}
 		sort.Sort(sort.StringSlice(curReplSlots))

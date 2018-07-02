@@ -152,12 +152,12 @@ func alterPasswordlessRole(ctx context.Context, connParams ConnParams, roles []s
 
 // getReplicatinSlots return existing replication slots. On PostgreSQL > 10 we
 // skip temporary slots.
-func getReplicationSlots(ctx context.Context, connParams ConnParams, maj int) ([]string, error) {
+func getReplicationSlots(ctx context.Context, connParams ConnParams, maj int) (ReplicationSlots, error) {
 	var q string
 	if maj < 10 {
-		q = "select slot_name from pg_replication_slots"
+		q = "select slot_name, slot_type from pg_replication_slots"
 	} else {
-		q = "select slot_name from pg_replication_slots where temporary is false"
+		q = "select slot_name, slot_type from pg_replication_slots where temporary is false"
 	}
 
 	db, err := sql.Open("postgres", connParams.ConnString())
@@ -166,7 +166,7 @@ func getReplicationSlots(ctx context.Context, connParams ConnParams, maj int) ([
 	}
 	defer db.Close()
 
-	replSlots := []string{}
+	replSlots := ReplicationSlots{}
 
 	rows, err := query(ctx, db, q)
 	if err != nil {
@@ -174,11 +174,11 @@ func getReplicationSlots(ctx context.Context, connParams ConnParams, maj int) ([
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var slotName string
-		if err := rows.Scan(&slotName); err != nil {
+		var replSlot ReplicationSlot
+		if err := rows.Scan(&replSlot.SlotName, &replSlot.SlotType); err != nil {
 			return nil, err
 		}
-		replSlots = append(replSlots, slotName)
+		replSlots = append(replSlots, replSlot)
 	}
 
 	return replSlots, nil
