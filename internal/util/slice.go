@@ -14,11 +14,24 @@
 
 package util
 
-import "sort"
+import (
+	"sort"
+
+	"github.com/sorintlab/stolon/internal/postgresql"
+)
 
 func StringInSlice(s []string, e string) bool {
 	for _, v := range s {
 		if v == e {
+			return true
+		}
+	}
+	return false
+}
+
+func SlotInStruct(s postgresql.ReplicationSlots, e string) bool {
+	for _, v := range s {
+		if v.SlotName == e {
 			return true
 		}
 	}

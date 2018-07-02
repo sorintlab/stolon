@@ -89,6 +89,17 @@ type InitConfig struct {
 	DataChecksums bool
 }
 
+type ReplicationSlot struct {
+	SlotName string
+	SlotType string
+}
+
+type ReplicationSlots []ReplicationSlot
+
+func (slots ReplicationSlots) Len() int           { return len(slots) }
+func (slots ReplicationSlots) Swap(i, j int)      { slots[i], slots[j] = slots[j], slots[i] }
+func (slots ReplicationSlots) Less(i, j int) bool { return slots[i].SlotName > slots[j].SlotName }
+
 func SetLogger(l *zap.SugaredLogger) {
 	log = l
 }
@@ -538,7 +549,7 @@ func (p *Manager) GetSyncStandbys() ([]string, error) {
 	return getSyncStandbys(ctx, p.localConnParams)
 }
 
-func (p *Manager) GetReplicationSlots() ([]string, error) {
+func (p *Manager) GetReplicationSlots() (ReplicationSlots, error) {
 	maj, _, err := p.PGDataVersion()
 	if err != nil {
 		return nil, err
