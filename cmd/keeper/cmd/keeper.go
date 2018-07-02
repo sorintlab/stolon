@@ -611,6 +611,22 @@ func parseSynchronousStandbyNames(s string) ([]string, error) {
 	return entries, nil
 }
 
+func (p *PostgresKeeper) GetInSyncStandbys() ([]string, error) {
+	inSyncStandbysFullName, err := p.pgm.GetSyncStandbys()
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve current sync standbys status from instance: %v", err)
+	}
+
+	inSyncStandbys := []string{}
+	for _, s := range inSyncStandbysFullName {
+		if common.IsStolonName(s) {
+			inSyncStandbys = append(inSyncStandbys, common.NameFromStolonName(s))
+		}
+	}
+
+	return inSyncStandbys, nil
+}
+
 func (p *PostgresKeeper) GetPGState(pctx context.Context) (*cluster.PostgresState, error) {
 	p.getPGStateMutex.Lock()
 	defer p.getPGStateMutex.Unlock()
@@ -644,20 +660,13 @@ func (p *PostgresKeeper) GetPGState(pctx context.Context) (*cluster.PostgresStat
 		log.Debugw("filtered out managed pg parameters", "filteredPGParameters", filteredPGParameters)
 		pgState.PGParameters = filteredPGParameters
 
-		synchronousStandbyNames, err := parseSynchronousStandbyNames(pgParameters["synchronous_standby_names"])
+		inSyncStandbys, err := p.GetInSyncStandbys()
 		if err != nil {
-			log.Errorw("error parsing synchronous_standby_names", zap.Error(err))
+			log.Errorw("failed to retrieve current in sync standbys from instance", zap.Error(err))
 			return pgState, nil
 		}
-		synchronousStandbys := []string{}
-		for _, n := range synchronousStandbyNames {
-			// pgState.SynchronousStandbys must contain only the internal standbys dbUIDs
-			if !common.IsStolonName(n) {
-				continue
-			}
-			synchronousStandbys = append(synchronousStandbys, common.NameFromStolonName(n))
-		}
-		pgState.SynchronousStandbys = synchronousStandbys
+
+		pgState.SynchronousStandbys = inSyncStandbys
 
 		sd, err := p.pgm.GetSystemData()
 		if err != nil {
