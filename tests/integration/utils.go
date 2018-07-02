@@ -167,6 +167,37 @@ func waitReplicationSlots(q Querier, replSlots []string, timeout time.Duration) 
 	return fmt.Errorf("timeout waiting for replSlots %v, got: %v, last err: %v", replSlots, curReplSlots, err)
 }
 
+func waitStolonReplicationSlots(q Querier, replSlots []string, timeout time.Duration) error {
+	// prefix with stolon_
+	for i, slot := range replSlots {
+		replSlots[i] = common.StolonName(slot)
+	}
+	sort.Sort(sort.StringSlice(replSlots))
+
+	start := time.Now()
+	var curReplSlots []string
+	var err error
+	for time.Now().Add(-timeout).Before(start) {
+		allReplSlots, err := getReplicationSlots(q)
+		if err != nil {
+			goto end
+		}
+		curReplSlots = []string{}
+		for _, s := range allReplSlots {
+			if common.IsStolonName(s) {
+				curReplSlots = append(curReplSlots, s)
+			}
+		}
+		sort.Sort(sort.StringSlice(curReplSlots))
+		if reflect.DeepEqual(replSlots, curReplSlots) {
+			return nil
+		}
+	end:
+		time.Sleep(2 * time.Second)
+	}
+	return fmt.Errorf("timeout waiting for replSlots %v, got: %v, last err: %v", replSlots, curReplSlots, err)
+}
+
 func waitNotStolonReplicationSlots(q Querier, replSlots []string, timeout time.Duration) error {
 	sort.Sort(sort.StringSlice(replSlots))
 

@@ -886,60 +886,39 @@ func (p *PostgresKeeper) isDifferentTimelineBranch(followedDB *cluster.DB, pgSta
 	return false
 }
 
-func (p *PostgresKeeper) updateReplSlots(curReplSlots []string, uid string, followersUIDs []string) error {
+func (p *PostgresKeeper) updateReplSlots(curReplSlots []string, uid string, followersUIDs, additionalReplSlots []string) error {
+	internalReplSlots := map[string]struct{}{}
+
+	// Create a list of the wanted internal replication slots
+	for _, followerUID := range followersUIDs {
+		if followerUID == uid {
+			continue
+		}
+		internalReplSlots[common.StolonName(followerUID)] = struct{}{}
+	}
+
+	// Add AdditionalReplicationSlots
+	for _, slot := range additionalReplSlots {
+		internalReplSlots[common.StolonName(slot)] = struct{}{}
+	}
+
 	// Drop internal replication slots
 	for _, slot := range curReplSlots {
 		if !common.IsStolonName(slot) {
 			continue
 		}
-		if !util.StringInSlice(followersUIDs, common.NameFromStolonName(slot)) {
-			log.Infow("dropping replication slot since db not marked as follower", "slot", slot, "db", common.NameFromStolonName(slot))
+		if _, ok := internalReplSlots[slot]; !ok {
+			log.Infow("dropping replication slot", "slot", slot)
 			if err := p.pgm.DropReplicationSlot(slot); err != nil {
 				log.Errorw("failed to drop replication slot", "slot", slot, "err", err)
 				// don't return the error but continue also if drop failed (standby still connected)
 			}
 		}
 	}
+
 	// Create internal replication slots
-	for _, followerUID := range followersUIDs {
-		if followerUID == uid {
-			continue
-		}
-		replSlot := common.StolonName(followerUID)
-		if !util.StringInSlice(curReplSlots, replSlot) {
-			log.Infow("creating replication slot", "slot", replSlot, "db", followerUID)
-			if err := p.pgm.CreateReplicationSlot(replSlot); err != nil {
-				log.Errorw("failed to create replication slot", "slot", replSlot, zap.Error(err))
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-func (p *PostgresKeeper) updateAdditionalReplSlots(curReplSlots []string, additionalReplSlots []string) error {
-	// detect not stolon replication slots
-	notStolonSlots := []string{}
-	for _, curReplSlot := range curReplSlots {
-		if !common.IsStolonName(curReplSlot) {
-			notStolonSlots = append(notStolonSlots, curReplSlot)
-		}
-	}
-
-	// drop unnecessary slots
-	for _, slot := range notStolonSlots {
-		if !util.StringInSlice(additionalReplSlots, slot) {
-			log.Infow("dropping replication slot", "slot", slot)
-			if err := p.pgm.DropReplicationSlot(slot); err != nil {
-				log.Errorw("failed to drop replication slot", "slot", slot, zap.Error(err))
-				return err
-			}
-		}
-	}
-
-	// create required slots
-	for _, slot := range additionalReplSlots {
-		if !util.StringInSlice(notStolonSlots, slot) {
+	for slot := range internalReplSlots {
+		if !util.StringInSlice(curReplSlots, slot) {
 			log.Infow("creating replication slot", "slot", slot)
 			if err := p.pgm.CreateReplicationSlot(slot); err != nil {
 				log.Errorw("failed to create replication slot", "slot", slot, zap.Error(err))
@@ -947,7 +926,6 @@ func (p *PostgresKeeper) updateAdditionalReplSlots(curReplSlots []string, additi
 			}
 		}
 	}
-
 	return nil
 }
 
@@ -961,12 +939,8 @@ func (p *PostgresKeeper) refreshReplicationSlots(cd *cluster.ClusterData, db *cl
 
 	followersUIDs := db.Spec.Followers
 
-	if err = p.updateReplSlots(currentReplicationSlots, db.UID, followersUIDs); err != nil {
+	if err = p.updateReplSlots(currentReplicationSlots, db.UID, followersUIDs, db.Spec.AdditionalReplicationSlots); err != nil {
 		log.Errorw("error updating replication slots", zap.Error(err))
-		return err
-	}
-	if err = p.updateAdditionalReplSlots(currentReplicationSlots, db.Spec.AdditionalReplicationSlots); err != nil {
-		log.Errorw("error updating additional replication slots", zap.Error(err))
 		return err
 	}
 
@@ -1449,7 +1423,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 			log.Infow("already master")
 		}
 
-		if err = p.refreshReplicationSlots(cd, db); err != nil {
+		if err := p.refreshReplicationSlots(cd, db); err != nil {
 			log.Errorw("error updating replication slots", zap.Error(err))
 			return
 		}
@@ -1499,7 +1473,8 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 			// TODO(sgotti) Check that the followed instance has all the needed WAL segments
 
 			// Update our primary_conninfo if replConnString changed
-			if db.Spec.FollowConfig.Type == cluster.FollowTypeInternal {
+			switch db.Spec.FollowConfig.Type {
+			case cluster.FollowTypeInternal:
 				var curReplConnParams postgresql.ConnParams
 
 				curReplConnParams, err = pgm.GetPrimaryConninfo()
@@ -1531,13 +1506,11 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 					}
 				}
 
-				// TODO(sgotti) currently we ignore DBSpec.AdditionalReplicationSlots on standbys
-				// So we don't touch replication slots and manually created
-				// slots are kept. If the instance becomes master then they'll
-				// be dropped.
-			}
+				if err = p.refreshReplicationSlots(cd, db); err != nil {
+					log.Errorw("error updating replication slots", zap.Error(err))
+				}
 
-			if db.Spec.FollowConfig.Type == cluster.FollowTypeExternal {
+			case cluster.FollowTypeExternal:
 				// Update recovery conf if our FollowConfig has changed
 				curReplConnParams, err := pgm.GetPrimaryConninfo()
 				if err != nil {
@@ -1573,7 +1546,6 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 
 				if err = p.refreshReplicationSlots(cd, db); err != nil {
 					log.Errorw("error updating replication slots", zap.Error(err))
-					return
 				}
 			}
 
