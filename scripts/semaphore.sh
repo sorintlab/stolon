@@ -23,12 +23,13 @@ curl -L https://releases.hashicorp.com/consul/1.0.6/consul_1.0.6_linux_amd64.zip
 unzip consul_1.0.6_linux_amd64.zip
 popd
 
-# Install postgreSQL 9.5 and 9.6
+# Install postgreSQL 9.5, 9.6, 10 and 11
 # TODO(sgotti) remove this when semaphoreci images will have this already installed
 sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt/ $(lsb_release -cs)-pgdg main 10" > /etc/apt/sources.list.d/pgdg.list'
+sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt/ $(lsb_release -cs)-pgdg main 11" > /etc/apt/sources.list.d/pgdg.list'
 wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
 sudo apt-get update
-sudo apt-get -y install postgresql-9.5 postgresql-9.6 postgresql-10
+sudo apt-get -y install postgresql-9.5 postgresql-9.6 postgresql-10 postgresql-11
 
 # Precompile stdlib with cgo disable to speedup builds
 sudo -E CGO_ENABLED=0 go install -a -installsuffix cgo std
@@ -59,3 +60,7 @@ export PATH=/usr/lib/postgresql/9.6/bin/:$OLDPATH ; ./test
 # Test with postgresql 10
 echo "===== Testing with postgreSQL 10 ====="
 export PATH=/usr/lib/postgresql/10/bin/:$OLDPATH ; ./test
+
+# Test with postgresql 11
+echo "===== Testing with postgreSQL 11 ====="
+export PATH=/usr/lib/postgresql/11/bin/:$OLDPATH ; ./test
