@@ -1718,8 +1718,8 @@ func (p *PostgresKeeper) generateHBA(cd *cluster.ClusterData, db *cluster.DB) []
 				if dbElt.UID != db.UID {
 					computedHBA = append(
 						computedHBA,
-						fmt.Sprintf("host all %s %s/32 %s", p.pgSUUsername, db.Status.ListenAddress, p.pgReplAuthMethod),
-						fmt.Sprintf("host replication %s %s/32 %s", p.pgReplUsername, db.Status.ListenAddress, p.pgReplAuthMethod),
+						fmt.Sprintf("host all %s %s/32 %s", p.pgSUUsername, dbElt.Status.ListenAddress, p.pgReplAuthMethod),
+						fmt.Sprintf("host replication %s %s/32 %s", p.pgReplUsername, dbElt.Status.ListenAddress, p.pgReplAuthMethod),
 					)
 				}
 			}
