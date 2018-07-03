@@ -15,6 +15,7 @@
 package integration
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -364,16 +365,28 @@ func TestAdditionalReplicationSlots(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
+	cd, _, err := sm.GetClusterData(context.TODO())
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	var standbyDBUID string
+	for _, db := range cd.DBs {
+		if db.Spec.KeeperUID == standby.uid {
+			standbyDBUID = db.UID
+		}
+	}
+
 	// create additional replslots on master
 	err = StolonCtl(clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "additionalMasterReplicationSlots" : [ "replslot01", "replslot02" ] }`)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	if err := waitNotStolonReplicationSlots(master, []string{"replslot01", "replslot02"}, 30*time.Second); err != nil {
+	if err := waitStolonReplicationSlots(master, []string{standbyDBUID, "replslot01", "replslot02"}, 30*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	// no repl slot on standby
-	if err := waitNotStolonReplicationSlots(standby, []string{}, 30*time.Second); err != nil {
+	if err := waitStolonReplicationSlots(standby, []string{}, 30*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
@@ -382,11 +395,11 @@ func TestAdditionalReplicationSlots(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	if err := waitNotStolonReplicationSlots(master, []string{"replslot01"}, 30*time.Second); err != nil {
+	if err := waitStolonReplicationSlots(master, []string{standbyDBUID, "replslot01"}, 30*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	// no repl slot on standby
-	if err := waitNotStolonReplicationSlots(standby, []string{}, 30*time.Second); err != nil {
+	if err := waitStolonReplicationSlots(standby, []string{}, 30*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
@@ -395,11 +408,11 @@ func TestAdditionalReplicationSlots(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	if err := waitNotStolonReplicationSlots(master, []string{}, 30*time.Second); err != nil {
+	if err := waitStolonReplicationSlots(master, []string{standbyDBUID}, 30*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	// no repl slot on standby
-	if err := waitNotStolonReplicationSlots(standby, []string{}, 30*time.Second); err != nil {
+	if err := waitStolonReplicationSlots(standby, []string{}, 30*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
@@ -408,19 +421,27 @@ func TestAdditionalReplicationSlots(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	if err := waitNotStolonReplicationSlots(master, []string{"replslot01", "replslot02"}, 30*time.Second); err != nil {
+	if err := waitStolonReplicationSlots(master, []string{standbyDBUID, "replslot01", "replslot02"}, 30*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	// no repl slot on standby
-	if err := waitNotStolonReplicationSlots(standby, []string{}, 30*time.Second); err != nil {
+	if err := waitStolonReplicationSlots(standby, []string{}, 30*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	// Manually create a replication slot. It should be dropped.
+	// Manually create a replication slot. It should not be dropped.
 	if _, err := master.Exec("select pg_create_physical_replication_slot('manualreplslot')"); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	if err := waitNotStolonReplicationSlots(master, []string{"replslot01", "replslot02"}, 30*time.Second); err != nil {
+	// Manually create a replication slot starting with stolon_ . It should be dropped.
+	if _, err := master.Exec("select pg_create_physical_replication_slot('stolon_manualreplslot')"); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := waitStolonReplicationSlots(master, []string{standbyDBUID, "replslot01", "replslot02"}, 30*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	// check it here so we are sure the refresh slots function has already been called
+	if err := waitNotStolonReplicationSlots(master, []string{"manualreplslot"}, 30*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
@@ -437,7 +458,7 @@ func TestAdditionalReplicationSlots(t *testing.T) {
 	}
 
 	// repl slot on standby which is the new master
-	if err := waitNotStolonReplicationSlots(standby, []string{"replslot01", "replslot02"}, 30*time.Second); err != nil {
+	if err := waitStolonReplicationSlots(standby, []string{"replslot01", "replslot02"}, 30*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 }

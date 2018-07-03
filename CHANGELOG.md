@@ -1,3 +1,9 @@
+### v0.12.0
+
+## Upgrades notes.
+
+* Replication slots declared in the clusterspec `additionalMasterReplicationSlots` option will now be prefixed with the `stolon_` string to let users be able to manually create/drop custom replication slots (they shouldn't start with `stolon_`). Users of these feature should upgrade all the references to these replication slots adding the `stolon_` prefix.
+
 ### v0.11.0
 
 #### New features
