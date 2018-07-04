@@ -1,6 +1,22 @@
 ### v0.12.0
 
-## Upgrades notes.
+#### New features
+
+* Detect and report when keeper persistent data dir is not the expected one (usually due to wrong configuration, non persistent storage etc...) ([#510](https://github.com/sorintlab/stolon/pull/510))
+* Support PostgresSQL 11 (beta) ([#513](https://github.com/sorintlab/stolon/pull/513))
+* Replication slots declared in the clusterspec `additionalMasterReplicationSlots` option will now be prefixed with the `stolon_` string to let users be able to manually create/drop custom replication slots (See Upgrade Notes) ([#531](https://github.com/sorintlab/stolon/pull/531))
+
+#### Bug Fixes
+
+* fix wrong address in pg_hba.conf when clusterspec `defaultSUReplAccessMode` is `strict` ([#520](https://github.com/sorintlab/stolon/pull/520))
+
+and [many other](https://github.com/sorintlab/stolon/milestone/11) bug fixes and documentation improvements.
+
+Thanks to everybody who contributed to this release:
+
+Alexandre Assouad, Lothar Gesslein, @nseyvet
+
+#### Upgrades notes.
 
 * Replication slots declared in the clusterspec `additionalMasterReplicationSlots` option will now be prefixed with the `stolon_` string to let users be able to manually create/drop custom replication slots (they shouldn't start with `stolon_`). Users of these feature should upgrade all the references to these replication slots adding the `stolon_` prefix.
 
@@ -24,7 +40,7 @@ Thanks to everybody who contributed to this release:
 Bill Helgeson, Niklas Hambüchen, Sylvere Richard, Tyler Kellen
 
 
-## Upgrades notes.
+#### Upgrades notes.
 
 * In the k8s store backend, the label that defines the kind of stolon component has changed from `app` to `component`. When upgrading you should update the various resource descriptors setting the k8s component name (`stolon-keeper`, `stolon-sentinel`, `stolon-proxy`) inside the `component` label instead of the `app` label.
 * When using the etcdv2 store, due to a wrong leader election path introduced in the last release and now fixed, if your sentinel returns an election error like `election loop error {"error": "102: Not a file ...` you should stop all the sentinels and remove the wrong dir using `etcdctl rmdir /stolon/cluster/$STOLONCLUSTER/sentinel-leader` where `$STOLONCLUSTER` should be substituted with the stolon cluster name (remember to set `ETCDCTL_API=2`).
