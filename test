@@ -41,11 +41,18 @@ echo "Running tests..."
 
 COVER=${COVER:-"-cover"}
 
-echo "Checking gofmt..."
-fmtRes=$(gofmt -l $(find . -type f -name '*.go' ! -path './vendor/*'))
-if [ -n "${fmtRes}" ]; then
-	echo -e "gofmt checking failed:\n${fmtRes}"
-	exit 255
+# Disable gofmt on CI since it'll break when we'll use go 1.10 and go 1.11
+#
+# TODO(sgotti) Check against only one (usually the latest stable) go version
+# gofmt output (for example gofmt in go 1.10 and 1.11 will format differently)
+# or check that at least one passes
+if [ "${CI}" != "true" ]; then
+	echo "Checking gofmt..."
+	fmtRes=$(gofmt -l $(find . -type f -name '*.go' ! -path './vendor/*'))
+	if [ -n "${fmtRes}" ]; then
+		echo -e "gofmt checking failed:\n${fmtRes}"
+		exit 255
+	fi
 fi
 
 echo "Checking govet..."
