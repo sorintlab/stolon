@@ -935,7 +935,7 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 				}
 			}
 		default:
-			return nil, fmt.Errorf("unknown init mode %q", clusterSpec.InitMode)
+			return nil, fmt.Errorf("unknown init mode %s", *cd.Cluster.DefSpec().InitMode)
 		}
 
 	case cluster.ClusterPhaseNormal:
