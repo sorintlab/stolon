@@ -365,7 +365,7 @@ func proxy(c *cobra.Command, args []string) {
 		}
 	}
 
-	if err := cmd.CheckCommonConfig(&cfg.CommonConfig); err != nil {
+	if err := cmd.CheckCommonConfig(c, &cfg.CommonConfig); err != nil {
 		die(err.Error())
 	}
 
