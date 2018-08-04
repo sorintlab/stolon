@@ -34,7 +34,7 @@ require (
 	github.com/gregjones/httpcache v0.0.0-20171119193500-2bcd89a1743f // indirect
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway v1.5.1 // indirect
-	github.com/hashicorp/consul v1.0.2 // indirect
+	github.com/hashicorp/consul v1.0.2
 	github.com/hashicorp/go-cleanhttp v0.0.0-20160217214820-875fb671b3dd // indirect
 	github.com/hashicorp/go-immutable-radix v1.0.0 // indirect
 	github.com/hashicorp/go-msgpack v0.0.0-20150518234257-fa3f63826f7c // indirect
