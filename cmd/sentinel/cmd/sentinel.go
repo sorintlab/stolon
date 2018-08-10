@@ -388,7 +388,8 @@ func (s *Sentinel) setDBSpecFromClusterSpec(cd *cluster.ClusterData) {
 		db.Spec.PGParameters = clusterSpec.PGParameters
 		db.Spec.PGHBA = clusterSpec.PGHBA
 		if db.Spec.FollowConfig != nil && db.Spec.FollowConfig.Type == cluster.FollowTypeExternal {
-			db.Spec.FollowConfig.StandbySettings = clusterSpec.StandbySettings
+			db.Spec.FollowConfig.StandbySettings = clusterSpec.StandbyConfig.StandbySettings
+			db.Spec.FollowConfig.ArchiveRecoverySettings = clusterSpec.StandbyConfig.ArchiveRecoverySettings
 		}
 		db.Spec.AdditionalWalSenders = *clusterSpec.AdditionalWalSenders
 		switch s.dbType(cd, db.UID) {
@@ -881,8 +882,9 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 				if *clusterSpec.Role == cluster.ClusterRoleStandby {
 					role = common.RoleStandby
 					followConfig = &cluster.FollowConfig{
-						Type:            cluster.FollowTypeExternal,
-						StandbySettings: clusterSpec.StandbySettings,
+						Type:                    cluster.FollowTypeExternal,
+						StandbySettings:         clusterSpec.StandbyConfig.StandbySettings,
+						ArchiveRecoverySettings: clusterSpec.StandbyConfig.ArchiveRecoverySettings,
 					}
 				}
 				db := &cluster.DB{
@@ -1033,8 +1035,9 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 			if *clusterSpec.Role == cluster.ClusterRoleStandby {
 				masterDBRole = common.RoleStandby
 				followConfig = &cluster.FollowConfig{
-					Type:            cluster.FollowTypeExternal,
-					StandbySettings: clusterSpec.StandbySettings,
+					Type:                    cluster.FollowTypeExternal,
+					StandbySettings:         clusterSpec.StandbyConfig.StandbySettings,
+					ArchiveRecoverySettings: clusterSpec.StandbyConfig.ArchiveRecoverySettings,
 				}
 			}
 
