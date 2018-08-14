@@ -650,18 +650,13 @@ func (p *Manager) IsInitialized() (bool, error) {
 	return true, nil
 }
 
-func (p *Manager) GetRoleFromDB() (common.Role, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), p.requestTimeout)
-	defer cancel()
-	return getRole(ctx, p.localConnParams)
-}
-
 func (p *Manager) GetRole() (common.Role, error) {
-	curConnParams, err := p.GetPrimaryConninfo()
-	if err != nil {
-		return "", fmt.Errorf("error retrieving primary conn info: %v", err)
+	// if recovery.conf exists then consider it as a standby
+	_, err := os.Stat(filepath.Join(p.dataDir, "recovery.conf"))
+	if err != nil && !os.IsNotExist(err) {
+		return "", fmt.Errorf("error determining if recovery.conf exists: %v", err)
 	}
-	if curConnParams == nil {
+	if os.IsNotExist(err) {
 		return common.RoleMaster, nil
 	}
 	return common.RoleStandby, nil
@@ -707,26 +702,6 @@ func (p *Manager) GetPrimarySlotName() (string, error) {
 		}
 	}
 	return "", nil
-}
-
-func (p *Manager) HasConnParams() (bool, error) {
-	regex := regexp.MustCompile(`primary_conninfo`)
-
-	fh, err := os.Open(filepath.Join(p.dataDir, "recovery.conf"))
-	if os.IsNotExist(err) {
-		return false, nil
-	}
-	defer fh.Close()
-
-	scanner := bufio.NewScanner(fh)
-	scanner.Split(bufio.ScanLines)
-
-	for scanner.Scan() {
-		if regex.MatchString(scanner.Text()) {
-			return true, nil
-		}
-	}
-	return false, nil
 }
 
 func (p *Manager) WriteConf() error {

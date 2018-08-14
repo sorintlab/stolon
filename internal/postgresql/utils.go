@@ -206,31 +206,6 @@ func dropReplicationSlot(ctx context.Context, connParams ConnParams, name string
 	return err
 }
 
-func getRole(ctx context.Context, connParams ConnParams) (common.Role, error) {
-	db, err := sql.Open("postgres", connParams.ConnString())
-	if err != nil {
-		return "", err
-	}
-	defer db.Close()
-
-	rows, err := query(ctx, db, "select pg_is_in_recovery from pg_is_in_recovery()")
-	if err != nil {
-		return "", err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var isInRecovery bool
-		if err := rows.Scan(&isInRecovery); err != nil {
-			return "", err
-		}
-		if isInRecovery {
-			return common.RoleStandby, nil
-		}
-		return common.RoleMaster, nil
-	}
-	return "", fmt.Errorf("no rows returned")
-}
-
 func getSyncStandbys(ctx context.Context, connParams ConnParams) ([]string, error) {
 	db, err := sql.Open("postgres", connParams.ConnString())
 	if err != nil {
