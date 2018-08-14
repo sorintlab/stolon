@@ -461,6 +461,9 @@ func (os *ClusterSpec) Validate() error {
 		if s.PITRConfig.DataRestoreCommand == "" {
 			return fmt.Errorf("pitrConfig.DataRestoreCommand undefined")
 		}
+		if s.PITRConfig.RecoveryTargetSettings != nil && *s.Role == ClusterRoleStandby {
+			return fmt.Errorf("cannot define pitrConfig.RecoveryTargetSettings when required cluster role is standby")
+		}
 	default:
 		return fmt.Errorf("unknown initMode: %q", *s.InitMode)
 
