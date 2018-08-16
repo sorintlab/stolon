@@ -812,9 +812,7 @@ func (p *PostgresKeeper) resync(db, followedDB *cluster.DB, tryPgrewind bool) er
 			// log pg_rewind error and fallback to pg_basebackup
 			log.Errorw("error syncing with pg_rewind", zap.Error(err))
 		} else {
-			if err := pgm.WriteRecoveryConf(p.createRecoveryParameters(standbySettings, nil, nil)); err != nil {
-				return fmt.Errorf("err: %v", err)
-			}
+			pgm.SetRecoveryParameters(p.createRecoveryParameters(standbySettings, nil, nil))
 			return nil
 		}
 	}
@@ -843,9 +841,8 @@ func (p *PostgresKeeper) resync(db, followedDB *cluster.DB, tryPgrewind bool) er
 	}
 	log.Infow("sync succeeded")
 
-	if err := pgm.WriteRecoveryConf(p.createRecoveryParameters(standbySettings, nil, nil)); err != nil {
-		return fmt.Errorf("err: %v", err)
-	}
+	pgm.SetRecoveryParameters(p.createRecoveryParameters(standbySettings, nil, nil))
+
 	return nil
 }
 
@@ -1048,6 +1045,8 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 		}
 		log.Infow("current db UID different than cluster data db UID", "db", p.dbLocalState.UID, "cdDB", db.UID)
 
+		pgm.SetRecoveryParameters(nil)
+
 		switch db.Spec.InitMode {
 		case cluster.DBInitModeNew:
 			log.Infow("initializing the database cluster")
@@ -1154,10 +1153,8 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 			if db.Spec.FollowConfig != nil && db.Spec.FollowConfig.Type == cluster.FollowTypeExternal {
 				standbySettings = db.Spec.FollowConfig.StandbySettings
 			}
-			if err = pgm.WriteRecoveryConf(p.createRecoveryParameters(standbySettings, db.Spec.PITRConfig.ArchiveRecoverySettings, db.Spec.PITRConfig.RecoveryTargetSettings)); err != nil {
-				log.Errorw("error writing recovery.conf", zap.Error(err))
-				return
-			}
+			pgm.SetRecoveryParameters(p.createRecoveryParameters(standbySettings, db.Spec.PITRConfig.ArchiveRecoverySettings, db.Spec.PITRConfig.RecoveryTargetSettings))
+
 			if err = pgm.StartTmpMerged(); err != nil {
 				log.Errorw("failed to start instance", zap.Error(err))
 				return
@@ -1415,6 +1412,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 
 		if localRole == common.RoleStandby {
 			log.Infow("promoting to master")
+			pgm.SetRecoveryParameters(nil)
 			if err = pgm.Promote(); err != nil {
 				log.Errorw("failed to promote instance", zap.Error(err))
 				return
@@ -1460,30 +1458,16 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				return
 			}
 			if !started {
-				if err = pgm.WriteRecoveryConf(p.createRecoveryParameters(standbySettings, nil, nil)); err != nil {
-					log.Errorw("error writing recovery.conf", zap.Error(err))
-					return
-				}
+				pgm.SetRecoveryParameters(p.createRecoveryParameters(standbySettings, nil, nil))
 				if err = pgm.Start(); err != nil {
 					log.Errorw("failed to start postgres", zap.Error(err))
 					return
 				}
 			}
 
-			// TODO(sgotti) Check that the followed instance has all the needed WAL segments
-
 			// Update our primary_conninfo if replConnString changed
 			switch db.Spec.FollowConfig.Type {
 			case cluster.FollowTypeInternal:
-				var curReplConnParams postgresql.ConnParams
-
-				curReplConnParams, err = pgm.GetPrimaryConninfo()
-				if err != nil {
-					log.Errorw("failed to get postgres primary conn info", zap.Error(err))
-					return
-				}
-				log.Debugw("curReplConnParams", "curReplConnParams", curReplConnParams)
-
 				followedUID := db.Spec.FollowConfig.DBUID
 				followedDB, ok := cd.DBs[followedUID]
 				if !ok {
@@ -1493,13 +1477,16 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				newReplConnParams := p.getReplConnParams(db, followedDB)
 				log.Debugw("newReplConnParams", "newReplConnParams", newReplConnParams)
 
-				if !curReplConnParams.Equals(newReplConnParams) {
-					log.Infow("connection parameters changed. Reconfiguring.", "followedDB", followedUID, "replConnParams", newReplConnParams)
-					standbySettings := &cluster.StandbySettings{PrimaryConninfo: newReplConnParams.ConnString(), PrimarySlotName: common.StolonName(db.UID)}
-					if err = pgm.WriteRecoveryConf(p.createRecoveryParameters(standbySettings, nil, nil)); err != nil {
-						log.Errorw("error writing recovery.conf", zap.Error(err))
-						return
-					}
+				standbySettings := &cluster.StandbySettings{PrimaryConninfo: newReplConnParams.ConnString(), PrimarySlotName: common.StolonName(db.UID)}
+
+				curRecoveryParameters := pgm.CurRecoveryParameters()
+				newRecoveryParameters := p.createRecoveryParameters(standbySettings, nil, nil)
+
+				// Update recovery conf if parameters has changed
+				if !curRecoveryParameters.Equals(newRecoveryParameters) {
+					log.Infow("recovery parameters changed, restarting postgres instance", "curRecoveryParameters", curRecoveryParameters, "newRecoveryParameters", newRecoveryParameters)
+					pgm.SetRecoveryParameters(newRecoveryParameters)
+
 					if err = pgm.Restart(true); err != nil {
 						log.Errorw("failed to restart postgres instance", zap.Error(err))
 						return
@@ -1511,33 +1498,14 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				}
 
 			case cluster.FollowTypeExternal:
-				// Update recovery conf if our FollowConfig has changed
-				curReplConnParams, err := pgm.GetPrimaryConninfo()
-				if err != nil {
-					log.Errorw("failed to get postgres primary conn info", zap.Error(err))
-					return
-				}
-				log.Debugw("curReplConnParams", "curReplConnParams", curReplConnParams)
+				curRecoveryParameters := pgm.CurRecoveryParameters()
+				newRecoveryParameters := p.createRecoveryParameters(db.Spec.FollowConfig.StandbySettings, nil, nil)
 
-				newReplConnParams, err := pg.ParseConnString(db.Spec.FollowConfig.StandbySettings.PrimaryConninfo)
-				if err != nil {
-					log.Errorw("failed ot parse standby connection string", zap.Error(err))
-					return
-				}
-				log.Debugw("newReplConnParams", "newReplConnParams", newReplConnParams)
+				// Update recovery conf if parameters has changed
+				if !curRecoveryParameters.Equals(newRecoveryParameters) {
+					log.Infow("recovery parameters changed, restarting postgres instance", "curRecoveryParameters", curRecoveryParameters, "newRecoveryParameters", newRecoveryParameters)
+					pgm.SetRecoveryParameters(newRecoveryParameters)
 
-				curPrimarySlotName, err := pgm.GetPrimarySlotName()
-				if err != nil {
-					log.Errorw("failed to get current primary slot name", zap.Error(err))
-					return
-				}
-
-				if !curReplConnParams.Equals(newReplConnParams) || curPrimarySlotName != db.Spec.FollowConfig.StandbySettings.PrimarySlotName {
-					standbySettings := db.Spec.FollowConfig.StandbySettings
-					if err = pgm.WriteRecoveryConf(p.createRecoveryParameters(standbySettings, nil, nil)); err != nil {
-						log.Errorw("error writing recovery.conf", zap.Error(err))
-						return
-					}
 					if err = pgm.Restart(true); err != nil {
 						log.Errorw("failed to restart postgres instance", zap.Error(err))
 						return

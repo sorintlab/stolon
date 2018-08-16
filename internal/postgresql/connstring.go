@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"net/url"
 	"reflect"
+	"sort"
 	"strings"
 	"unicode"
 )
@@ -206,6 +207,8 @@ func URLToConnParams(urlStr string) (ConnParams, error) {
 	return p, nil
 }
 
+// ConnString returns a connection string, its entries are sorted so the
+// returned string can be reproducible and comparable
 func (p ConnParams) ConnString() string {
 	var kvs []string
 	escaper := strings.NewReplacer(` `, `\ `, `'`, `\'`, `\`, `\\`)
@@ -214,5 +217,6 @@ func (p ConnParams) ConnString() string {
 			kvs = append(kvs, k+"="+escaper.Replace(v))
 		}
 	}
+	sort.Sort(sort.StringSlice(kvs))
 	return strings.Join(kvs, " ")
 }

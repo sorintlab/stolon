@@ -40,9 +40,10 @@ import (
 )
 
 const (
-	postgresConf     = "postgresql.conf"
-	postgresAutoConf = "postgresql.auto.conf"
-	tmpPostgresConf  = "stolon-temp-postgresql.conf"
+	postgresConf         = "postgresql.conf"
+	postgresRecoveryConf = "recovery.conf"
+	postgresAutoConf     = "postgresql.auto.conf"
+	tmpPostgresConf      = "stolon-temp-postgresql.conf"
 
 	startTimeout = 60 * time.Second
 )
@@ -54,21 +55,23 @@ var (
 var log = slog.S()
 
 type Manager struct {
-	pgBinPath       string
-	dataDir         string
-	parameters      common.Parameters
-	hba             []string
-	curParameters   common.Parameters
-	curHba          []string
-	localConnParams ConnParams
-	replConnParams  ConnParams
-	suAuthMethod    string
-	suUsername      string
-	suPassword      string
-	replAuthMethod  string
-	replUsername    string
-	replPassword    string
-	requestTimeout  time.Duration
+	pgBinPath             string
+	dataDir               string
+	parameters            common.Parameters
+	recoveryParameters    common.Parameters
+	hba                   []string
+	curParameters         common.Parameters
+	curRecoveryParameters common.Parameters
+	curHba                []string
+	localConnParams       ConnParams
+	replConnParams        ConnParams
+	suAuthMethod          string
+	suUsername            string
+	suPassword            string
+	replAuthMethod        string
+	replUsername          string
+	replPassword          string
+	requestTimeout        time.Duration
 }
 
 type SystemData struct {
@@ -95,19 +98,21 @@ func SetLogger(l *zap.SugaredLogger) {
 
 func NewManager(pgBinPath string, dataDir string, localConnParams, replConnParams ConnParams, suAuthMethod, suUsername, suPassword, replAuthMethod, replUsername, replPassword string, requestTimeout time.Duration) *Manager {
 	return &Manager{
-		pgBinPath:       pgBinPath,
-		dataDir:         filepath.Join(dataDir, "postgres"),
-		parameters:      make(common.Parameters),
-		curParameters:   make(common.Parameters),
-		replConnParams:  replConnParams,
-		localConnParams: localConnParams,
-		suAuthMethod:    suAuthMethod,
-		suUsername:      suUsername,
-		suPassword:      suPassword,
-		replAuthMethod:  replAuthMethod,
-		replUsername:    replUsername,
-		replPassword:    replPassword,
-		requestTimeout:  requestTimeout,
+		pgBinPath:             pgBinPath,
+		dataDir:               filepath.Join(dataDir, "postgres"),
+		parameters:            make(common.Parameters),
+		recoveryParameters:    make(common.Parameters),
+		curParameters:         make(common.Parameters),
+		curRecoveryParameters: make(common.Parameters),
+		replConnParams:        replConnParams,
+		localConnParams:       localConnParams,
+		suAuthMethod:          suAuthMethod,
+		suUsername:            suUsername,
+		suPassword:            suPassword,
+		replAuthMethod:        replAuthMethod,
+		replUsername:          replUsername,
+		replPassword:          replPassword,
+		requestTimeout:        requestTimeout,
 	}
 }
 
@@ -117,6 +122,14 @@ func (p *Manager) SetParameters(parameters common.Parameters) {
 
 func (p *Manager) CurParameters() common.Parameters {
 	return p.curParameters
+}
+
+func (p *Manager) SetRecoveryParameters(recoveryParameters common.Parameters) {
+	p.recoveryParameters = recoveryParameters
+}
+
+func (p *Manager) CurRecoveryParameters() common.Parameters {
+	return p.curRecoveryParameters
 }
 
 func (p *Manager) SetHba(hba []string) {
@@ -133,6 +146,14 @@ func (p *Manager) UpdateCurParameters() {
 		panic(err)
 	}
 	p.curParameters = n.(common.Parameters)
+}
+
+func (p *Manager) UpdateCurRecoveryParameters() {
+	n, err := copystructure.Copy(p.recoveryParameters)
+	if err != nil {
+		panic(err)
+	}
+	p.curRecoveryParameters = n.(common.Parameters)
 }
 
 func (p *Manager) UpdateCurHba() {
@@ -247,16 +268,16 @@ func (p *Manager) StartTmpMerged() error {
 	if err := p.writePgHba(); err != nil {
 		return fmt.Errorf("error writing pg_hba.conf file: %v", err)
 	}
+	if err := p.writeRecoveryConf(); err != nil {
+		return fmt.Errorf("error writing %s file: %v", postgresRecoveryConf, err)
+	}
 
 	return p.start("-c", fmt.Sprintf("config_file=%s", tmpPostgresConfPath))
 }
 
 func (p *Manager) Start() error {
-	if err := p.WriteConf(); err != nil {
-		return fmt.Errorf("error writing %s file: %v", postgresConf, err)
-	}
-	if err := p.writePgHba(); err != nil {
-		return fmt.Errorf("error writing pg_hba.conf file: %v", err)
+	if err := p.writeConfs(); err != nil {
+		return err
 	}
 	return p.start()
 }
@@ -340,6 +361,7 @@ func (p *Manager) start(args ...string) error {
 	}
 
 	p.UpdateCurParameters()
+	p.UpdateCurRecoveryParameters()
 	p.UpdateCurHba()
 
 	return nil
@@ -386,12 +408,11 @@ func (p *Manager) IsStarted() (bool, error) {
 
 func (p *Manager) Reload() error {
 	log.Infow("reloading database configuration")
-	if err := p.WriteConf(); err != nil {
-		return fmt.Errorf("error writing %s file: %v", postgresConf, err)
+
+	if err := p.writeConfs(); err != nil {
+		return err
 	}
-	if err := p.writePgHba(); err != nil {
-		return fmt.Errorf("error writing pg_hba.conf file: %v", err)
-	}
+
 	name := filepath.Join(p.pgBinPath, "pg_ctl")
 	cmd := exec.Command(name, "reload", "-D", p.dataDir, "-o", "-c unix_socket_directories="+common.PgUnixSocketDirectories)
 	log.Debugw("execing cmd", "cmd", cmd)
@@ -404,6 +425,7 @@ func (p *Manager) Reload() error {
 	}
 
 	p.UpdateCurParameters()
+	p.UpdateCurRecoveryParameters()
 	p.UpdateCurHba()
 
 	return nil
@@ -652,7 +674,7 @@ func (p *Manager) IsInitialized() (bool, error) {
 
 func (p *Manager) GetRole() (common.Role, error) {
 	// if recovery.conf exists then consider it as a standby
-	_, err := os.Stat(filepath.Join(p.dataDir, "recovery.conf"))
+	_, err := os.Stat(filepath.Join(p.dataDir, postgresRecoveryConf))
 	if err != nil && !os.IsNotExist(err) {
 		return "", fmt.Errorf("error determining if recovery.conf exists: %v", err)
 	}
@@ -665,7 +687,7 @@ func (p *Manager) GetRole() (common.Role, error) {
 func (p *Manager) GetPrimaryConninfo() (ConnParams, error) {
 	regex := regexp.MustCompile(`\s*primary_conninfo\s*=\s*'(.*)'$`)
 
-	fh, err := os.Open(filepath.Join(p.dataDir, "recovery.conf"))
+	fh, err := os.Open(filepath.Join(p.dataDir, postgresRecoveryConf))
 	if os.IsNotExist(err) {
 		return nil, nil
 	}
@@ -686,7 +708,7 @@ func (p *Manager) GetPrimaryConninfo() (ConnParams, error) {
 func (p *Manager) GetPrimarySlotName() (string, error) {
 	regex := regexp.MustCompile(`\s*primary_slot_name\s*=\s*'(.*)'$`)
 
-	fh, err := os.Open(filepath.Join(p.dataDir, "recovery.conf"))
+	fh, err := os.Open(filepath.Join(p.dataDir, postgresRecoveryConf))
 	if os.IsNotExist(err) {
 		return "", nil
 	}
@@ -704,7 +726,20 @@ func (p *Manager) GetPrimarySlotName() (string, error) {
 	return "", nil
 }
 
-func (p *Manager) WriteConf() error {
+func (p *Manager) writeConfs() error {
+	if err := p.writeConf(); err != nil {
+		return fmt.Errorf("error writing %s file: %v", postgresConf, err)
+	}
+	if err := p.writePgHba(); err != nil {
+		return fmt.Errorf("error writing pg_hba.conf file: %v", err)
+	}
+	if err := p.writeRecoveryConf(); err != nil {
+		return fmt.Errorf("error writing %s file: %v", postgresRecoveryConf, err)
+	}
+	return nil
+}
+
+func (p *Manager) writeConf() error {
 	return common.WriteFileAtomicFunc(filepath.Join(p.dataDir, postgresConf), 0600,
 		func(f io.Writer) error {
 			for k, v := range p.parameters {
@@ -718,10 +753,15 @@ func (p *Manager) WriteConf() error {
 		})
 }
 
-func (p *Manager) WriteRecoveryConf(recoveryParameters common.Parameters) error {
-	return common.WriteFileAtomicFunc(filepath.Join(p.dataDir, "recovery.conf"), 0600,
+func (p *Manager) writeRecoveryConf() error {
+	// write recovery.conf only if recoveryParameters isn't nil or empty
+	if len(p.recoveryParameters) == 0 {
+		return nil
+	}
+
+	return common.WriteFileAtomicFunc(filepath.Join(p.dataDir, postgresRecoveryConf), 0600,
 		func(f io.Writer) error {
-			for n, v := range recoveryParameters {
+			for n, v := range p.recoveryParameters {
 				if _, err := f.Write([]byte(fmt.Sprintf("%s = '%s'\n", n, v))); err != nil {
 					return err
 				}
