@@ -396,10 +396,10 @@ func (p *PostgresKeeper) createRecoveryParameters(standbySettings *cluster.Stand
 		if recoveryTargetSettings.RecoveryTargetXid != "" {
 			parameters["recovery_target_xid"] = recoveryTargetSettings.RecoveryTargetXid
 		}
-
 		if recoveryTargetSettings.RecoveryTargetTimeline != "" {
 			parameters["recovery_target_timeline"] = recoveryTargetSettings.RecoveryTargetTimeline
 		}
+		parameters["recovery_target_action"] = "promote"
 	}
 
 	return parameters
