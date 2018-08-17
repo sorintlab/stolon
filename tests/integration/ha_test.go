@@ -1559,7 +1559,6 @@ func testKeeperRemovalStolonCtl(t *testing.T, syncRepl bool) {
 
 	// remove master from the cluster data, must fail
 	err = StolonCtl(clusterName, tstore.storeBackend, storeEndpoints, "removekeeper", master.uid)
-	t.Logf("received err: %v", err)
 	if err == nil {
 		t.Fatalf("expected err")
 	}
@@ -1814,4 +1813,119 @@ func TestDisappearedKeeperData(t *testing.T) {
 	if err := tp.WaitRightMaster(standby, 3*cluster.DefaultProxyCheckInterval); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
+}
+
+func testForceFail(t *testing.T, syncRepl bool, standbyCluster bool) {
+	dir, err := ioutil.TempDir("", "stolon")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer os.RemoveAll(dir)
+
+	var ptk *TestKeeper
+	var primary *TestKeeper
+	if standbyCluster {
+		primaryClusterName := uuid.NewV4().String()
+		ptks, ptss, ptp, ptstore := setupServers(t, primaryClusterName, dir, 1, 1, false, false, nil)
+		defer shutdown(ptks, ptss, ptp, ptstore)
+		for _, ptk = range ptks {
+			break
+		}
+		primary = ptk
+	}
+
+	clusterName := uuid.NewV4().String()
+
+	tks, tss, tp, tstore := setupServers(t, clusterName, dir, 2, 1, syncRepl, false, ptk)
+	defer shutdown(tks, tss, tp, tstore)
+
+	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
+	storePath := filepath.Join(common.StorePrefix, clusterName)
+	sm := store.NewKVBackedStore(tstore.store, storePath)
+
+	master, standbys := waitMasterStandbysReady(t, sm, tks)
+	standby := standbys[0]
+
+	if !standbyCluster {
+		primary = master
+	}
+
+	// a standby cluster will disable syncRepl since it's not possible to do sync repl on cascading standbys
+	if syncRepl && !standbyCluster {
+		if err := WaitClusterDataSynchronousStandbys([]string{standby.uid}, sm, 30*time.Second); err != nil {
+			t.Fatalf("expected synchronous standby on keeper %q in cluster data", standby.uid)
+		}
+	}
+
+	if err := populate(t, primary); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := write(t, primary, 1, 1); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// get the primary/master XLogPos
+	xLogPos, err := GetXLogPos(primary)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	// wait for the keepers to have reported their state
+	if err := WaitClusterSyncedXLogPos([]*TestKeeper{master, standby}, xLogPos, sm, 20*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// the proxy should connect to the right master
+	if err := tp.WaitRightMaster(master, 3*cluster.DefaultProxyCheckInterval); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// mark master as failed
+	err = StolonCtl(clusterName, tstore.storeBackend, storeEndpoints, "failkeeper", master.uid)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// Wait for cluster data containing standby as master
+	if err := WaitClusterDataMaster(standby.uid, sm, 30*time.Second); err != nil {
+		t.Fatalf("expected master %q in cluster view", standby.uid)
+	}
+	if err := standby.WaitDBRole(common.RoleMaster, ptk, 30*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if !standbyCluster {
+		primary = standby
+	}
+
+	c, err := getLines(t, standby)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if c != 1 {
+		t.Fatalf("wrong number of lines, want: %d, got: %d", 1, c)
+	}
+
+	// the proxy should connect to the right master
+	if err := tp.WaitRightMaster(standby, 3*cluster.DefaultProxyCheckInterval); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+}
+
+func TestForceFail(t *testing.T) {
+	t.Parallel()
+	testForceFail(t, false, false)
+}
+
+func TestForceFailSyncRepl(t *testing.T) {
+	t.Parallel()
+	testForceFail(t, true, false)
+}
+
+func TestForceFailStandbyCluster(t *testing.T) {
+	t.Parallel()
+	testForceFail(t, false, true)
+}
+
+func TestForceFailSyncReplStandbyCluster(t *testing.T) {
+	t.Parallel()
+	testForceFail(t, false, true)
 }

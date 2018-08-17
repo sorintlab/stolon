@@ -240,6 +240,11 @@ func (s *Sentinel) updateKeepersStatus(cd *cluster.ClusterData, keepersInfo clus
 	// Update keepers' healthy states
 	for _, k := range cd.Keepers {
 		healthy := s.isKeeperHealthy(cd, k)
+		if k.Status.ForceFail {
+			healthy = false
+			// reset ForceFail
+			k.Status.ForceFail = false
+		}
 		// set zero LastHealthyTime to time.Now() to avoid the keeper being
 		// removed since previous versions don't have it set
 		if k.Status.LastHealthyTime.IsZero() {
@@ -302,6 +307,11 @@ func (s *Sentinel) updateKeepersStatus(cd *cluster.ClusterData, keepersInfo clus
 	// Update dbs' healthy state
 	for _, db := range cd.DBs {
 		db.Status.Healthy = s.isDBHealthy(cd, db)
+		// if keeper is unhealthy then mark also the db ad unhealthy
+		keeper := cd.Keepers[db.Spec.KeeperUID]
+		if !keeper.Status.Healthy {
+			db.Status.Healthy = false
+		}
 	}
 
 	return cd, kihs
