@@ -10,6 +10,13 @@ This is useful for a lot of different use cases:
 In a stolon standby cluster the master keeper will be the one that will sync with the remote instance, while the other keepers will replicate with the master keeper (creating a cascading replication topology).
 Everything else will work as a normal cluster, if a keeper dies another one will be elected as the cluster master.
 
+#### A standby cluster of a standalone postgres instance
+![Standby Cluster](standbycluster_standalone_small.png)
+
+#### A standby cluster of another stolon cluster
+![Standby Cluster](standbycluster_small.png)
+
+
 ### Initializing a stolon standby cluster
 
 #### Prerequisites
