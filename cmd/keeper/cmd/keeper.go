@@ -113,7 +113,7 @@ var cfg config
 func init() {
 	user, err := util.GetUser()
 	if err != nil {
-		die("cannot get current user: %v", err)
+		log.Fatalf("cannot get current user: %v", err)
 	}
 
 	cmd.AddCommonFlags(CmdKeeper, &cfg.CommonConfig)
@@ -148,21 +148,6 @@ var managedPGParameters = []string{
 	"max_wal_senders",
 	"wal_log_hints",
 	"synchronous_standby_names",
-}
-
-func stderr(format string, a ...interface{}) {
-	out := fmt.Sprintf(format, a...)
-	fmt.Fprintln(os.Stderr, strings.TrimSuffix(out, "\n"))
-}
-
-func stdout(format string, a ...interface{}) {
-	out := fmt.Sprintf(format, a...)
-	fmt.Fprintln(os.Stdout, strings.TrimSuffix(out, "\n"))
-}
-
-func die(format string, a ...interface{}) {
-	stderr(format, a...)
-	os.Exit(1)
 }
 
 func readPasswordFromFile(filepath string) (string, error) {
@@ -485,7 +470,7 @@ func NewPostgresKeeper(cfg *config, end chan error) (*PostgresKeeper, error) {
 		return nil, fmt.Errorf("failed to load keeper local state file: %v", err)
 	}
 	if p.keeperLocalState.UID != "" && p.cfg.uid != "" && p.keeperLocalState.UID != p.cfg.uid {
-		die("saved uid %q differs from configuration uid: %q", p.keeperLocalState.UID, cfg.uid)
+		log.Fatalf("saved uid %q differs from configuration uid: %q", p.keeperLocalState.UID, cfg.uid)
 	}
 	if p.keeperLocalState.UID == "" {
 		p.keeperLocalState.UID = cfg.uid
@@ -494,7 +479,7 @@ func NewPostgresKeeper(cfg *config, end chan error) (*PostgresKeeper, error) {
 			log.Infow("uid generated", "uid", p.keeperLocalState.UID)
 		}
 		if err = p.saveKeeperLocalState(); err != nil {
-			die("error: %v", err)
+			log.Fatalf("error: %v", err)
 		}
 	}
 
@@ -1737,7 +1722,7 @@ func keeper(c *cobra.Command, args []string) {
 	case "debug":
 		slog.SetLevel(zap.DebugLevel)
 	default:
-		die("invalid log level: %v", cfg.LogLevel)
+		log.Fatalf("invalid log level: %v", cfg.LogLevel)
 	}
 	if cfg.debug {
 		slog.SetDebug()
@@ -1748,19 +1733,19 @@ func keeper(c *cobra.Command, args []string) {
 	}
 
 	if cfg.dataDir == "" {
-		die("data dir required")
+		log.Fatalf("data dir required")
 	}
 
 	if err = cmd.CheckCommonConfig(&cfg.CommonConfig); err != nil {
-		die(err.Error())
+		log.Fatalf(err.Error())
 	}
 
 	if err = os.MkdirAll(cfg.dataDir, 0700); err != nil {
-		die("cannot create data dir: %v", err)
+		log.Fatalf("cannot create data dir: %v", err)
 	}
 
 	if cfg.pgListenAddress == "" {
-		die("--pg-listen-address is required")
+		log.Fatalf("--pg-listen-address is required")
 	}
 
 	ip := net.ParseIP(cfg.pgListenAddress)
@@ -1776,73 +1761,73 @@ func keeper(c *cobra.Command, args []string) {
 		}
 	}
 	if cfg.pgListenAddress == "" {
-		die("--pg-listen-address is required")
+		log.Fatalf("--pg-listen-address is required")
 	}
 
 	if _, ok := validAuthMethods[cfg.pgReplAuthMethod]; !ok {
-		die("--pg-repl-auth-method must be one of: md5, trust")
+		log.Fatalf("--pg-repl-auth-method must be one of: md5, trust")
 	}
 	if cfg.pgReplUsername == "" {
-		die("--pg-repl-username is required")
+		log.Fatalf("--pg-repl-username is required")
 	}
 	if cfg.pgReplAuthMethod == "trust" {
-		stdout("warning: not utilizing a password for replication between hosts is extremely dangerous")
+		log.Warn("not utilizing a password for replication between hosts is extremely dangerous")
 		if cfg.pgReplPassword != "" || cfg.pgReplPasswordFile != "" {
-			die("can not utilize --pg-repl-auth-method trust together with --pg-repl-password or --pg-repl-passwordfile")
+			log.Fatalf("can not utilize --pg-repl-auth-method trust together with --pg-repl-password or --pg-repl-passwordfile")
 		}
 	}
 	if cfg.pgSUAuthMethod == "trust" {
-		stdout("warning: not utilizing a password for superuser is extremely dangerous")
+		log.Warn("not utilizing a password for superuser is extremely dangerous")
 		if cfg.pgSUPassword != "" || cfg.pgSUPasswordFile != "" {
-			die("can not utilize --pg-su-auth-method trust together with --pg-su-password or --pg-su-passwordfile")
+			log.Fatalf("can not utilize --pg-su-auth-method trust together with --pg-su-password or --pg-su-passwordfile")
 		}
 	}
 	if cfg.pgReplAuthMethod != "trust" && cfg.pgReplPassword == "" && cfg.pgReplPasswordFile == "" {
-		die("one of --pg-repl-password or --pg-repl-passwordfile is required")
+		log.Fatalf("one of --pg-repl-password or --pg-repl-passwordfile is required")
 	}
 	if cfg.pgReplAuthMethod != "trust" && cfg.pgReplPassword != "" && cfg.pgReplPasswordFile != "" {
-		die("only one of --pg-repl-password or --pg-repl-passwordfile must be provided")
+		log.Fatalf("only one of --pg-repl-password or --pg-repl-passwordfile must be provided")
 	}
 	if _, ok := validAuthMethods[cfg.pgSUAuthMethod]; !ok {
-		die("--pg-su-auth-method must be one of: md5, password, trust")
+		log.Fatalf("--pg-su-auth-method must be one of: md5, password, trust")
 	}
 	if cfg.pgSUAuthMethod != "trust" && cfg.pgSUPassword == "" && cfg.pgSUPasswordFile == "" {
-		die("one of --pg-su-password or --pg-su-passwordfile is required")
+		log.Fatalf("one of --pg-su-password or --pg-su-passwordfile is required")
 	}
 	if cfg.pgSUAuthMethod != "trust" && cfg.pgSUPassword != "" && cfg.pgSUPasswordFile != "" {
-		die("only one of --pg-su-password or --pg-su-passwordfile must be provided")
+		log.Fatalf("only one of --pg-su-password or --pg-su-passwordfile must be provided")
 	}
 
 	if cfg.pgSUUsername == cfg.pgReplUsername {
-		stdout("warning: superuser name and replication user name are the same. Different users are suggested.")
+		log.Warn("superuser name and replication user name are the same. Different users are suggested.")
 		if cfg.pgReplAuthMethod != cfg.pgSUAuthMethod {
-			die("do not support different auth methods when utilizing superuser for replication.")
+			log.Fatalf("do not support different auth methods when utilizing superuser for replication.")
 		}
 		if cfg.pgSUPassword != cfg.pgReplPassword && cfg.pgSUAuthMethod != "trust" && cfg.pgReplAuthMethod != "trust" {
-			die("provided superuser name and replication user name are the same but provided passwords are different")
+			log.Fatalf("provided superuser name and replication user name are the same but provided passwords are different")
 		}
 	}
 
 	if cfg.pgReplPasswordFile != "" {
 		cfg.pgReplPassword, err = readPasswordFromFile(cfg.pgReplPasswordFile)
 		if err != nil {
-			die("cannot read pg replication user password: %v", err)
+			log.Fatalf("cannot read pg replication user password: %v", err)
 		}
 	}
 	if cfg.pgSUPasswordFile != "" {
 		cfg.pgSUPassword, err = readPasswordFromFile(cfg.pgSUPasswordFile)
 		if err != nil {
-			die("cannot read pg superuser password: %v", err)
+			log.Fatalf("cannot read pg superuser password: %v", err)
 		}
 	}
 
 	// Open (and create if needed) the lock file.
 	// There is no need to clean up this file since we don't use the file as an actual lock. We get a lock
-	// on the file. So the lock get released when our process stops (or dies).
+	// on the file. So the lock get released when our process stops (or log.Fatalfs).
 	lockFileName := filepath.Join(cfg.dataDir, "lock")
 	lockFile, err := os.OpenFile(lockFileName, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
-		die("cannot take exclusive lock on data dir %q: %v", lockFileName, err)
+		log.Fatalf("cannot take exclusive lock on data dir %q: %v", lockFileName, err)
 	}
 
 	// Get a lock on our lock file.
@@ -1855,14 +1840,14 @@ func keeper(c *cobra.Command, args []string) {
 
 	err = syscall.FcntlFlock(lockFile.Fd(), syscall.F_SETLK, ft)
 	if err != nil {
-		die("cannot take exclusive lock on data dir %q: %v", lockFileName, err)
+		log.Fatalf("cannot take exclusive lock on data dir %q: %v", lockFileName, err)
 	}
 
 	log.Infow("exclusive lock on data dir taken")
 
 	if cfg.uid != "" {
 		if !pg.IsValidReplSlotName(cfg.uid) {
-			die("keeper uid %q not valid. It can contain only lower-case letters, numbers and the underscore character", cfg.uid)
+			log.Fatalf("keeper uid %q not valid. It can contain only lower-case letters, numbers and the underscore character", cfg.uid)
 		}
 	}
 
@@ -1885,7 +1870,7 @@ func keeper(c *cobra.Command, args []string) {
 
 	p, err := NewPostgresKeeper(&cfg, end)
 	if err != nil {
-		die("cannot create keeper: %v", err)
+		log.Fatalf("cannot create keeper: %v", err)
 	}
 	go p.Start(ctx)
 

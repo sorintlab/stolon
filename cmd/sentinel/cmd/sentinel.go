@@ -25,7 +25,6 @@ import (
 	"os/signal"
 	"reflect"
 	"sort"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -74,21 +73,6 @@ func init() {
 	CmdSentinel.PersistentFlags().BoolVar(&cfg.debug, "debug", false, "enable debug logging (deprecated, use log-level instead)")
 
 	CmdSentinel.PersistentFlags().MarkDeprecated("debug", "use --log-level=debug instead")
-}
-
-func stderr(format string, a ...interface{}) {
-	out := fmt.Sprintf(format, a...)
-	fmt.Fprintln(os.Stderr, strings.TrimSuffix(out, "\n"))
-}
-
-func stdout(format string, a ...interface{}) {
-	out := fmt.Sprintf(format, a...)
-	fmt.Fprintln(os.Stdout, strings.TrimSuffix(out, "\n"))
-}
-
-func die(format string, a ...interface{}) {
-	stderr(format, a...)
-	os.Exit(1)
 }
 
 func (s *Sentinel) electionLoop(ctx context.Context) {
@@ -1947,7 +1931,7 @@ func sentinel(c *cobra.Command, args []string) {
 	case "debug":
 		slog.SetLevel(zap.DebugLevel)
 	default:
-		die("invalid log level: %v", cfg.LogLevel)
+		log.Fatalf("invalid log level: %v", cfg.LogLevel)
 	}
 	if cfg.debug {
 		slog.SetDebug()
@@ -1958,7 +1942,7 @@ func sentinel(c *cobra.Command, args []string) {
 	}
 
 	if err := cmd.CheckCommonConfig(&cfg.CommonConfig); err != nil {
-		die(err.Error())
+		log.Fatalf(err.Error())
 	}
 
 	uid := common.UID()
@@ -1983,7 +1967,7 @@ func sentinel(c *cobra.Command, args []string) {
 
 	s, err := NewSentinel(uid, &cfg, end)
 	if err != nil {
-		die("cannot create sentinel: %v", err)
+		log.Fatalf("cannot create sentinel: %v", err)
 	}
 	go s.Start(ctx)
 
