@@ -24,7 +24,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -682,48 +681,6 @@ func (p *Manager) GetRole() (common.Role, error) {
 		return common.RoleMaster, nil
 	}
 	return common.RoleStandby, nil
-}
-
-func (p *Manager) GetPrimaryConninfo() (ConnParams, error) {
-	regex := regexp.MustCompile(`\s*primary_conninfo\s*=\s*'(.*)'$`)
-
-	fh, err := os.Open(filepath.Join(p.dataDir, postgresRecoveryConf))
-	if os.IsNotExist(err) {
-		return nil, nil
-	}
-	defer fh.Close()
-
-	scanner := bufio.NewScanner(fh)
-	scanner.Split(bufio.ScanLines)
-
-	for scanner.Scan() {
-		m := regex.FindStringSubmatch(scanner.Text())
-		if len(m) == 2 {
-			return ParseConnString(m[1])
-		}
-	}
-	return nil, nil
-}
-
-func (p *Manager) GetPrimarySlotName() (string, error) {
-	regex := regexp.MustCompile(`\s*primary_slot_name\s*=\s*'(.*)'$`)
-
-	fh, err := os.Open(filepath.Join(p.dataDir, postgresRecoveryConf))
-	if os.IsNotExist(err) {
-		return "", nil
-	}
-	defer fh.Close()
-
-	scanner := bufio.NewScanner(fh)
-	scanner.Split(bufio.ScanLines)
-
-	for scanner.Scan() {
-		m := regex.FindStringSubmatch(scanner.Text())
-		if len(m) == 2 {
-			return m[1], nil
-		}
-	}
-	return "", nil
 }
 
 func (p *Manager) writeConfs() error {

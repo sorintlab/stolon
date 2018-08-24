@@ -92,7 +92,8 @@ type FollowConfig struct {
 	// Keeper ID to follow when Type is "internal"
 	DBUID string `json:"dbuid,omitempty"`
 	// Standby settings when Type is "external"
-	StandbySettings *StandbySettings `json:"standbySettings,omitempty"`
+	StandbySettings         *StandbySettings         `json:"standbySettings,omitempty"`
+	ArchiveRecoverySettings *ArchiveRecoverySettings `json:"archiveRecoverySettings,omitempty"`
 }
 
 type PostgresBinaryVersion struct {
@@ -164,6 +165,12 @@ type PITRConfig struct {
 
 type ExistingConfig struct {
 	KeeperUID string `json:"keeperUID,omitempty"`
+}
+
+// Standby config when role is standby
+type StandbyConfig struct {
+	StandbySettings         *StandbySettings         `json:"standbySettings,omitempty"`
+	ArchiveRecoverySettings *ArchiveRecoverySettings `json:"archiveRecoverySettings,omitempty"`
 }
 
 // ArchiveRecoverySettings defines the archive recovery settings in the recovery.conf file (https://www.postgresql.org/docs/9.6/static/archive-recovery-settings.html )
@@ -265,8 +272,8 @@ type ClusterSpec struct {
 	PITRConfig *PITRConfig `json:"pitrConfig,omitempty"`
 	// Existing init configuration used when InitMode is "existing"
 	ExistingConfig *ExistingConfig `json:"existingConfig,omitempty"`
-	// Standby setting when role is standby
-	StandbySettings *StandbySettings `json:"standbySettings,omitempty"`
+	// Standby config when role is standby
+	StandbyConfig *StandbyConfig `json:"standbyConfig,omitempty"`
 	// Define the mode of the default hba rules needed for replication by standby keepers (the su and repl auth methods will be the one provided in the keeper command line options)
 	// Values can be "all" or "strict", "all" allow access from all ips, "strict" restrict master access to standby servers ips.
 	// Default is "all"
@@ -479,11 +486,8 @@ func (os *ClusterSpec) Validate() error {
 	switch *s.Role {
 	case ClusterRoleMaster:
 	case ClusterRoleStandby:
-		if s.StandbySettings == nil {
-			return fmt.Errorf("standbySettings undefined. Required when cluster role is \"standby\"")
-		}
-		if s.StandbySettings.PrimaryConninfo == "" {
-			return fmt.Errorf("standbySettings primaryConnInfo undefined. Required when cluster role is \"standby\"")
+		if s.StandbyConfig == nil {
+			return fmt.Errorf("standbyConfig undefined. Required when cluster role is \"standby\"")
 		}
 	default:
 		return fmt.Errorf("unknown role: %q", *s.InitMode)

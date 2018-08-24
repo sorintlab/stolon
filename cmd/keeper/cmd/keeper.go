@@ -343,11 +343,14 @@ func (p *PostgresKeeper) createPGParameters(db *cluster.DB) common.Parameters {
 	return parameters
 }
 
-func (p *PostgresKeeper) createRecoveryParameters(standbySettings *cluster.StandbySettings, archiveRecoverySettings *cluster.ArchiveRecoverySettings, recoveryTargetSettings *cluster.RecoveryTargetSettings) common.Parameters {
+func (p *PostgresKeeper) createRecoveryParameters(standbyMode bool, standbySettings *cluster.StandbySettings, archiveRecoverySettings *cluster.ArchiveRecoverySettings, recoveryTargetSettings *cluster.RecoveryTargetSettings) common.Parameters {
 	parameters := common.Parameters{}
 
-	if standbySettings != nil {
+	if standbyMode {
 		parameters["standby_mode"] = "on"
+	}
+
+	if standbySettings != nil {
 		if standbySettings.PrimaryConninfo != "" {
 			parameters["primary_conninfo"] = standbySettings.PrimaryConninfo
 		}
@@ -797,7 +800,7 @@ func (p *PostgresKeeper) resync(db, followedDB *cluster.DB, tryPgrewind bool) er
 			// log pg_rewind error and fallback to pg_basebackup
 			log.Errorw("error syncing with pg_rewind", zap.Error(err))
 		} else {
-			pgm.SetRecoveryParameters(p.createRecoveryParameters(standbySettings, nil, nil))
+			pgm.SetRecoveryParameters(p.createRecoveryParameters(true, standbySettings, nil, nil))
 			return nil
 		}
 	}
@@ -826,7 +829,7 @@ func (p *PostgresKeeper) resync(db, followedDB *cluster.DB, tryPgrewind bool) er
 	}
 	log.Infow("sync succeeded")
 
-	pgm.SetRecoveryParameters(p.createRecoveryParameters(standbySettings, nil, nil))
+	pgm.SetRecoveryParameters(p.createRecoveryParameters(true, standbySettings, nil, nil))
 
 	return nil
 }
@@ -1134,18 +1137,23 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				log.Errorw("failed to restore postgres database cluster", zap.Error(err))
 				return
 			}
+
+			standbyMode := false
 			var standbySettings *cluster.StandbySettings
 			if db.Spec.FollowConfig != nil && db.Spec.FollowConfig.Type == cluster.FollowTypeExternal {
+				standbyMode = true
 				standbySettings = db.Spec.FollowConfig.StandbySettings
 			}
-			pgm.SetRecoveryParameters(p.createRecoveryParameters(standbySettings, db.Spec.PITRConfig.ArchiveRecoverySettings, db.Spec.PITRConfig.RecoveryTargetSettings))
+
+			// if we are initializing a standby cluster then enable standby_mode to not stop recovery
+			pgm.SetRecoveryParameters(p.createRecoveryParameters(standbyMode, standbySettings, db.Spec.PITRConfig.ArchiveRecoverySettings, db.Spec.PITRConfig.RecoveryTargetSettings))
 
 			if err = pgm.StartTmpMerged(); err != nil {
 				log.Errorw("failed to start instance", zap.Error(err))
 				return
 			}
 
-			if standbySettings == nil {
+			if !standbyMode {
 				// wait for the db having replyed all the wals
 				if err = pgm.WaitRecoveryDone(cd.Cluster.DefSpec().SyncTimeout.Duration); err != nil {
 					log.Errorw("recovery not finished", zap.Error(err))
@@ -1443,7 +1451,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				return
 			}
 			if !started {
-				pgm.SetRecoveryParameters(p.createRecoveryParameters(standbySettings, nil, nil))
+				pgm.SetRecoveryParameters(p.createRecoveryParameters(true, standbySettings, nil, nil))
 				if err = pgm.Start(); err != nil {
 					log.Errorw("failed to start postgres", zap.Error(err))
 					return
@@ -1465,7 +1473,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				standbySettings := &cluster.StandbySettings{PrimaryConninfo: newReplConnParams.ConnString(), PrimarySlotName: common.StolonName(db.UID)}
 
 				curRecoveryParameters := pgm.CurRecoveryParameters()
-				newRecoveryParameters := p.createRecoveryParameters(standbySettings, nil, nil)
+				newRecoveryParameters := p.createRecoveryParameters(true, standbySettings, nil, nil)
 
 				// Update recovery conf if parameters has changed
 				if !curRecoveryParameters.Equals(newRecoveryParameters) {
@@ -1484,7 +1492,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 
 			case cluster.FollowTypeExternal:
 				curRecoveryParameters := pgm.CurRecoveryParameters()
-				newRecoveryParameters := p.createRecoveryParameters(db.Spec.FollowConfig.StandbySettings, nil, nil)
+				newRecoveryParameters := p.createRecoveryParameters(true, db.Spec.FollowConfig.StandbySettings, db.Spec.FollowConfig.ArchiveRecoverySettings, nil)
 
 				// Update recovery conf if parameters has changed
 				if !curRecoveryParameters.Equals(newRecoveryParameters) {

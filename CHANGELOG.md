@@ -1,3 +1,10 @@
+### v0.13.0
+
+#### Upgrades notes.
+
+* The clusterspec `standbySettings` option as been replaced by the `standbyConfig` option. Internally it can contain two fields `standbySettings` and `archiveRecoverySettings` (see the clusterspec doc with the descriptors of this new option). If you're updating a standby cluster, BEFORE starting it you should update, using `stolonctl`, the clusterspec with the new `standbyConfig` option.
+
+
 ### v0.12.0
 
 #### New features

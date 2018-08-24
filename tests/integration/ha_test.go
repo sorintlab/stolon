@@ -156,8 +156,10 @@ func setupServers(t *testing.T, clusterName, dir string, numKeepers, numSentinel
 			PITRConfig: &cluster.PITRConfig{
 				DataRestoreCommand: fmt.Sprintf("PGPASSFILE=%s pg_basebackup -D %%d -h %s -p %s -U %s", pgpass.Name(), primaryKeeper.pgListenAddress, primaryKeeper.pgPort, primaryKeeper.pgReplUsername),
 			},
-			StandbySettings: &cluster.StandbySettings{
-				PrimaryConninfo: fmt.Sprintf("sslmode=disable host=%s port=%s user=%s password=%s", primaryKeeper.pgListenAddress, primaryKeeper.pgPort, primaryKeeper.pgReplUsername, primaryKeeper.pgReplPassword),
+			StandbyConfig: &cluster.StandbyConfig{
+				StandbySettings: &cluster.StandbySettings{
+					PrimaryConninfo: fmt.Sprintf("sslmode=disable host=%s port=%s user=%s password=%s", primaryKeeper.pgListenAddress, primaryKeeper.pgPort, primaryKeeper.pgReplUsername, primaryKeeper.pgReplPassword),
+				},
 			},
 		}
 	}
