@@ -15,15 +15,19 @@ We suggest that you first read the [Stolon Architecture and Requirements](archit
 * [Standby Cluster](standbycluster.md)
 
 ### Misc topics
-  * [Enabling pg_rewind](pg_rewind.md)
-  * [Enabling synchronous replication](syncrepl.md)
-  * [PostgreSQL SSL/TLS setup](ssl.md)
+
+* [Enabling pg_rewind](pg_rewind.md)
+* [Enabling synchronous replication](syncrepl.md)
+* [PostgreSQL SSL/TLS setup](ssl.md)
 
 ### Recipes
-  * [Manual switchover without transactions loss](manual_switchover.md)
+
+* [Manual switchover without transactions loss](manual_switchover.md)
 
 ### Examples
-  * [Simple test cluster](simplecluster.md)
-  * [Kubernetes](../examples/kubernetes/README.md)
+
+* [Simple test cluster](simplecluster.md)
+* [Kubernetes](../examples/kubernetes/README.md)
+* [Two (or more) nodes setup](twonodes.md)
 
 ### [FAQ](faq.md)
