@@ -19,8 +19,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"os"
-	"strings"
 	"sync"
 	"time"
 
@@ -74,21 +72,6 @@ func init() {
 	CmdProxy.PersistentFlags().IntVar(&cfg.keepAliveInterval, "tcp-keepalive-interval", 0, "set tcp keepalive interval (seconds)")
 
 	CmdProxy.PersistentFlags().MarkDeprecated("debug", "use --log-level=debug instead")
-}
-
-func stderr(format string, a ...interface{}) {
-	out := fmt.Sprintf(format, a...)
-	fmt.Fprintln(os.Stderr, strings.TrimSuffix(out, "\n"))
-}
-
-func stdout(format string, a ...interface{}) {
-	out := fmt.Sprintf(format, a...)
-	fmt.Fprintln(os.Stdout, strings.TrimSuffix(out, "\n"))
-}
-
-func die(format string, a ...interface{}) {
-	stderr(format, a...)
-	os.Exit(1)
 }
 
 type ClusterChecker struct {
@@ -347,7 +330,7 @@ func proxy(c *cobra.Command, args []string) {
 	case "debug":
 		slog.SetLevel(zap.DebugLevel)
 	default:
-		die("invalid log level: %v", cfg.LogLevel)
+		log.Fatalf("invalid log level: %v", cfg.LogLevel)
 	}
 	if cfg.debug {
 		slog.SetDebug()
@@ -366,17 +349,17 @@ func proxy(c *cobra.Command, args []string) {
 	}
 
 	if err := cmd.CheckCommonConfig(&cfg.CommonConfig); err != nil {
-		die(err.Error())
+		log.Fatalf(err.Error())
 	}
 
 	if cfg.keepAliveIdle < 0 {
-		die("tcp keepalive idle value must be greater or equal to 0")
+		log.Fatalf("tcp keepalive idle value must be greater or equal to 0")
 	}
 	if cfg.keepAliveCount < 0 {
-		die("tcp keepalive idle value must be greater or equal to 0")
+		log.Fatalf("tcp keepalive idle value must be greater or equal to 0")
 	}
 	if cfg.keepAliveInterval < 0 {
-		die("tcp keepalive idle value must be greater or equal to 0")
+		log.Fatalf("tcp keepalive idle value must be greater or equal to 0")
 	}
 
 	uid := common.UID()
@@ -387,16 +370,16 @@ func proxy(c *cobra.Command, args []string) {
 		go func() {
 			err := http.ListenAndServe(cfg.MetricsListenAddress, nil)
 			if err != nil {
-				die("metrics http server error", zap.Error(err))
+				log.Fatalf("metrics http server error", zap.Error(err))
 			}
 		}()
 	}
 
 	clusterChecker, err := NewClusterChecker(uid, cfg)
 	if err != nil {
-		die("cannot create cluster checker: %v", err)
+		log.Fatalf("cannot create cluster checker: %v", err)
 	}
 	if err = clusterChecker.Start(); err != nil {
-		die("cluster checker ended with error: %v", err)
+		log.Fatalf("cluster checker ended with error: %v", err)
 	}
 }
