@@ -41,8 +41,9 @@ For more details and requirements see [Stolon Architecture and Requirements](doc
 
 ## Quick start and examples
 
-* [simple cluster example](doc/simplecluster.md)
-* [kubernetes example](examples/kubernetes/README.md)
+* [Simple cluster example](doc/simplecluster.md)
+* [Kubernetes example](examples/kubernetes/README.md)
+* [Two (or more) nodes setup](doc/twonodes.md)
 
 ## Project Status
 
