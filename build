@@ -33,18 +33,7 @@ fi
 ORG_PATH="github.com/sorintlab"
 REPO_PATH="${ORG_PATH}/stolon"
 
-# Hack to be sure that:
-# * all the dependencies are vendored
-# * if cloned as another repo name it will compile anyway
-export GOPATH=${PWD}/gopath
-
-rm -f $GOPATH/src/${REPO_PATH}
-mkdir -p $GOPATH/src/${ORG_PATH}
-ln -s ${PWD} $GOPATH/src/${REPO_PATH}
-
 mkdir -p ${BINDIR}
-
-export GO15VENDOREXPERIMENT=1
 
 VERSION=${STOLON_VERSION:-$(${BASEDIR}/scripts/git-version.sh)}
 LD_FLAGS="-s -X ${REPO_PATH}/cmd.Version=$VERSION"
@@ -72,32 +61,12 @@ if [ -w ${go_root_dir}/pkg ]; then
 	use_go_install=1
 fi
 
-if [ -z $use_go_install ]; then
-	echo "Cannot find/create a go stdlib created with cgo disabled for the go release installed at ${go_root_dir} since ${go_root_dir}/pkg is not writable by `whoami`"
-	echo "The build will use \"go build\" instead of \"go install\". This is slower since every run will need to rebuild all the needed packages."
-	echo "To speed up the build you should make ${go_root_dir}/pkg writable for `whoami` for at least the first build"
-	echo "or manually rebuild stdlib executing the command 'CGO_ENABLED=0 go install -a -installsuffix cgo std' from a user with write access to ${go_root_dir}/pkg"
+for cmd in sentinel proxy; do
+	CGO_ENABLED=0 go build -installsuffix cgo -ldflags "$LD_FLAGS" -o ${BINDIR}/stolon-${cmd} ${REPO_PATH}/cmd/${cmd}
+done
+CGO_ENABLED=0 go build -installsuffix cgo -ldflags "$LD_FLAGS" -o ${BINDIR}/stolonctl ${REPO_PATH}/cmd/stolonctl
 
-	for cmd in sentinel proxy; do
-		CGO_ENABLED=0 go build -a -installsuffix cgo -ldflags "$LD_FLAGS" -o ${BINDIR}/stolon-${cmd} ${REPO_PATH}/cmd/${cmd}
-	done
-	CGO_ENABLED=0 go build -a -installsuffix cgo -ldflags "$LD_FLAGS" -o ${BINDIR}/stolonctl ${REPO_PATH}/cmd/stolonctl
-else
-	for cmd in sentinel proxy; do
-		CGO_ENABLED=0 go install -installsuffix cgo -ldflags "$LD_FLAGS" ${REPO_PATH}/cmd/${cmd}
-		rm -f ${BINDIR}/stolon-${cmd}
-		cp ${GOPATH}/bin/${cmd} ${BINDIR}/stolon-${cmd}
-	done
-	CGO_ENABLED=0 go install -installsuffix cgo -ldflags "$LD_FLAGS" ${REPO_PATH}/cmd/stolonctl
-	rm -f ${BINDIR}/stolonctl
-	cp ${GOPATH}/bin/stolonctl ${BINDIR}/
-fi
-
-# stolon-keeper cannot be statically built since it needs to get its current
-# running user and this is not available with cgo disabled
-go install -ldflags "$LD_FLAGS" ${REPO_PATH}/cmd/keeper
-rm -f ${BINDIR}/stolon-keeper
-cp ${GOPATH}/bin/keeper ${BINDIR}/stolon-keeper
+go build -ldflags "$LD_FLAGS" -o ${BINDIR}/stolon-keeper ${REPO_PATH}/cmd/keeper 
 
 # Copy binaries to Dockerfile image directories
 declare -a DOCKERFILE_PATHS
