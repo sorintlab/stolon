@@ -27,8 +27,11 @@ touch $HOME/.kube/config
 export KUBECONFIG=$HOME/.kube/config
 sudo -E minikube start --vm-driver=none
 
-# Precompile stdlib with cgo disable to speedup builds
-sudo -E CGO_ENABLED=0 go install -a -installsuffix cgo std
+# Fix build to work with the right import path also when building github forked repositories
+if [[ ! -e ~/workspace/src/github.com/sorintlab/stolon ]]; then
+  mkdir -p ~/workspace/src/github.com/sorintlab
+  ln -s /home/runner/stolon ~/workspace/src/github.com/sorintlab/stolon
+fi
 
 ./build
 

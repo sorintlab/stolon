@@ -31,8 +31,11 @@ wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-
 sudo apt-get update
 sudo apt-get -y install postgresql-9.5 postgresql-9.6 postgresql-10 postgresql-11
 
-# Precompile stdlib with cgo disable to speedup builds
-sudo -E CGO_ENABLED=0 go install -a -installsuffix cgo std
+# Fix build to work with the right import path also when building github forked repositories
+if [[ ! -e ~/workspace/src/github.com/sorintlab/stolon ]]; then
+  mkdir -p ~/workspace/src/github.com/sorintlab
+  ln -s /home/runner/stolon ~/workspace/src/github.com/sorintlab/stolon
+fi
 
 # Run tests
 export ETCD_BIN="${PWD}/etcd/etcd-v3.2.11-linux-amd64/etcd"

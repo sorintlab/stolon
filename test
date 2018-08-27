@@ -23,11 +23,6 @@ REPO_PATH="${ORG_PATH}/stolon"
 
 ./build
 
-# Hack to be sure that:
-# * all the dependencies are vendored
-# * if cloned as another repo name it will compile anyway
-export GOPATH=${PWD}/gopath
-
 # test all packages excluding integration tests
 IGNORE_PKGS="(vendor/|tests/integration)"
 PACKAGES=$(find . -name \*_test.go | while read -r a; do dirname "$a"; done | sort | uniq | grep -vE "$IGNORE_PKGS" | sed "s|\./||g")
