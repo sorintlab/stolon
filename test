@@ -57,12 +57,11 @@ echo "Running tests..."
 
 COVER=${COVER:-"-cover"}
 
-# Disable gofmt on CI since it'll break when we'll use go 1.10 and go 1.11
-#
-# TODO(sgotti) Check against only one (usually the latest stable) go version
-# gofmt output (for example gofmt in go 1.10 and 1.11 will format differently)
-# or check that at least one passes
-if [ "${CI}" != "true" ]; then
+# Use only of specific go version to run gofmt since it'll break when we'll use go 1.10 and go 1.11
+GOFMT_VERSION="go1.11"
+
+MAJOR_GOVERSION=$( echo -n $(go version) | grep -o 'go1\.[0-9]*' || true )
+if [ "${MAJOR_GOVERSION}" == "${GOFMT_VERSION}" ]; then
 	echo "Checking gofmt..."
 	fmtRes=$(gofmt -l $(find . -type f -name '*.go' ! -path './vendor/*'))
 	if [ -n "${fmtRes}" ]; then

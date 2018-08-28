@@ -122,7 +122,7 @@ func TestGenerateHBA(t *testing.T) {
 	}{
 		{
 			DefaultSUReplAccessMode: cluster.SUReplAccessAll,
-			dbUID: "db1",
+			dbUID:                   "db1",
 			out: []string{
 				"local postgres superuser md5",
 				"local replication repluser md5",
@@ -136,7 +136,7 @@ func TestGenerateHBA(t *testing.T) {
 		},
 		{
 			DefaultSUReplAccessMode: cluster.SUReplAccessAll,
-			dbUID: "db2",
+			dbUID:                   "db2",
 			out: []string{
 				"local postgres superuser md5",
 				"local replication repluser md5",
@@ -150,7 +150,7 @@ func TestGenerateHBA(t *testing.T) {
 		},
 		{
 			DefaultSUReplAccessMode: cluster.SUReplAccessAll,
-			dbUID: "db1",
+			dbUID:                   "db1",
 			pgHBA: []string{
 				"host all all 192.168.0.0/24 md5",
 			},
@@ -166,7 +166,7 @@ func TestGenerateHBA(t *testing.T) {
 		},
 		{
 			DefaultSUReplAccessMode: cluster.SUReplAccessAll,
-			dbUID: "db2",
+			dbUID:                   "db2",
 			pgHBA: []string{
 				"host all all 192.168.0.0/24 md5",
 			},
@@ -182,7 +182,7 @@ func TestGenerateHBA(t *testing.T) {
 		},
 		{
 			DefaultSUReplAccessMode: cluster.SUReplAccessStrict,
-			dbUID: "db1",
+			dbUID:                   "db1",
 			out: []string{
 				"local postgres superuser md5",
 				"local replication repluser md5",
@@ -194,7 +194,7 @@ func TestGenerateHBA(t *testing.T) {
 		},
 		{
 			DefaultSUReplAccessMode: cluster.SUReplAccessStrict,
-			dbUID: "db2",
+			dbUID:                   "db2",
 			out: []string{
 				"local postgres superuser md5",
 				"local replication repluser md5",
