@@ -165,7 +165,7 @@ func readPasswordFromFile(filepath string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("unable to read password from file %s: %v", filepath, err)
 	}
-	return strings.TrimSpace(string(pwBytes)), nil
+	return string(pwBytes), nil
 }
 
 // walLevel returns the wal_level value to use.
@@ -1806,16 +1806,6 @@ func keeper(c *cobra.Command, args []string) {
 		log.Fatalf("only one of --pg-su-password or --pg-su-passwordfile must be provided")
 	}
 
-	if cfg.pgSUUsername == cfg.pgReplUsername {
-		log.Warn("superuser name and replication user name are the same. Different users are suggested.")
-		if cfg.pgReplAuthMethod != cfg.pgSUAuthMethod {
-			log.Fatalf("do not support different auth methods when utilizing superuser for replication.")
-		}
-		if cfg.pgSUPassword != cfg.pgReplPassword && cfg.pgSUAuthMethod != "trust" && cfg.pgReplAuthMethod != "trust" {
-			log.Fatalf("provided superuser name and replication user name are the same but provided passwords are different")
-		}
-	}
-
 	if cfg.pgReplPasswordFile != "" {
 		cfg.pgReplPassword, err = readPasswordFromFile(cfg.pgReplPasswordFile)
 		if err != nil {
@@ -1826,6 +1816,35 @@ func keeper(c *cobra.Command, args []string) {
 		cfg.pgSUPassword, err = readPasswordFromFile(cfg.pgSUPasswordFile)
 		if err != nil {
 			log.Fatalf("cannot read pg superuser password: %v", err)
+		}
+	}
+
+	// Trim trailing new lines from passwords
+	tp := strings.TrimRight(cfg.pgSUPassword, "\r\n")
+	if cfg.pgSUPassword != tp {
+		log.Warn("superuser password contain trailing new line, removing")
+		if tp == "" {
+			log.Fatalf("superuser password is empty after removing trailing new line")
+		}
+		cfg.pgSUPassword = tp
+	}
+
+	tp = strings.TrimRight(cfg.pgReplPassword, "\r\n")
+	if cfg.pgReplPassword != tp {
+		log.Warn("replication user password contain trailing new line, removing")
+		if tp == "" {
+			log.Fatalf("replication user password is empty after removing trailing new line")
+		}
+		cfg.pgReplPassword = tp
+	}
+
+	if cfg.pgSUUsername == cfg.pgReplUsername {
+		log.Warn("superuser name and replication user name are the same. Different users are suggested.")
+		if cfg.pgReplAuthMethod != cfg.pgSUAuthMethod {
+			log.Fatalf("do not support different auth methods when utilizing superuser for replication.")
+		}
+		if cfg.pgSUPassword != cfg.pgReplPassword && cfg.pgSUAuthMethod != "trust" && cfg.pgReplAuthMethod != "trust" {
+			log.Fatalf("provided superuser name and replication user name are the same but provided passwords are different")
 		}
 	}
 
