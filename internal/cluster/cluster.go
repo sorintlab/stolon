@@ -544,6 +544,8 @@ type KeeperStatus struct {
 	BootUUID string `json:"bootUUID,omitempty"`
 
 	PostgresBinaryVersion PostgresBinaryVersion `json:"postgresBinaryVersion,omitempty"`
+
+	ForceFail bool `json:"forceFail,omitempty"`
 }
 
 type Keeper struct {
