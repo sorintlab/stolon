@@ -110,6 +110,19 @@ func TestGenerateHBA(t *testing.T) {
 					ListenAddress: "192.168.0.2",
 				},
 			},
+			"db3": &cluster.DB{
+				UID: "db3",
+				Spec: &cluster.DBSpec{
+					Role: common.RoleStandby,
+					FollowConfig: &cluster.FollowConfig{
+						Type:  cluster.FollowTypeInternal,
+						DBUID: "db1",
+					},
+				},
+				Status: cluster.DBStatus{
+					ListenAddress: "192.168.0.3",
+				},
+			},
 		},
 		Proxy: &cluster.Proxy{},
 	}
@@ -188,6 +201,8 @@ func TestGenerateHBA(t *testing.T) {
 				"local replication repluser md5",
 				"host all superuser 192.168.0.2/32 md5",
 				"host replication repluser 192.168.0.2/32 md5",
+				"host all superuser 192.168.0.3/32 md5",
+				"host replication repluser 192.168.0.3/32 md5",
 				"host all all 0.0.0.0/0 md5",
 				"host all all ::0/0 md5",
 			},
