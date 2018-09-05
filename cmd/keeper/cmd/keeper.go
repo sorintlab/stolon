@@ -25,6 +25,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -1675,14 +1676,19 @@ func (p *PostgresKeeper) generateHBA(cd *cluster.ClusterData, db *cluster.DB) []
 	case cluster.SUReplAccessStrict:
 		// only the master keeper (primary instance or standby of a remote primary when in standby cluster mode) will accept connections only from the other standby keepers IPs
 		if IsMaster(db) {
+			addresses := []string{}
 			for _, dbElt := range cd.DBs {
 				if dbElt.UID != db.UID {
-					computedHBA = append(
-						computedHBA,
-						fmt.Sprintf("host all %s %s/32 %s", p.pgSUUsername, dbElt.Status.ListenAddress, p.pgReplAuthMethod),
-						fmt.Sprintf("host replication %s %s/32 %s", p.pgReplUsername, dbElt.Status.ListenAddress, p.pgReplAuthMethod),
-					)
+					addresses = append(addresses, dbElt.Status.ListenAddress)
 				}
+			}
+			sort.Sort(sort.StringSlice(addresses))
+			for _, address := range addresses {
+				computedHBA = append(
+					computedHBA,
+					fmt.Sprintf("host all %s %s/32 %s", p.pgSUUsername, address, p.pgReplAuthMethod),
+					fmt.Sprintf("host replication %s %s/32 %s", p.pgReplUsername, address, p.pgReplAuthMethod),
+				)
 			}
 		}
 	}
