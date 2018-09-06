@@ -6,7 +6,11 @@ The sentinels and proxies will be deployed as [kubernetes deployments](https://k
 
 ## Docker image
 
-Prebuilt images are available on the dockerhub, the images' tags are the stolon release version plus the postgresql version (for example v0.6.0-pg9.6). Additional images are available:
+Prebuilt images are available on the dockerhub, the images' tags are the stolon release version plus the postgresql version (for example v0.6.0-pg9.6).
+
+**NOTE**: These images are **example** images provided for quickly testing stolon. In production you should build your own image customized to fit your needs (adding postgres extensions, backup tools/scripts etc...).
+
+Additional images are available:
 
 * `master-pg9.6`: automatically built after every commit to the master branch.
 
