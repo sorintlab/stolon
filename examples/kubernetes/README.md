@@ -6,24 +6,24 @@ The sentinels and proxies will be deployed as [kubernetes deployments](https://k
 
 ## Docker image
 
-Prebuilt images are available on the dockerhub, the images' tags are the stolon release version plus the postgresql version (for example v0.6.0-pg9.6).
+Prebuilt images are available on the dockerhub, the images' tags are the stolon release version plus the postgresql version (for example v0.12.0-pg10).
 
 **NOTE**: These images are **example** images provided for quickly testing stolon. In production you should build your own image customized to fit your needs (adding postgres extensions, backup tools/scripts etc...).
 
 Additional images are available:
 
-* `master-pg9.6`: automatically built after every commit to the master branch.
+* `master-pg10`: automatically built after every commit to the master branch.
 
 In the [image](image/docker) directory you'll find a Makefile to build the image used in this example (starting from the official postgreSQL images). The Makefile generates the Dockefile from a template Dockerfile where you have to define the wanted postgres version and image tag (`PGVERSION` and `TAG` mandatory variables).
-For example, if you want to build an image named `stolon:master-pg9.6` that uses postgresql 9.6 you should execute:
+For example, if you want to build an image named `stolon:master-pg10` that uses postgresql 10 you should execute:
 
 ```
-make PGVERSION=9.6 TAG=stolon:master-pg9.6
+make PGVERSION=10 TAG=stolon:master-pg10
 ```
 
 Once the image is built you should push it to the docker registry used by your kubernetes infrastructure.
 
-The provided example uses `sorintlab/stolon:master-pg9.6`
+The provided example uses `sorintlab/stolon:master-pg10`
 
 
 ## Cluster setup and tests
@@ -44,7 +44,7 @@ You can execute stolonctl in different ways:
 * as a one shot command executed inside a temporary pod:
 
 ```
-kubectl run -i -t stolonctl --image=sorintlab/stolon:master-pg9.6 --restart=Never --rm -- /usr/local/bin/stolonctl --cluster-name=kube-stolon --store-backend=kubernetes --kube-resource-kind=configmap init
+kubectl run -i -t stolonctl --image=sorintlab/stolon:master-pg10 --restart=Never --rm -- /usr/local/bin/stolonctl --cluster-name=kube-stolon --store-backend=kubernetes --kube-resource-kind=configmap init
 ```
 
 * from a machine that can access the store backend:
