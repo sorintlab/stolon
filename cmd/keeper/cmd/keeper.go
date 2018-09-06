@@ -712,6 +712,7 @@ func (p *PostgresKeeper) Start(ctx context.Context) {
 	endSMCh := make(chan struct{})
 	endPgStatecheckerCh := make(chan struct{})
 	endUpdateKeeperInfo := make(chan struct{})
+	endRestartPGCh := make(chan struct{})
 
 	var err error
 	var cd *cluster.ClusterData
@@ -739,6 +740,7 @@ func (p *PostgresKeeper) Start(ctx context.Context) {
 	smTimerCh := time.NewTimer(0).C
 	updatePGStateTimerCh := time.NewTimer(0).C
 	updateKeeperInfoTimerCh := time.NewTimer(0).C
+	restartPGTimerCh := time.NewTimer(0).C
 	for true {
 		select {
 		case <-ctx.Done():
@@ -779,8 +781,51 @@ func (p *PostgresKeeper) Start(ctx context.Context) {
 
 		case <-endUpdateKeeperInfo:
 			updateKeeperInfoTimerCh = time.NewTimer(p.sleepInterval).C
+		case <-restartPGTimerCh:
+			go func() {
+				p.restartPostgresIfScheduled(ctx)
+				endRestartPGCh <- struct{}{}
+			}()
+		case <-endRestartPGCh:
+			restartPGTimerCh = time.NewTimer(p.sleepInterval).C
 		}
 	}
+}
+
+func (p *PostgresKeeper) restartPostgresIfScheduled(pctx context.Context) error {
+	log.Debugw("Checking if restart is required")
+	cd, previousKvPair, err := p.e.GetClusterData(pctx)
+
+	if err != nil {
+		return fmt.Errorf("Error fetching clusterdata from context during restartPostgres: %v", err)
+	}
+
+	k, ok := cd.Keepers[p.keeperLocalState.UID]
+	if !ok {
+		return fmt.Errorf("Failed restarting postgres as keeper data not available")
+	}
+	isRestartRequired := k.Status.SchedulePgRestart
+
+	if isRestartRequired {
+		log.Infow("Postgres Restart is scheduled")
+		newCd := cd.DeepCopy()
+
+		keeper := newCd.Keepers[p.keeperLocalState.UID]
+
+		keeper.Status.SchedulePgRestart = false
+
+		log.Infow("Updating ClusterData to toggle off scheduled postgres restart")
+		if _, err = p.e.AtomicPutClusterData(pctx, newCd, previousKvPair); err != nil {
+			return fmt.Errorf("Failed updating cluster data on PgRestart: %v", err)
+		}
+
+		log.Infow("Restarting postgres")
+		if err := p.pgm.Restart(true); err != nil {
+			return fmt.Errorf("Failed restarting Postgres: %v", err)
+		}
+	}
+
+	return nil
 }
 
 func (p *PostgresKeeper) resync(db, followedDB *cluster.DB, tryPgrewind bool) error {

@@ -546,6 +546,8 @@ type KeeperStatus struct {
 	PostgresBinaryVersion PostgresBinaryVersion `json:"postgresBinaryVersion,omitempty"`
 
 	ForceFail bool `json:"forceFail,omitempty"`
+
+	SchedulePgRestart bool `json:"schedulePgRestart,omitempty"`
 }
 
 type Keeper struct {
