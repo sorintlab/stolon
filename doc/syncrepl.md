@@ -29,3 +29,32 @@ Set MinSynchronousStandbys/MaxSynchronousStandbys to a value greater than 1 (onl
 ```
 stolonctl --cluster-name=mycluster --store-backend=etcd update --patch '{ "synchronousReplication" : true, "minSynchronousStandbys": 2, "maxSynchronousStandbys": 3 }'
 ```
+
+## Handling postgresql sync repl limits under such circumstances
+
+Postgres synchronous replication has a downside explained in the [docs](https://www.postgresql.org/docs/current/static/warm-standby.html)
+
+`If primary restarts while commits are waiting for acknowledgement, those waiting transactions will be marked fully committed once the primary database recovers. There is no way to be certain that all standbys have received all outstanding WAL data at time of the crash of the primary. Some transactions may not show as committed on the standby, even though they show as committed on the primary. The guarantee we offer is that the application will not receive explicit acknowledgement of the successful commit of a transaction until the WAL data is known to be safely received by all the synchronous standbys.`
+
+Under some events this will cause lost transactions. For example:
+
+* Sync standby goes down.
+* A client commits a transaction, it blocks waiting for acknowledgement.
+* Primary restart, it'll mark the above transaction as fully committed. All the
+clients will now see that transaction.
+* Primary dies
+* Standby comes back.
+* The sentinel will elect the standby as the new master since it's in the
+synchronous_standby_names list.
+* The above transaction will be lost despite synchronous replication being
+enabled.
+
+So there can be some conditions where a syncstandby could be elected also if it's missing the last transactions if it was down at the commit time.
+
+It's not easy to fix this issue since these events cannot be resolved by the sentinel because it's not possible to know if a sync standby is really in sync when the master is down (since we cannot query its last wal position and the reporting from the keeper is asynchronous).
+
+But with stolon we have the power to overcome this issue by noticing when a primary restarts (since we control it), allow only "internal" connections until all the defined synchronous standbys are really in sync.
+
+Allowing only "internal" connections means not adding the default rules or the user defined pgHBA rules but only the rules needed for replication (and local communication from the keeper).
+
+Since "internal" rules accepts the defined superuser and replication users, client should not use these roles for normal operation or the above solution won't work (but they shouldn't do it anyway since this could cause exhaustion of reserved superuser connections needed by the keeper to check the instance).

@@ -16,10 +16,12 @@ package integration
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -27,6 +29,7 @@ import (
 	"github.com/satori/go.uuid"
 	"github.com/sorintlab/stolon/internal/cluster"
 	"github.com/sorintlab/stolon/internal/common"
+	pg "github.com/sorintlab/stolon/internal/postgresql"
 	"github.com/sorintlab/stolon/internal/store"
 )
 
@@ -1928,4 +1931,113 @@ func TestForceFailStandbyCluster(t *testing.T) {
 func TestForceFailSyncReplStandbyCluster(t *testing.T) {
 	t.Parallel()
 	testForceFail(t, false, true)
+}
+
+// TestSyncStandbyNotInSync tests that, when using synchronous replication, a
+// normal user cannot connect to primary db after it has restarted until all
+// defined synchronous standbys are in sync.
+func TestSyncStandbyNotInSync(t *testing.T) {
+	t.Parallel()
+	dir, err := ioutil.TempDir("", "stolon")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer os.RemoveAll(dir)
+	clusterName := uuid.NewV4().String()
+	tks, tss, tp, tstore := setupServers(t, clusterName, dir, 2, 1, true, false, nil)
+	defer shutdown(tks, tss, tp, tstore)
+	storePath := filepath.Join(common.StorePrefix, clusterName)
+	sm := store.NewKVBackedStore(tstore.store, storePath)
+	master, standbys := waitMasterStandbysReady(t, sm, tks)
+	standby := standbys[0]
+	if err := WaitClusterDataSynchronousStandbys([]string{standby.uid}, sm, 30*time.Second); err != nil {
+		t.Fatalf("expected synchronous standby on keeper %q in cluster data", standby.uid)
+	}
+	if err := populate(t, master); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := write(t, master, 1, 1); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	// create a normal user
+	if _, err := master.Exec("CREATE USER user01 PASSWORD 'password'"); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if _, err := master.Exec("GRANT ALL ON DATABASE postgres TO user01"); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if _, err := master.Exec("GRANT ALL ON TABLE table01 TO user01"); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	connParams := pg.ConnParams{
+		"user":     "user01",
+		"password": "password",
+		"host":     master.pgListenAddress,
+		"port":     master.pgPort,
+		"dbname":   "postgres",
+		"sslmode":  "disable",
+	}
+	connString := connParams.ConnString()
+	user01db, err := sql.Open("postgres", connString)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if _, err := user01db.Exec("SELECT * from table01"); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	// get the master XLogPos
+	xLogPos, err := GetXLogPos(master)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	// wait for the keepers to have reported their state
+	if err := WaitClusterSyncedXLogPos([]*TestKeeper{master, standby}, xLogPos, sm, 20*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	// the proxy should connect to the right master
+	if err := tp.WaitRightMaster(master, 3*cluster.DefaultProxyCheckInterval); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	// Stop the standby keeper, should also stop the database
+	t.Logf("Stopping current standby keeper: %s", standby.uid)
+	standby.Stop()
+	// this call will block and then exit with an error when the master is restarted
+	go func() {
+		write(t, master, 2, 2)
+	}()
+	time.Sleep(1 * time.Second)
+	// restart master
+	t.Logf("Restarting current master keeper: %s", master.uid)
+	master.Stop()
+	master.Start()
+	waitKeeperReady(t, sm, master)
+	// The transaction should be fully committed on master
+	c, err := getLines(t, master)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if c != 2 {
+		t.Fatalf("wrong number of lines, want: %d, got: %d", 2, c)
+	}
+	// The normal user shouldn't be able to connect
+	if _, err := user01db.Exec("SELECT * from table01"); err != nil {
+		exp := `pq: no pg_hba.conf entry for host "127.0.0.1", user "user01", database "postgres"`
+		if !strings.HasPrefix(err.Error(), exp) {
+			t.Fatalf("expected error when connecting to db as user01 starting with %q, got err: %q", exp, err.Error())
+		}
+	} else {
+		t.Fatalf("expected error connecting to db as user01, got no err")
+	}
+	// Starting the standby keeper
+	t.Logf("Starting current standby keeper: %s", standby.uid)
+	standby.Start()
+	time.Sleep(10 * time.Second)
+	// The normal user should now be able to connect and see 2 lines
+	c, err = getLines(t, user01db)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if c != 2 {
+		t.Fatalf("wrong number of lines, want: %d, got: %d", 2, c)
+	}
 }

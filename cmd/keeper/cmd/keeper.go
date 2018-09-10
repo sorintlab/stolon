@@ -427,6 +427,8 @@ type PostgresKeeper struct {
 	pgStateMutex    sync.Mutex
 	getPGStateMutex sync.Mutex
 	lastPGState     *cluster.PostgresState
+
+	waitSyncStandbysSynced bool
 }
 
 func NewPostgresKeeper(cfg *config, end chan error) (*PostgresKeeper, error) {
@@ -992,8 +994,8 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 		return
 	}
 
-	// Dynamicly generate hba auth from clusterData
-	pgm.SetHba(p.generateHBA(cd, db))
+	// Generate hba auth from clusterData
+	pgm.SetHba(p.generateHBA(cd, db, p.waitSyncStandbysSynced))
 
 	var pgParameters common.Parameters
 
@@ -1035,6 +1037,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 		log.Infow("current db UID different than cluster data db UID", "db", p.dbLocalState.UID, "cdDB", db.UID)
 
 		pgm.SetRecoveryParameters(nil)
+		p.waitSyncStandbysSynced = false
 
 		switch db.Spec.InitMode {
 		case cluster.DBInitModeNew:
@@ -1394,6 +1397,13 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 			return
 		}
 		if !started {
+			// if we have syncrepl enabled and the postgres instance is stopped, before opening connections to normal users wait for having the defined synchronousStandbys in sync state.
+			if db.Spec.SynchronousReplication {
+				p.waitSyncStandbysSynced = true
+				log.Infow("not allowing connection as normal users since synchronous replication is enabled and instance was down")
+				pgm.SetHba(p.generateHBA(cd, db, true))
+			}
+
 			if err = pgm.Start(); err != nil {
 				log.Errorw("failed to start postgres", zap.Error(err))
 				return
@@ -1547,8 +1557,24 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 		log.Infow("postgres parameters not changed")
 	}
 
-	// Dynamicly generate hba auth from clusterData
-	newHBA := p.generateHBA(cd, db)
+	// Generate hba auth from clusterData
+
+	// if we have syncrepl enabled and the postgres instance is stopped, before opening connections to normal users wait for having the defined synchronousStandbys in sync state.
+	if db.Spec.SynchronousReplication && p.waitSyncStandbysSynced {
+		inSyncStandbys, err := p.GetInSyncStandbys()
+		if err != nil {
+			log.Errorw("failed to retrieve current in sync standbys from instance", zap.Error(err))
+			return
+		}
+		if !util.CompareStringSliceNoOrder(inSyncStandbys, db.Spec.SynchronousStandbys) {
+			log.Infow("not allowing connection as normal users since synchronous replication is enabled, instance was down and not all sync standbys are synced")
+		} else {
+			p.waitSyncStandbysSynced = false
+		}
+	} else {
+		p.waitSyncStandbysSynced = false
+	}
+	newHBA := p.generateHBA(cd, db, p.waitSyncStandbysSynced)
 	if !reflect.DeepEqual(newHBA, pgm.CurHba()) {
 		log.Infow("postgres hba entries changed, reloading postgres instance")
 		pgm.SetHba(newHBA)
@@ -1653,8 +1679,12 @@ func IsMaster(db *cluster.DB) bool {
 	}
 }
 
-// generateHBA generates the instance hba entries depending on the value of DefaultSUReplAccessMode.
-func (p *PostgresKeeper) generateHBA(cd *cluster.ClusterData, db *cluster.DB) []string {
+// generateHBA generates the instance hba entries depending on the value of
+// DefaultSUReplAccessMode.
+// When onlyInternal is true only rules needed for replication will be setup
+// and the traffic should be permitted only for pgSUUsername standard
+// connections and pgReplUsername replication connections.
+func (p *PostgresKeeper) generateHBA(cd *cluster.ClusterData, db *cluster.DB, onlyInternal bool) []string {
 	// Minimal entries for local normal and replication connections needed by the stolon keeper
 	// Matched local connections are for postgres database and suUsername user with md5 auth
 	// Matched local replication connections are for replUsername user with md5 auth
@@ -1693,16 +1723,18 @@ func (p *PostgresKeeper) generateHBA(cd *cluster.ClusterData, db *cluster.DB) []
 		}
 	}
 
-	// By default, if no custom pg_hba entries are provided, accept
-	// connections for all databases and users with md5 auth
-	if db.Spec.PGHBA != nil {
-		computedHBA = append(computedHBA, db.Spec.PGHBA...)
-	} else {
-		computedHBA = append(
-			computedHBA,
-			"host all all 0.0.0.0/0 md5",
-			"host all all ::0/0 md5",
-		)
+	if !onlyInternal {
+		// By default, if no custom pg_hba entries are provided, accept
+		// connections for all databases and users with md5 auth
+		if db.Spec.PGHBA != nil {
+			computedHBA = append(computedHBA, db.Spec.PGHBA...)
+		} else {
+			computedHBA = append(
+				computedHBA,
+				"host all all 0.0.0.0/0 md5",
+				"host all all ::0/0 md5",
+			)
+		}
 	}
 
 	// return generated Hba merged with user Hba

@@ -72,6 +72,9 @@ func pgParametersWithDefaults(p cluster.PGParameters) cluster.PGParameters {
 type Querier interface {
 	Exec(query string, args ...interface{}) (sql.Result, error)
 	Query(query string, args ...interface{}) (*sql.Rows, error)
+}
+
+type ReplQuerier interface {
 	ReplQuery(query string, args ...interface{}) (*sql.Rows, error)
 }
 
@@ -94,7 +97,7 @@ func GetPGParameters(q Querier) (common.Parameters, error) {
 	return pgParameters, nil
 }
 
-func GetSystemData(q Querier) (*pg.SystemData, error) {
+func GetSystemData(q ReplQuerier) (*pg.SystemData, error) {
 	rows, err := q.ReplQuery("IDENTIFY_SYSTEM")
 	if err != nil {
 		return nil, err
@@ -116,7 +119,7 @@ func GetSystemData(q Querier) (*pg.SystemData, error) {
 	return nil, fmt.Errorf("query returned 0 rows")
 }
 
-func GetXLogPos(q Querier) (uint64, error) {
+func GetXLogPos(q ReplQuerier) (uint64, error) {
 	// get the current master XLogPos
 	systemData, err := GetSystemData(q)
 	if err != nil {
