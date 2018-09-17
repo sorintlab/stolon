@@ -8,7 +8,7 @@ secrets:
 
 services:
   sentinel:
-    image: sorintlab/stolon:master-pg10
+    image: sorintlab/stolon:v0.13.0-pg10
     command: gosu stolon stolon-sentinel --cluster-name stolon-cluster --store-backend=etcdv3 --store-endpoints http://etcd-00:2379,http://etcd-01:2379,http://etcd-02:2379 --log-level debug
     networks:
       - etcd_etcd
@@ -22,7 +22,7 @@ services:
         failure_action: pause
 
   keeper1:
-    image: sorintlab/stolon:master-pg10
+    image: sorintlab/stolon:v0.13.0-pg10
     hostname: keeper1
     environment:
       - PGDATA=/var/lib/postgresql/data
@@ -41,7 +41,7 @@ services:
 #        constraints: [node.labels.nodename == node1]
 
   keeper2:
-    image: sorintlab/stolon:master-pg10
+    image: sorintlab/stolon:v0.13.0-pg10
     hostname: keeper2
     environment:
       - PGDATA=/var/lib/postgresql/data
@@ -59,7 +59,7 @@ services:
 #        constraints: [node.labels.nodename == node2]
 
   proxy:
-    image: sorintlab/stolon:master-pg10
+    image: sorintlab/stolon:v0.13.0-pg10
     command: gosu stolon stolon-proxy --listen-address 0.0.0.0 --cluster-name stolon-cluster --store-backend=etcdv3 --store-endpoints http://etcd-00:2379,http://etcd-01:2379,http://etcd-02:2379 --log-level info
     networks:
       - etcd_etcd
