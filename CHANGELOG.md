@@ -1,5 +1,22 @@
 ### v0.13.0
 
+#### New features
+
+* Add a `stolonctl` command to force fail a keeper ([#546](https://github.com/sorintlab/stolon/pull/546))
+* Overcome PostgreSQL synchronous replication limitation that could cause lost transactions under some events ([#514](https://github.com/sorintlab/stolon/pull/514))
+* Users can now define `archiveRecoverySettings` in the cluster spec of a standby cluster. One of the possible use cases is to feed the standby cluster only with archived logs without streaming replication. (See Upgrade Notes) ([#543](https://github.com/sorintlab/stolon/pull/543))
+* Keeper: remove trailing new lines from provided passwords ([#548](https://github.com/sorintlab/stolon/pull/548))
+
+#### Bug Fixes
+
+* Sort keepers addresses in `pg_hba.conf` to avoid unneeded postgres instance reloads ([#558](https://github.com/sorintlab/stolon/pull/558))
+* Set `recovery_target_action` to promote when using recovery target settings [#545](https://github.com/sorintlab/stolon/pull/545))
+* Fixed wrong listen address used in `pg_hba.conf` when `SUReplAccessStrict` mode was enabled ([#520](https://github.com/sorintlab/stolon/pull/520))
+
+and [many other](https://github.com/sorintlab/stolon/milestone/12) bug fixes and documentation improvements.
+
+Thanks to everybody who contributed to this release.
+
 #### Upgrades notes.
 
 * The clusterspec `standbySettings` option as been replaced by the `standbyConfig` option. Internally it can contain two fields `standbySettings` and `archiveRecoverySettings` (see the clusterspec doc with the descriptors of this new option). If you're updating a standby cluster, BEFORE starting it you should update, using `stolonctl`, the clusterspec with the new `standbyConfig` option.
