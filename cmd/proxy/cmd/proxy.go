@@ -356,10 +356,10 @@ func proxy(c *cobra.Command, args []string) {
 		log.Fatalf("tcp keepalive idle value must be greater or equal to 0")
 	}
 	if cfg.keepAliveCount < 0 {
-		log.Fatalf("tcp keepalive idle value must be greater or equal to 0")
+		log.Fatalf("tcp keepalive count value must be greater or equal to 0")
 	}
 	if cfg.keepAliveInterval < 0 {
-		log.Fatalf("tcp keepalive idle value must be greater or equal to 0")
+		log.Fatalf("tcp keepalive interval value must be greater or equal to 0")
 	}
 
 	uid := common.UID()
