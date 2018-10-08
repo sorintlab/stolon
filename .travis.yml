@@ -10,8 +10,7 @@ env:
   - TARGET=amd64
   - TARGET=arm64
 
-install:
-  -
+install: true
 
 script:
-  ./test
+  GO111MODULE=on ./test
