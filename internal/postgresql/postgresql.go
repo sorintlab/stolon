@@ -924,3 +924,20 @@ func (p *Manager) OlderWalFile() (string, error) {
 
 	return "", nil
 }
+
+// IsRestartRequired returns if a postgres restart is necessary
+func (p *Manager) IsRestartRequired(changedParams []string) (bool, error) {
+	maj, min, err := p.BinaryVersion()
+	if err != nil {
+		return false, fmt.Errorf("Error fetching pg version for checking IsRestartRequired, %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), p.requestTimeout)
+	defer cancel()
+
+	if maj == 9 && min < 5 {
+		return isRestartRequiredUsingPgSettingsContext(ctx, p.localConnParams, changedParams)
+	} else {
+		return isRestartRequiredUsingPendingRestart(ctx, p.localConnParams)
+	}
+}

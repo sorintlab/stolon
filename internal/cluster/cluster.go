@@ -69,6 +69,7 @@ const (
 	DefaultMergePGParameter                           = true
 	DefaultRole                      ClusterRole      = ClusterRoleMaster
 	DefaultSUReplAccess              SUReplAccessMode = SUReplAccessAll
+	DefaultAutomaticPgRestart                         = false
 )
 
 const (
@@ -283,6 +284,8 @@ type ClusterSpec struct {
 	// Additional pg_hba.conf entries
 	// we don't set omitempty since we want to distinguish between null or empty slice
 	PGHBA []string `json:"pgHBA"`
+	// Enable automatic pg restart when pg parameters that requires restart changes
+	AutomaticPgRestart *bool `json:"automaticPgRestart"`
 }
 
 type ClusterStatus struct {
@@ -390,6 +393,9 @@ func (os *ClusterSpec) WithDefaults() *ClusterSpec {
 	if s.Role == nil {
 		v := DefaultRole
 		s.Role = &v
+	}
+	if s.AutomaticPgRestart == nil {
+		s.AutomaticPgRestart = BoolP(DefaultAutomaticPgRestart)
 	}
 	return s
 }

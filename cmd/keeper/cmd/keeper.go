@@ -1547,6 +1547,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 	}
 
 	needsReload := false
+	changedParams := pgParameters.Diff(pgm.CurParameters())
 
 	if !pgParameters.Equals(pgm.CurParameters()) {
 		log.Infow("postgres parameters changed, reloading postgres instance")
@@ -1587,6 +1588,23 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 	if needsReload {
 		if err := pgm.Reload(); err != nil {
 			log.Errorw("failed to reload postgres instance", err)
+		}
+
+		clusterSpec := cd.Cluster.DefSpec()
+		automaticPgRestartEnabled := *clusterSpec.AutomaticPgRestart
+
+		if automaticPgRestartEnabled {
+			needsRestart, err := pgm.IsRestartRequired(changedParams)
+			if err != nil {
+				log.Errorw("Failed to checked if restart is required", err)
+			}
+
+			if needsRestart {
+				log.Infow("Restarting postgres")
+				if err := pgm.Restart(true); err != nil {
+					log.Errorw("Failed to restart postgres instance", err)
+				}
+			}
 		}
 	}
 
