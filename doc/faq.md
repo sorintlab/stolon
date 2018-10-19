@@ -14,6 +14,8 @@ We are open to alternative solutions (PRs are welcome) like using haproxy if the
 
 Currently the proxy redirects all requests to the master. There is a [feature request](https://github.com/sorintlab/stolon/issues/132) for using the proxy also for standbys but it's low in the priority list.
 
+There is a simple Python script that gets info about standbys from `stolonctl` and generates HAProxy config: [UnitedTraders/stolon-standby-haproxy](https://github.com/UnitedTraders/stolon-standby-haproxy).
+
 If your application want to query the hot standbys, currently you can read the standby dbs and their status form the cluster data directly from the store (but be warned that this isn't meant to be stable).
 
 ## Why is shared storage and fencing not necessary with stolon?
