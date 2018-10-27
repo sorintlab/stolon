@@ -35,6 +35,7 @@ var cmdClusterData = &cobra.Command{
 }
 
 type clusterdataReadOptions struct {
+	file   string
 	pretty bool
 }
 
@@ -61,6 +62,7 @@ var cmdWriteClusterData = &cobra.Command{
 
 func init() {
 	cmdReadClusterData.PersistentFlags().BoolVar(&readClusterdataOpts.pretty, "pretty", false, "pretty print")
+	cmdReadClusterData.PersistentFlags().StringVarP(&readClusterdataOpts.file, "file", "f", "", "file to write cluster data")
 	cmdClusterData.AddCommand(cmdReadClusterData)
 
 	cmdWriteClusterData.PersistentFlags().StringVarP(&writeClusterdataOpts.file, "file", "f", "", "file containing the new cluster data")
@@ -70,7 +72,7 @@ func init() {
 	CmdStolonCtl.AddCommand(cmdClusterData)
 }
 
-func readClusterdata(cmd *cobra.Command, args []string) {
+func readClusterdata(_ *cobra.Command, _ []string) {
 	e, err := cmdcommon.NewStore(&cfg.CommonConfig)
 	if err != nil {
 		die("%v", err)
@@ -95,7 +97,13 @@ func readClusterdata(cmd *cobra.Command, args []string) {
 			die("failed to marshall clusterdata: %v", err)
 		}
 	}
-	stdout("%s", clusterdataj)
+	if readClusterdataOpts.file == "" || readClusterdataOpts.file == "-" {
+		stdout("%s", clusterdataj)
+		return
+	}
+	if err = ioutil.WriteFile(readClusterdataOpts.file, clusterdataj, 0644); err != nil {
+		die("unable to write cluster data into file %s, reason: %v", readClusterdataOpts.file, err)
+	}
 }
 
 func isSafeToWriteClusterData(store store.Store) error {
