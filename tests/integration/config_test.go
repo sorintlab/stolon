@@ -462,3 +462,127 @@ func TestAdditionalReplicationSlots(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 }
+
+func TestAutomaticPgRestart(t *testing.T) {
+	t.Parallel()
+
+	dir, err := ioutil.TempDir("", "")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer os.RemoveAll(dir)
+
+	tstore, err := NewTestStore(t, dir)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := tstore.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := tstore.WaitUp(10 * time.Second); err != nil {
+		t.Fatalf("error waiting on store up: %v", err)
+	}
+	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
+	defer tstore.Stop()
+
+	clusterName := uuid.NewV4().String()
+
+	storePath := filepath.Join(common.StorePrefix, clusterName)
+
+	sm := store.NewKVBackedStore(tstore.store, storePath)
+	automaticPgRestart := true
+	pgParameters := map[string]string{"max_connections": "100"}
+
+	initialClusterSpec := &cluster.ClusterSpec{
+		InitMode:           cluster.ClusterInitModeP(cluster.ClusterInitModeNew),
+		AutomaticPgRestart: &automaticPgRestart,
+		PGParameters:       pgParameters,
+	}
+
+	initialClusterSpecFile, err := writeClusterSpec(dir, initialClusterSpec)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	ts, err := NewTestSentinel(t, dir, clusterName, tstore.storeBackend, storeEndpoints, fmt.Sprintf("--initial-cluster-spec=%s", initialClusterSpecFile))
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := ts.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer ts.Stop()
+
+	tk, err := NewTestKeeper(t, dir, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, tstore.storeBackend, storeEndpoints)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := tk.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer tk.Stop()
+
+	if err := WaitClusterPhase(sm, cluster.ClusterPhaseNormal, 60*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := tk.WaitDBUp(60 * time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	err = StolonCtl(clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "pgParameters" : { "max_connections": "150" } }`)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// Wait for restart to happen
+	time.Sleep(10 * time.Second)
+
+	rows, err := tk.Query("select setting from pg_settings where name = 'max_connections'")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer rows.Close()
+
+	if rows.Next() {
+		var maxConnections int
+		err = rows.Scan(&maxConnections)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+
+		if maxConnections != 150 {
+			t.Errorf("expected max_connections %d is not equal to actual %d", 150, maxConnections)
+		}
+	}
+
+	// Allow users to opt out
+	err = StolonCtl(clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "automaticPgRestart" : false }`)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	err = StolonCtl(clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "pgParameters" : { "max_connections": "200" } }`)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// Restart should not happen, but waiting in case it restarts
+	time.Sleep(10 * time.Second)
+
+	rows, err = tk.Query("select setting from pg_settings where name = 'max_connections'")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer rows.Close()
+
+	if rows.Next() {
+		var maxConnections int
+		err = rows.Scan(&maxConnections)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+
+		if maxConnections != 150 {
+			t.Errorf("expected max_connections %d is not equal to actual %d", 150, maxConnections)
+		}
+	}
+}

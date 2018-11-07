@@ -27,7 +27,7 @@ import (
 
 	"os"
 
-	_ "github.com/lib/pq"
+	"github.com/lib/pq"
 )
 
 const (
@@ -434,6 +434,56 @@ func getConfigFilePGParameters(ctx context.Context, connParams ConnParams) (comm
 		}
 	}
 	return pgParameters, nil
+}
+
+func isRestartRequiredUsingPendingRestart(ctx context.Context, connParams ConnParams) (bool, error) {
+	isRestartRequired := false
+	db, err := sql.Open("postgres", connParams.ConnString())
+	if err != nil {
+		return isRestartRequired, err
+	}
+	defer db.Close()
+
+	rows, err := query(ctx, db, "select count(*) > 0 from pg_settings where pending_restart;")
+	if err != nil {
+		return isRestartRequired, err
+	}
+	defer rows.Close()
+	if rows.Next() {
+		if err := rows.Scan(&isRestartRequired); err != nil {
+			return isRestartRequired, err
+		}
+	}
+
+	return isRestartRequired, nil
+}
+
+func isRestartRequiredUsingPgSettingsContext(ctx context.Context, connParams ConnParams, changedParams []string) (bool, error) {
+	isRestartRequired := false
+	db, err := sql.Open("postgres", connParams.ConnString())
+	if err != nil {
+		return isRestartRequired, err
+	}
+	defer db.Close()
+
+	stmt, err := db.Prepare("select count(*) > 0 from pg_settings where context = 'postmaster' and name = ANY($1)")
+
+	if err != nil {
+		return false, err
+	}
+
+	rows, err := stmt.Query(pq.Array(changedParams))
+	if err != nil {
+		return isRestartRequired, err
+	}
+	defer rows.Close()
+	if rows.Next() {
+		if err := rows.Scan(&isRestartRequired); err != nil {
+			return isRestartRequired, err
+		}
+	}
+
+	return isRestartRequired, nil
 }
 
 func ParseBinaryVersion(v string) (int, int, error) {
