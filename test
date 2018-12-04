@@ -11,7 +11,7 @@
 #
 set -e
 
-source scripts/readlinkdashf.sh
+source $(dirname $0)/scripts/readlinkdashf.sh
 BASEDIR=$(readlinkdashf $(dirname $0))
 BINDIR=${BASEDIR}/bin
 

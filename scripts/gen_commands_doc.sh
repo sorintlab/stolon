@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 set -e
-source readlinkdashf.sh
+source $(dirname $0)/readlinkdashf.sh
 
 BASEDIR=$(readlinkdashf $(dirname $0)/..)
 
