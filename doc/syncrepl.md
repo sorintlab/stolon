@@ -11,15 +11,15 @@ In the cluster spec you can set the `MinSynchronousStandbys` and `MaxSynchronous
 
 ## Enable synchronous replication.
 
-Assuming that your cluster name is `mycluster` and using etcd listening on localhost:2379:
+Assuming that your cluster name is `mycluster` and using etcd (v3 api) listening on localhost:2379:
 ```
-stolonctl --cluster-name=mycluster --store-backend=etcd update --patch '{ "synchronousReplication" : true }'
+stolonctl --cluster-name=mycluster --store-backend=etcdv3 update --patch '{ "synchronousReplication" : true }'
 ```
 
 ## Disable synchronous replication.
 
 ```
-stolonctl --cluster-name=mycluster --store-backend=etcd update --patch '{ "synchronousReplication" : false }'
+stolonctl --cluster-name=mycluster --store-backend=etcdv3 update --patch '{ "synchronousReplication" : false }'
 ```
 
 ## Set min and max number of synchronous replication standbys
@@ -27,7 +27,7 @@ stolonctl --cluster-name=mycluster --store-backend=etcd update --patch '{ "synch
 Set MinSynchronousStandbys/MaxSynchronousStandbys to a value greater than 1 (only when using PostgreSQL >= 9.6)
 
 ```
-stolonctl --cluster-name=mycluster --store-backend=etcd update --patch '{ "synchronousReplication" : true, "minSynchronousStandbys": 2, "maxSynchronousStandbys": 3 }'
+stolonctl --cluster-name=mycluster --store-backend=etcdv3 update --patch '{ "synchronousReplication" : true, "minSynchronousStandbys": 2, "maxSynchronousStandbys": 3 }'
 ```
 
 ## Handling postgresql sync repl limits under such circumstances
