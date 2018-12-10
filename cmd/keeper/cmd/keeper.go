@@ -206,11 +206,25 @@ func (p *PostgresKeeper) walLevel(db *cluster.DB) string {
 	return walLevel
 }
 
+func (p *PostgresKeeper) walKeepSegments(db *cluster.DB) int {
+	walKeep := 8
+	if db.Spec.PGParameters != nil {
+		if l, ok := db.Spec.PGParameters["wal_keep_segments"]; ok {
+			if walKeepParam, err := strconv.Atoi(l); err == nil {
+				if walKeepParam > walKeep {
+					walKeep = walKeepParam
+				}
+			}
+		}
+	}
+	return walKeep
+}
+
 func (p *PostgresKeeper) mandatoryPGParameters(db *cluster.DB) common.Parameters {
 	return common.Parameters{
 		"unix_socket_directories": common.PgUnixSocketDirectories,
 		"wal_level":               p.walLevel(db),
-		"wal_keep_segments":       "8",
+		"wal_keep_segments":       fmt.Sprintf("%v", p.walKeepSegments(db)),
 		"hot_standby":             "on",
 	}
 }
