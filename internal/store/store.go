@@ -22,6 +22,8 @@ import (
 	"github.com/sorintlab/stolon/internal/cluster"
 )
 
+//go:generate mockgen -destination=../mock/store/store.go -source=$GOFILE
+
 var (
 	// ErrKeyNotFound is thrown when the key is not found in the store during a Get operation
 	ErrKeyNotFound      = errors.New("Key not found in store")

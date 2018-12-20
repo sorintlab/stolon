@@ -1,3 +1,10 @@
+### v0.14.0
+
+#### Upgrades notes.
+ * The `stolonctl clusterdata` command has been splitted into two:
+    1. `stolonctl clusterdata read` which will be used to read the current clusterdata.
+    2. `stolonctl clusterdata write` which will be used to write the new clusterdata into the new store.
+
 ### v0.13.0
 
 #### New features
