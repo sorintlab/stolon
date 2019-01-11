@@ -41,12 +41,12 @@ if [ -w ${go_root_dir}/pkg ]; then
 	use_go_install=1
 fi
 
-for cmd in sentinel proxy; do
+for cmd in sentinel proxy watch; do
 	CGO_ENABLED=0 go build -installsuffix cgo -ldflags "$LD_FLAGS" -o ${BINDIR}/stolon-${cmd} ${REPO_PATH}/cmd/${cmd}
 done
 CGO_ENABLED=0 go build -installsuffix cgo -ldflags "$LD_FLAGS" -o ${BINDIR}/stolonctl ${REPO_PATH}/cmd/stolonctl
 
-go build -ldflags "$LD_FLAGS" -o ${BINDIR}/stolon-keeper ${REPO_PATH}/cmd/keeper 
+go build -ldflags "$LD_FLAGS" -o ${BINDIR}/stolon-keeper ${REPO_PATH}/cmd/keeper
 
 # Copy binaries to Dockerfile image directories
 declare -a DOCKERFILE_PATHS
@@ -55,7 +55,7 @@ for path in "${DOCKERFILE_PATHS[@]}"
 do
   rm -rf $path/bin/
   mkdir -p $path/bin/
-  for cmd in stolon-keeper stolon-sentinel stolon-proxy stolonctl; do
+  for cmd in stolon-keeper stolon-sentinel stolon-proxy stolon-watch stolonctl; do
           cp ${BINDIR}/${cmd} $path/bin/
   done
 done
