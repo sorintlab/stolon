@@ -61,7 +61,7 @@ popd
 OK=false
 COUNT=0
 while [ $COUNT -lt 120 ]; do
-	OUT=$(./bin/stolonctl --cluster-name kube-stolon --store-backend kubernetes --kube-resource-kind configmap clusterdata | jq .cluster.status.phase)
+	OUT=$(./bin/stolonctl --cluster-name kube-stolon --store-backend kubernetes --kube-resource-kind configmap clusterdata read | jq .cluster.status.phase)
 	if [ "$OUT" == '"normal"' ]; then
 		OK=true	
 		break
@@ -74,7 +74,7 @@ done
 # report some debug output
 kubectl get all
 ./bin/stolonctl --cluster-name kube-stolon --store-backend kubernetes --kube-resource-kind configmap status
-./bin/stolonctl --cluster-name kube-stolon --store-backend kubernetes --kube-resource-kind configmap clusterdata | jq .
+./bin/stolonctl --cluster-name kube-stolon --store-backend kubernetes --kube-resource-kind configmap clusterdata read | jq .
 
 if [ "$OK" != "true" ]; then
 	echo "stolon cluster not correctly setup"

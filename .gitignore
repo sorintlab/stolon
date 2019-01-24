@@ -9,6 +9,7 @@
 *.un~
 Session.vim
 .netrwhist
+.idea/
 
 #
 bin/
