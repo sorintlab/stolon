@@ -42,9 +42,9 @@ if [ -w ${go_root_dir}/pkg ]; then
 fi
 
 for cmd in sentinel proxy; do
-  echo "Building stolon-${cmd} ..."
+	echo "Building stolon-${cmd} ..."
 	CGO_ENABLED=0 go build -installsuffix cgo -ldflags "$LD_FLAGS" -o ${BINDIR}/stolon-${cmd} ${REPO_PATH}/cmd/${cmd}
-  echo "Done building stolon-${cmd}"
+	echo "Done building stolon-${cmd}"
 done
 
 echo "Building stolonctl ..."
@@ -61,10 +61,10 @@ declare -a DOCKERFILE_PATHS
 DOCKERFILE_PATHS=(${BASEDIR}/examples/kubernetes/image/docker)
 for path in "${DOCKERFILE_PATHS[@]}"
 do
-  rm -rf $path/bin/
-  mkdir -p $path/bin/
-  for cmd in stolon-keeper stolon-sentinel stolon-proxy stolonctl; do
-          cp ${BINDIR}/${cmd} $path/bin/
-  done
+	rm -rf $path/bin/
+	mkdir -p $path/bin/
+	for cmd in stolon-keeper stolon-sentinel stolon-proxy stolonctl; do
+		cp ${BINDIR}/${cmd} $path/bin/
+	done
 done
 echo "Done!"
