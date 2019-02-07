@@ -33,8 +33,8 @@ var cmdInit = &cobra.Command{
 }
 
 type InitOptions struct {
-	file     string
-	forceYes bool
+	file        string
+	forceYes    bool
 	overwriteDb bool
 }
 
