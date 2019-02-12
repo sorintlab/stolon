@@ -85,7 +85,7 @@ func initCluster(cmd *cobra.Command, args []string) {
 	}
 	if cd != nil {
 		if !initOpts.overwriteDb {
-			stdout("exiting as DB is already initialized")
+			stdout("Exiting as DB is already initialized")
 			os.Exit(0)
 		}
 		stdout("WARNING: The current cluster data will be removed")
