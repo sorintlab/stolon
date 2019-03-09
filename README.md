@@ -39,6 +39,13 @@ For more details and requirements see [Stolon Architecture and Requirements](doc
 
 [Documentation Index](doc/README.md)
 
+## Installation
+
+Stolon is available in [brew](https://brew.sh/). It is **unofficial and not supported** by the project.
+So check the version before installing using `brew`.
+
+[Step to install using brew](doc/unofficial_packages.md)
+
 ## Quick start and examples
 
 * [Simple cluster example](doc/simplecluster.md)
