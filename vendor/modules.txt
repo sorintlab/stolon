@@ -1,3 +1,5 @@
+# cloud.google.com/go v0.34.0
+cloud.google.com/go/compute/metadata
 # github.com/PuerkitoBio/purell v1.1.0
 github.com/PuerkitoBio/purell
 # github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578
@@ -155,14 +157,21 @@ go.uber.org/zap/internal/color
 go.uber.org/zap/internal/exit
 # golang.org/x/crypto v0.0.0-20180127211104-1875d0a70c90
 golang.org/x/crypto/ssh/terminal
-# golang.org/x/net v0.0.0-20180724234803-3673e40ba225
+# golang.org/x/net v0.0.0-20190108225652-1e06a53dbb7e
 golang.org/x/net/context
 golang.org/x/net/http2
 golang.org/x/net/trace
 golang.org/x/net/http/httpguts
 golang.org/x/net/http2/hpack
 golang.org/x/net/idna
+golang.org/x/net/context/ctxhttp
 golang.org/x/net/internal/timeseries
+# golang.org/x/oauth2 v0.0.0-20190226205417-e64efc72b421
+golang.org/x/oauth2
+golang.org/x/oauth2/google
+golang.org/x/oauth2/internal
+golang.org/x/oauth2/jws
+golang.org/x/oauth2/jwt
 # golang.org/x/sys v0.0.0-20180122081959-af50095a40f9
 golang.org/x/sys/unix
 golang.org/x/sys/windows
@@ -172,6 +181,17 @@ golang.org/x/text/unicode/bidi
 golang.org/x/text/unicode/norm
 golang.org/x/text/width
 golang.org/x/text/transform
+# google.golang.org/appengine v1.4.0
+google.golang.org/appengine
+google.golang.org/appengine/urlfetch
+google.golang.org/appengine/internal
+google.golang.org/appengine/internal/app_identity
+google.golang.org/appengine/internal/modules
+google.golang.org/appengine/internal/urlfetch
+google.golang.org/appengine/internal/base
+google.golang.org/appengine/internal/datastore
+google.golang.org/appengine/internal/log
+google.golang.org/appengine/internal/remote_api
 # google.golang.org/genproto v0.0.0-20170731182057-09f6ed296fc6
 google.golang.org/genproto/googleapis/api/annotations
 google.golang.org/genproto/googleapis/rpc/status
@@ -228,6 +248,8 @@ k8s.io/apimachinery/pkg/util/strategicpatch
 k8s.io/apimachinery/pkg/api/errors
 k8s.io/apimachinery/pkg/apis/meta/v1
 k8s.io/apimachinery/pkg/labels
+k8s.io/apimachinery/pkg/util/net
+k8s.io/apimachinery/pkg/util/yaml
 k8s.io/apimachinery/pkg/util/json
 k8s.io/apimachinery/pkg/util/mergepatch
 k8s.io/apimachinery/third_party/forked/golang/json
@@ -244,7 +266,6 @@ k8s.io/apimachinery/pkg/watch
 k8s.io/apimachinery/pkg/util/sets
 k8s.io/apimachinery/pkg/util/validation
 k8s.io/apimachinery/pkg/runtime/serializer
-k8s.io/apimachinery/pkg/util/net
 k8s.io/apimachinery/pkg/util/runtime
 k8s.io/apimachinery/pkg/util/wait
 k8s.io/apimachinery/pkg/util/clock
@@ -261,12 +282,12 @@ k8s.io/apimachinery/pkg/runtime/serializer/versioning
 k8s.io/apimachinery/pkg/apis/meta/v1/unstructured
 k8s.io/apimachinery/pkg/apis/meta/v1alpha1
 k8s.io/apimachinery/pkg/util/framer
-k8s.io/apimachinery/pkg/util/yaml
 k8s.io/apimachinery/pkg/conversion/unstructured
 k8s.io/apimachinery/pkg/api/equality
 k8s.io/apimachinery/pkg/util/diff
 # k8s.io/client-go v0.0.0-20171026121518-35ccd4336052
 k8s.io/client-go/kubernetes
+k8s.io/client-go/plugin/pkg/client/auth/gcp
 k8s.io/client-go/kubernetes/scheme
 k8s.io/client-go/kubernetes/typed/core/v1
 k8s.io/client-go/tools/leaderelection
@@ -300,6 +321,7 @@ k8s.io/client-go/kubernetes/typed/storage/v1
 k8s.io/client-go/kubernetes/typed/storage/v1beta1
 k8s.io/client-go/rest
 k8s.io/client-go/util/flowcontrol
+k8s.io/client-go/util/jsonpath
 k8s.io/client-go/tools/reference
 k8s.io/client-go/tools/auth
 k8s.io/client-go/tools/clientcmd/api
@@ -311,6 +333,7 @@ k8s.io/client-go/tools/metrics
 k8s.io/client-go/transport
 k8s.io/client-go/util/cert
 k8s.io/client-go/util/integer
+k8s.io/client-go/third_party/forked/golang/template
 k8s.io/client-go/tools/clientcmd/api/v1
 # k8s.io/kube-openapi v0.0.0-20180201014056-275e2ce91dec
 k8s.io/kube-openapi/pkg/common
