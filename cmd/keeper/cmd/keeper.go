@@ -558,7 +558,6 @@ func (p *PostgresKeeper) updatePGState(pctx context.Context) {
 	pgState, err := p.GetPGState(pctx)
 	if err != nil {
 		log.Errorw("failed to get pg state", zap.Error(err))
-		return
 	}
 	p.lastPGState = pgState
 }
@@ -641,7 +640,7 @@ func (p *PostgresKeeper) GetPGState(pctx context.Context) (*cluster.PostgresStat
 
 	initialized, err := p.pgm.IsInitialized()
 	if err != nil {
-		return nil, err
+		return pgState, err
 	}
 	if initialized {
 		pgParameters, err := p.pgm.GetConfigFilePGParameters()
