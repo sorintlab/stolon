@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sorintlab/stolon/internal/common"
 	"github.com/sorintlab/stolon/internal/store"
 	"github.com/sorintlab/stolon/internal/util"
@@ -75,6 +76,24 @@ func AddCommonFlags(cmd *cobra.Command, cfg *CommonConfig) {
 	}
 }
 
+var (
+	// clusterIdentifier provides a Prometheus metric that should uniquely identify the
+	// cluster that any stolon component is associated with. Users can then join between
+	// various metric series for the same cluster without making assumptions about service
+	// discovery labels.
+	clusterIdentifier = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "stolon_cluster_identifier",
+			Help: "Set to 1, is labelled with the cluster_name",
+		},
+		[]string{"cluster_name"},
+	)
+)
+
+func init() {
+	prometheus.MustRegister(clusterIdentifier)
+}
+
 func CheckCommonConfig(cfg *CommonConfig) error {
 	if cfg.ClusterName == "" {
 		return fmt.Errorf("cluster name required")
@@ -102,6 +121,13 @@ func CheckCommonConfig(cfg *CommonConfig) error {
 	}
 
 	return nil
+}
+
+// SetMetrics should be called by any stolon component that outputs application metrics.
+// It sets the clusterIdentifier metric, which is key to joining across all the other
+// metric series.
+func SetMetrics(cfg *CommonConfig) {
+	clusterIdentifier.WithLabelValues(cfg.ClusterName).Set(1)
 }
 
 func IsColorLoggerEnable(cmd *cobra.Command, cfg *CommonConfig) bool {
