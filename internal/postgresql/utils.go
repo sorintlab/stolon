@@ -40,45 +40,11 @@ var (
 )
 
 func dbExec(ctx context.Context, db *sql.DB, query string, args ...interface{}) (sql.Result, error) {
-	ch := make(chan struct {
-		res sql.Result
-		err error
-	})
-	go func() {
-		res, err := db.Exec(query, args...)
-		ch <- struct {
-			res sql.Result
-			err error
-		}{res, err}
-	}()
-
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case out := <-ch:
-		return out.res, out.err
-	}
+	return db.ExecContext(ctx, query, args...)
 }
 
 func query(ctx context.Context, db *sql.DB, query string, args ...interface{}) (*sql.Rows, error) {
-	ch := make(chan struct {
-		rows *sql.Rows
-		err  error
-	})
-	go func() {
-		rows, err := db.Query(query, args...)
-		ch <- struct {
-			rows *sql.Rows
-			err  error
-		}{rows, err}
-	}()
-
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case out := <-ch:
-		return out.rows, out.err
-	}
+	return db.QueryContext(ctx, query, args...)
 }
 
 func ping(ctx context.Context, connParams ConnParams) error {

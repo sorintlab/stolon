@@ -20,6 +20,7 @@ We suggest that you first read the [Stolon Architecture and Requirements](archit
 * [Enabling synchronous replication](syncrepl.md)
 * [PostgreSQL SSL/TLS setup](ssl.md)
 * [Forcing a failover](forcefailover.md)
+* [Service Discovery](service_discovery.md)
 
 ### Recipes
 

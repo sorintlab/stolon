@@ -586,3 +586,89 @@ func TestAutomaticPgRestart(t *testing.T) {
 		}
 	}
 }
+
+func TestAdvertise(t *testing.T) {
+	t.Parallel()
+
+	dir, err := ioutil.TempDir("", "")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer os.RemoveAll(dir)
+
+	tstore, err := NewTestStore(t, dir)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := tstore.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := tstore.WaitUp(10 * time.Second); err != nil {
+		t.Fatalf("error waiting on store up: %v", err)
+	}
+	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
+	defer tstore.Stop()
+
+	clusterName := uuid.NewV4().String()
+
+	storePath := filepath.Join(common.StorePrefix, clusterName)
+
+	sm := store.NewKVBackedStore(tstore.store, storePath)
+
+	initialClusterSpec := &cluster.ClusterSpec{
+		InitMode:           cluster.ClusterInitModeP(cluster.ClusterInitModeNew),
+		SleepInterval:      &cluster.Duration{Duration: 2 * time.Second},
+		FailInterval:       &cluster.Duration{Duration: 5 * time.Second},
+		ConvergenceTimeout: &cluster.Duration{Duration: 30 * time.Second},
+	}
+	initialClusterSpecFile, err := writeClusterSpec(dir, initialClusterSpec)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	ts, err := NewTestSentinel(t, dir, clusterName, tstore.storeBackend, storeEndpoints, fmt.Sprintf("--initial-cluster-spec=%s", initialClusterSpecFile))
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := ts.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer ts.Stop()
+
+	// Start keeper with advertise config
+	advertiseConfig := []string{"--pg-advertise-address=6.6.6.6", "--pg-advertise-port=6666"}
+	tk, err := NewTestKeeper(t, dir, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, tstore.storeBackend, storeEndpoints, advertiseConfig...)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := tk.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer tk.Stop()
+
+	if err := WaitClusterPhase(sm, cluster.ClusterPhaseNormal, 60*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := tk.WaitDBUp(60 * time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// Check actual postgres listen address and port
+	pgParameters, err := tk.GetPGParameters()
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if tk.pgListenAddress != pgParameters["listen_addresses"] || tk.pgPort != pgParameters["port"] {
+		t.Fatalf("Expected postgres listen address and port to be %s and %s. Got %s and %s", tk.pgListenAddress, tk.pgPort, pgParameters["listen_addresses"], pgParameters["port"])
+	}
+
+	// Check advertised listen address and port
+	cd, _, err := sm.GetClusterData(context.TODO())
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	for _, db := range cd.DBs {
+		if db.Status.ListenAddress != "6.6.6.6" || db.Status.Port != "6666" {
+			t.Fatalf("Expected advertised address and port to be 6.6.6.6 and 6666. Got %s and %s", db.Status.ListenAddress, db.Status.Port)
+		}
+	}
+}
