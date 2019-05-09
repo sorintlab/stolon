@@ -98,6 +98,7 @@ type config struct {
 
 	uid                string
 	dataDir            string
+	walDir             string
 	debug              bool
 	pgListenAddress    string
 	pgAdvertiseAddress string
@@ -126,6 +127,7 @@ func init() {
 	CmdKeeper.PersistentFlags().StringVar(&cfg.uid, "id", "", "keeper uid (must be unique in the cluster and can contain only lower-case letters, numbers and the underscore character). If not provided a random uid will be generated.")
 	CmdKeeper.PersistentFlags().StringVar(&cfg.uid, "uid", "", "keeper uid (must be unique in the cluster and can contain only lower-case letters, numbers and the underscore character). If not provided a random uid will be generated.")
 	CmdKeeper.PersistentFlags().StringVar(&cfg.dataDir, "data-dir", "", "data directory")
+	CmdKeeper.PersistentFlags().StringVar(&cfg.walDir, "wal-dir", "", "wal directory")
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgListenAddress, "pg-listen-address", "", "postgresql instance listening address, local address used for the postgres instance. For all network interface, you can set the value to '*'.")
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgAdvertiseAddress, "pg-advertise-address", "", "postgresql instance address from outside. Use it to expose ip different than local ip with a NAT networking config")
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgPort, "pg-port", "5432", "postgresql instance listening port")
@@ -471,6 +473,7 @@ type PostgresKeeper struct {
 	bootUUID string
 
 	dataDir            string
+	walDir             string
 	pgListenAddress    string
 	pgAdvertiseAddress string
 	pgPort             string
@@ -522,6 +525,7 @@ func NewPostgresKeeper(cfg *config, end chan error) (*PostgresKeeper, error) {
 		bootUUID: common.UUID(),
 
 		dataDir: dataDir,
+		walDir:  cfg.walDir,
 
 		pgListenAddress:    cfg.pgListenAddress,
 		pgAdvertiseAddress: cfg.pgAdvertiseAddress,
@@ -823,7 +827,7 @@ func (p *PostgresKeeper) Start(ctx context.Context) {
 
 	// TODO(sgotti) reconfigure the various configurations options
 	// (RequestTimeout) after a changed cluster config
-	pgm := pg.NewManager(p.pgBinPath, p.dataDir, p.getLocalConnParams(), p.getLocalReplConnParams(), p.pgSUAuthMethod, p.pgSUUsername, p.pgSUPassword, p.pgReplAuthMethod, p.pgReplUsername, p.pgReplPassword, p.requestTimeout)
+	pgm := pg.NewManager(p.pgBinPath, p.dataDir, p.walDir, p.getLocalConnParams(), p.getLocalReplConnParams(), p.pgSUAuthMethod, p.pgSUUsername, p.pgSUPassword, p.pgReplAuthMethod, p.pgReplUsername, p.pgReplPassword, p.requestTimeout)
 	p.pgm = pgm
 
 	_ = p.pgm.StopIfStarted(true)
@@ -916,7 +920,7 @@ func (p *PostgresKeeper) resync(db, masterDB, followedDB *cluster.DB, tryPgrewin
 		replSlot = common.StolonName(db.UID)
 	}
 
-	if err := pgm.RemoveAll(); err != nil {
+	if err := pgm.RemoveAllIfInitialized(); err != nil {
 		return fmt.Errorf("failed to remove the postgres data dir: %v", err)
 	}
 	if slog.IsDebug() {
@@ -1115,7 +1119,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 		}
 
 		// Clean up cluster db datadir
-		if err = pgm.RemoveAll(); err != nil {
+		if err = pgm.RemoveAllIfInitialized(); err != nil {
 			log.Errorw("failed to remove the postgres data dir", zap.Error(err))
 			return
 		}
@@ -1174,7 +1178,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				log.Errorw("failed to stop pg instance", zap.Error(err))
 				return
 			}
-			if err = pgm.RemoveAll(); err != nil {
+			if err = pgm.RemoveAllIfInitialized(); err != nil {
 				log.Errorw("failed to remove the postgres data dir", zap.Error(err))
 				return
 			}
@@ -1236,7 +1240,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				log.Errorw("failed to stop pg instance", zap.Error(err))
 				return
 			}
-			if err = pgm.RemoveAll(); err != nil {
+			if err = pgm.RemoveAllIfInitialized(); err != nil {
 				log.Errorw("failed to remove the postgres data dir", zap.Error(err))
 				return
 			}

@@ -2143,3 +2143,180 @@ func TestSyncStandbyNotInSync(t *testing.T) {
 func TestSyncStandbyNotInSync0(t *testing.T) {
 	testSyncStandbyNotInSync(t, true)
 }
+
+func TestFailoverWithCustomWalDir(t *testing.T) {
+	dir, err := ioutil.TempDir("", "stolon")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer os.RemoveAll(dir)
+
+	// Set up store
+	tstore := setupStore(t, dir)
+	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
+
+	clusterName := uuid.NewV4().String()
+
+	syncRep := true
+	usePgRewind := true
+	initialClusterSpec := &cluster.ClusterSpec{
+		InitMode:               cluster.ClusterInitModeP(cluster.ClusterInitModeNew),
+		SleepInterval:          &cluster.Duration{Duration: 2 * time.Second},
+		FailInterval:           &cluster.Duration{Duration: 5 * time.Second},
+		ConvergenceTimeout:     &cluster.Duration{Duration: 30 * time.Second},
+		MaxStandbyLag:          cluster.Uint32P(50 * 1024), // limit lag to 50kiB
+		SynchronousReplication: &syncRep,
+		UsePgrewind:            &usePgRewind,
+		PGParameters:           defaultPGParameters,
+	}
+	initialClusterSpecFile, err := writeClusterSpec(dir, initialClusterSpec)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// Set up sentinel
+	sentinel, err := NewTestSentinel(t, dir, clusterName, tstore.storeBackend, storeEndpoints, fmt.Sprintf("--initial-cluster-spec=%s", initialClusterSpecFile))
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := sentinel.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// Set up first keeper
+	keeper1waldir, err := ioutil.TempDir("", "stolon")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer os.RemoveAll(dir)
+	tk1, err := NewTestKeeper(
+		t,
+		dir,
+		clusterName,
+		pgSUUsername,
+		pgSUPassword,
+		pgReplUsername,
+		pgReplPassword,
+		tstore.storeBackend,
+		storeEndpoints,
+		"--wal-dir",
+		keeper1waldir,
+	)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := tk1.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// Set up second keeper
+	keeper2waldir, err := ioutil.TempDir("", "")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer os.RemoveAll(dir)
+	tk2, err := NewTestKeeper(
+		t,
+		dir,
+		clusterName,
+		pgSUUsername,
+		pgSUPassword,
+		pgReplUsername,
+		pgReplPassword,
+		tstore.storeBackend,
+		storeEndpoints,
+		"--wal-dir",
+		keeper2waldir,
+	)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := tk2.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	storePath := filepath.Join(common.StorePrefix, clusterName)
+	store := store.NewKVBackedStore(tstore.store, storePath)
+
+	// Wait for keepers to become ready
+	if err := WaitClusterPhase(store, cluster.ClusterPhaseNormal, 60*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := tk1.WaitDBUp(60 * time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := tk2.WaitDBUp(60 * time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	keepers := map[string]*TestKeeper{tk1.uid: tk1, tk2.uid: tk2}
+	sentinels := map[string]*TestSentinel{sentinel.uid: sentinel}
+
+	// Set up proxy
+	proxy, err := NewTestProxy(t, dir, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, tstore.storeBackend, storeEndpoints)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := proxy.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	defer shutdown(keepers, sentinels, proxy, tstore)
+
+	master, standbys := waitMasterStandbysReady(t, store, keepers)
+	standby := standbys[0]
+
+	fmt.Printf("master: %s\n", master.uid)
+	fmt.Printf("standby: %s\n", standby.uid)
+
+	if err := WaitClusterDataSynchronousStandbys([]string{standby.uid}, store, 30*time.Second); err != nil {
+		t.Fatalf("expected synchronous standby on keeper %q in cluster data", standby.uid)
+	}
+
+	if err := populate(t, master); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := write(t, master, 1, 1); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// get the master XLogPos
+	xLogPos, err := GetXLogPos(master)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	// wait for the keepers to have reported their state
+	if err := WaitClusterSyncedXLogPos([]*TestKeeper{master, standby}, xLogPos, store, 20*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// the proxy should connect to the right master
+	if err := proxy.WaitRightMaster(master, 3*cluster.DefaultProxyCheckInterval); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// Stop the keeper process on master, should also stop the database
+	t.Logf("Stopping current master keeper: %s", master.uid)
+	master.Stop()
+
+	// Wait for cluster data containing standby as master
+	if err := WaitClusterDataMaster(standby.uid, store, 30*time.Second); err != nil {
+		t.Fatalf("expected master %q in cluster view", standby.uid)
+	}
+	if err := standby.WaitDBRole(common.RoleMaster, nil, 30*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	c, err := getLines(t, standby)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if c != 1 {
+		t.Fatalf("wrong number of lines, want: %d, got: %d", 1, c)
+	}
+
+	// the proxy should connect to the right master
+	if err := proxy.WaitRightMaster(standby, 3*cluster.DefaultProxyCheckInterval); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+}
