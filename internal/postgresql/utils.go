@@ -317,27 +317,20 @@ func fileExists(path string) (bool, error) {
 	return true, nil
 }
 
-func expand(s, dataDir string) string {
-	buf := make([]byte, 0, 2*len(s))
-	// %d %% are all ASCII, so bytes are fine for this operation.
-	i := 0
-	for j := 0; j < len(s); j++ {
-		if s[j] == '%' && j+1 < len(s) {
-			switch s[j+1] {
-			case 'd':
-				buf = append(buf, s[i:j]...)
-				buf = append(buf, []byte(dataDir)...)
-				j += 1
-				i = j + 1
-			case '%':
-				j += 1
-				buf = append(buf, s[i:j]...)
-				i = j + 1
-			default:
-			}
+// expandRecoveryCommand substitues the data and wal directories into a point-in-time
+// recovery command string. Any %d become the data directory, any %w become the wal
+// directory and any literal % characters are escaped by themselves (%% -> %).
+func expandRecoveryCommand(cmd, dataDir, walDir string) string {
+	return regexp.MustCompile(`%[dw%]`).ReplaceAllStringFunc(cmd, func(match string) string {
+		switch match[1] {
+		case 'd':
+			return dataDir
+		case 'w':
+			return walDir
 		}
-	}
-	return string(buf) + s[i:]
+
+		return "%"
+	})
 }
 
 func getConfigFilePGParameters(ctx context.Context, connParams ConnParams) (common.Parameters, error) {
