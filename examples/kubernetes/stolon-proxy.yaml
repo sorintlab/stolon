@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
       - name: stolon-proxy
-        image: sorintlab/stolon:master-pg10
+        image: sorintlab/stolon:v0.14.0-pg10
         command:
           - "/bin/bash"
           - "-ec"
