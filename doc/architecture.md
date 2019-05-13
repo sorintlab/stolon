@@ -22,14 +22,14 @@ If you're providing the keeper's uid in the command line don't start a new keepe
 
 #### Sentinel and proxies
 
-Sentinels and proxies don't need a local data directory but only use the store (etcd or consul). The sentinels and proxies uids are randomly generate at every process start to avoid possible collisions.
+Sentinels and proxies don't need a local data directory but only use the store (etcd or consul). The sentinels and proxies uids are randomly generated at every process start to avoid possible collisions.
 
 
 #### Store
 
 Currently the store can be etcd (using v2 or v3 api), consul or kubernetes, we leverage their features to achieve consistent and persistent cluster data.
 
-The store should be high available (at least three nodes).
+The store should be highly available (at least three nodes).
 
 When a stolon component is not able to read (quorum consistent read) or write to a quorate partition of the store (the stolon component is partitioned, the store is partitioned, the store is down etc...) it will just retry talking with it.
 
