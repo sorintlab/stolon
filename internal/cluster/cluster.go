@@ -215,6 +215,10 @@ type ClusterSpec struct {
 	SleepInterval *Duration `json:"sleepInterval,omitempty"`
 	// Time after which any request (keepers checks from sentinel etc...) will fail.
 	RequestTimeout *Duration `json:"requestTimeout,omitempty"`
+	// Proxy check interval
+	ProxyCheckInterval *Duration `json:"proxyCheckInterval,omitempty"`
+	// Proxy check timeout interval
+	ProxyTimeoutInterval *Duration `json:"proxyTimeoutInterval,omitempty"`
 	// Interval to wait for a db to be converged to the required state when
 	// no long operation are expected.
 	ConvergenceTimeout *Duration `json:"convergenceTimeout,omitempty"`
@@ -222,6 +226,8 @@ type ClusterSpec struct {
 	InitTimeout *Duration `json:"initTimeout,omitempty"`
 	// Interval to wait for a db to be synced with a master
 	SyncTimeout *Duration `json:"syncTimeout,omitempty"`
+	// Interval to wait for a db to boot and become ready
+	DBWaitReadyTimeout *Duration `json:"dbWaitReadyTimeout,omitempty"`
 	// Interval after the first fail to declare a keeper or a db as not healthy.
 	FailInterval *Duration `json:"failInterval,omitempty"`
 	// Interval after which a dead keeper will be removed from the cluster data
@@ -344,6 +350,12 @@ func (os *ClusterSpec) WithDefaults() *ClusterSpec {
 	if s.RequestTimeout == nil {
 		s.RequestTimeout = &Duration{Duration: DefaultRequestTimeout}
 	}
+	if s.ProxyTimeoutInterval == nil {
+		s.ProxyTimeoutInterval = &Duration{Duration: DefaultProxyTimeoutInterval}
+	}
+	if s.ProxyCheckInterval == nil {
+		s.ProxyCheckInterval = &Duration{Duration: DefaultProxyCheckInterval}
+	}
 	if s.ConvergenceTimeout == nil {
 		s.ConvergenceTimeout = &Duration{Duration: DefaultConvergenceTimeout}
 	}
@@ -352,6 +364,9 @@ func (os *ClusterSpec) WithDefaults() *ClusterSpec {
 	}
 	if s.SyncTimeout == nil {
 		s.SyncTimeout = &Duration{Duration: DefaultSyncTimeout}
+	}
+	if s.DBWaitReadyTimeout == nil {
+		s.DBWaitReadyTimeout = &Duration{Duration: DefaultDBWaitReadyTimeout}
 	}
 	if s.FailInterval == nil {
 		s.FailInterval = &Duration{Duration: DefaultFailInterval}
@@ -409,6 +424,12 @@ func (os *ClusterSpec) Validate() error {
 	if s.RequestTimeout.Duration < 0 {
 		return fmt.Errorf("requestTimeout must be positive")
 	}
+	if s.ProxyTimeoutInterval.Duration < 0 {
+		return fmt.Errorf("proxyTimeoutInterval must be positive")
+	}
+	if s.ProxyCheckInterval.Duration < 0 {
+		return fmt.Errorf("proxyCheckInterval must be positive")
+	}
 	if s.ConvergenceTimeout.Duration < 0 {
 		return fmt.Errorf("convergenceTimeout must be positive")
 	}
@@ -417,6 +438,9 @@ func (os *ClusterSpec) Validate() error {
 	}
 	if s.SyncTimeout.Duration < 0 {
 		return fmt.Errorf("syncTimeout must be positive")
+	}
+	if s.DBWaitReadyTimeout.Duration < 0 {
+		return fmt.Errorf("dbWaitReadyTimeout must be positive")
 	}
 	if s.DeadKeeperRemovalInterval.Duration < 0 {
 		return fmt.Errorf("deadKeeperRemovalInterval must be positive")

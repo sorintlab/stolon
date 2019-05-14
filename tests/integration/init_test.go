@@ -23,11 +23,10 @@ import (
 	"testing"
 	"time"
 
+	uuid "github.com/satori/go.uuid"
 	"github.com/sorintlab/stolon/internal/cluster"
 	"github.com/sorintlab/stolon/internal/common"
 	"github.com/sorintlab/stolon/internal/store"
-
-	"github.com/satori/go.uuid"
 )
 
 func TestInit(t *testing.T) {
@@ -249,7 +248,7 @@ func testInitExisting(t *testing.T, merge bool) {
 
 	t.Logf("reinitializing cluster")
 	// Initialize cluster with new spec
-	err = StolonCtl(clusterName, tstore.storeBackend, storeEndpoints, "init", "-y", "-f", initialClusterSpecFile)
+	err = StolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "init", "-y", "-f", initialClusterSpecFile)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}

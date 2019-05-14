@@ -56,9 +56,6 @@ type config struct {
 	keepAliveIdle     int
 	keepAliveCount    int
 	keepAliveInterval int
-	
-	checkIntervalSeconds   int
-	requestTimeoutSeconds  int
 }
 
 var cfg config
@@ -73,9 +70,6 @@ func init() {
 	CmdProxy.PersistentFlags().IntVar(&cfg.keepAliveIdle, "tcp-keepalive-idle", 0, "set tcp keepalive idle (seconds)")
 	CmdProxy.PersistentFlags().IntVar(&cfg.keepAliveCount, "tcp-keepalive-count", 0, "set tcp keepalive probe count number")
 	CmdProxy.PersistentFlags().IntVar(&cfg.keepAliveInterval, "tcp-keepalive-interval", 0, "set tcp keepalive interval (seconds)")
-
-	CmdProxy.PersistentFlags().IntVar(&cfg.checkIntervalSeconds, "check-interval-seconds", cluster.DefaultProxyCheckInterval / time.Second, "set check interval (seconds)")
-	CmdProxy.PersistentFlags().IntVar(&cfg.requestTimeoutSeconds, "request-timeout-seconds", cluster.DefaultProxyTimeoutInterval / time.Second, "request timeout (seconds)")
 
 	CmdProxy.PersistentFlags().MarkDeprecated("debug", "use --log-level=debug instead")
 }
@@ -94,8 +88,8 @@ type ClusterChecker struct {
 
 	pollonMutex sync.Mutex
 
-	checkIntervalSeconds   int
-	requestTimeoutSeconds  int
+	checkIntervalSeconds  int
+	requestTimeoutSeconds int
 }
 
 func NewClusterChecker(uid string, cfg config) (*ClusterChecker, error) {
@@ -105,14 +99,14 @@ func NewClusterChecker(uid string, cfg config) (*ClusterChecker, error) {
 	}
 
 	return &ClusterChecker{
-		uid:              uid,
-		listenAddress:    cfg.listenAddress,
-		port:             cfg.port,
-		stopListening:    cfg.stopListening,
-		e:                e,
-		endPollonProxyCh: make(chan error),
-		checkIntervalSeconds: cfg.checkIntervalSeconds,
-		requestTimeoutSeconds: cfg.requestTimeoutSeconds,
+		uid:                   uid,
+		listenAddress:         cfg.listenAddress,
+		port:                  cfg.port,
+		stopListening:         cfg.stopListening,
+		e:                     e,
+		endPollonProxyCh:      make(chan error),
+		checkIntervalSeconds:  int(cluster.DefaultProxyCheckInterval / time.Second),
+		requestTimeoutSeconds: int(cluster.DefaultProxyTimeoutInterval / time.Second),
 	}, nil
 }
 
@@ -215,6 +209,9 @@ func (c *ClusterChecker) Check() error {
 	}
 
 	proxy := cd.Proxy
+	c.checkIntervalSeconds = int(cd.Cluster.DefSpec().ProxyCheckInterval.Duration / time.Second)
+	c.requestTimeoutSeconds = int(cd.Cluster.DefSpec().ProxyTimeoutInterval.Duration / time.Second)
+
 	if proxy == nil {
 		log.Infow("no proxy object available, closing connections to master")
 		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
@@ -265,7 +262,7 @@ func (c *ClusterChecker) Check() error {
 }
 
 func (c *ClusterChecker) TimeoutChecker(checkOkCh chan struct{}) error {
-	timeoutTimer := time.NewTimer(c.requestTimeoutSeconds * time.Second)
+	timeoutTimer := time.NewTimer(time.Duration(c.requestTimeoutSeconds) * time.Second)
 
 	for true {
 		select {
@@ -284,7 +281,7 @@ func (c *ClusterChecker) TimeoutChecker(checkOkCh chan struct{}) error {
 
 			// ignore if stop succeeded or not due to timer already expired
 			timeoutTimer.Stop()
-			timeoutTimer = time.NewTimer(c.requestTimeoutSeconds * time.Second)
+			timeoutTimer = time.NewTimer(time.Duration(c.requestTimeoutSeconds) * time.Second)
 		}
 	}
 	return nil
@@ -294,6 +291,12 @@ func (c *ClusterChecker) Start() error {
 	checkOkCh := make(chan struct{})
 	checkCh := make(chan error)
 	timerCh := time.NewTimer(0).C
+
+	previousCheckIntervalSeconds := c.checkIntervalSeconds
+	previousRequestTimeoutSeconds := c.requestTimeoutSeconds
+
+	log.Infow("check interval seconds is ", "seconds", c.checkIntervalSeconds)
+	log.Infow("request timeout seconds is ", "seconds", c.requestTimeoutSeconds)
 
 	// TODO(sgotti) TimeoutCecker is needed to forcefully close connection also
 	// if the Check method is blocked somewhere.
@@ -315,7 +318,17 @@ func (c *ClusterChecker) Start() error {
 				// report that check was ok
 				checkOkCh <- struct{}{}
 			}
-			timerCh = time.NewTimer(c.checkIntervalSeconds * time.Second).C
+
+			if previousCheckIntervalSeconds != c.checkIntervalSeconds {
+				log.Infow("updated check interval seconds is ", "seconds", c.checkIntervalSeconds)
+				previousCheckIntervalSeconds = c.checkIntervalSeconds
+			}
+			if previousRequestTimeoutSeconds != c.requestTimeoutSeconds {
+				log.Infow("updated request timeout seconds is ", "seconds", c.requestTimeoutSeconds)
+				previousRequestTimeoutSeconds = c.requestTimeoutSeconds
+			}
+
+			timerCh = time.NewTimer(time.Duration(c.checkIntervalSeconds) * time.Second).C
 		case err := <-c.endPollonProxyCh:
 			if err != nil {
 				return fmt.Errorf("proxy error: %v", err)
@@ -362,6 +375,8 @@ func proxy(c *cobra.Command, args []string) {
 	if err := cmd.CheckCommonConfig(&cfg.CommonConfig); err != nil {
 		log.Fatalf(err.Error())
 	}
+
+	cmd.SetMetrics(&cfg.CommonConfig, "proxy")
 
 	if cfg.keepAliveIdle < 0 {
 		log.Fatalf("tcp keepalive idle value must be greater or equal to 0")

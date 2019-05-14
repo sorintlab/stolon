@@ -15,6 +15,7 @@
 package clientv3
 
 import (
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -27,7 +28,6 @@ import (
 
 	"github.com/coreos/etcd/etcdserver/api/v3rpc/rpctypes"
 
-	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -56,7 +56,7 @@ type Client struct {
 	cfg      Config
 	creds    *credentials.TransportCredentials
 	balancer *healthBalancer
-	mu       sync.Mutex
+	mu       *sync.RWMutex
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -67,6 +67,8 @@ type Client struct {
 	Password string
 	// tokenCred is an instance of WithPerRPCCredentials()'s argument
 	tokenCred *authTokenCredential
+
+	callOpts []grpc.CallOption
 }
 
 // New creates a new etcdv3 client from a given configuration.
@@ -108,11 +110,13 @@ func (c *Client) Close() error {
 func (c *Client) Ctx() context.Context { return c.ctx }
 
 // Endpoints lists the registered endpoints for the client.
-func (c *Client) Endpoints() (eps []string) {
+func (c *Client) Endpoints() []string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	// copy the slice; protect original endpoints from being changed
-	eps = make([]string, len(c.cfg.Endpoints))
+	eps := make([]string, len(c.cfg.Endpoints))
 	copy(eps, c.cfg.Endpoints)
-	return
+	return eps
 }
 
 // SetEndpoints updates client's endpoints.
@@ -295,7 +299,7 @@ func (c *Client) getToken(ctx context.Context) error {
 		endpoint := c.cfg.Endpoints[i]
 		host := getHost(endpoint)
 		// use dial options without dopts to avoid reusing the client balancer
-		auth, err = newAuthenticator(host, c.dialSetupOpts(endpoint))
+		auth, err = newAuthenticator(host, c.dialSetupOpts(endpoint), c)
 		if err != nil {
 			continue
 		}
@@ -385,10 +389,29 @@ func newClient(cfg *Config) (*Client, error) {
 		creds:    creds,
 		ctx:      ctx,
 		cancel:   cancel,
+		mu:       new(sync.RWMutex),
+		callOpts: defaultCallOpts,
 	}
 	if cfg.Username != "" && cfg.Password != "" {
 		client.Username = cfg.Username
 		client.Password = cfg.Password
+	}
+	if cfg.MaxCallSendMsgSize > 0 || cfg.MaxCallRecvMsgSize > 0 {
+		if cfg.MaxCallRecvMsgSize > 0 && cfg.MaxCallSendMsgSize > cfg.MaxCallRecvMsgSize {
+			return nil, fmt.Errorf("gRPC message recv limit (%d bytes) must be greater than send limit (%d bytes)", cfg.MaxCallRecvMsgSize, cfg.MaxCallSendMsgSize)
+		}
+		callOpts := []grpc.CallOption{
+			defaultFailFast,
+			defaultMaxCallSendMsgSize,
+			defaultMaxCallRecvMsgSize,
+		}
+		if cfg.MaxCallSendMsgSize > 0 {
+			callOpts[1] = grpc.MaxCallSendMsgSize(cfg.MaxCallSendMsgSize)
+		}
+		if cfg.MaxCallRecvMsgSize > 0 {
+			callOpts[2] = grpc.MaxCallRecvMsgSize(cfg.MaxCallRecvMsgSize)
+		}
+		client.callOpts = callOpts
 	}
 
 	client.balancer = newHealthBalancer(cfg.Endpoints, cfg.DialTimeout, func(ep string) (bool, error) {
@@ -506,6 +529,20 @@ func isHaltErr(ctx context.Context, err error) bool {
 	// (e.g., failed in middle of send, corrupted frame)
 	// TODO: are permanent Internal errors possible from grpc?
 	return ev.Code() != codes.Unavailable && ev.Code() != codes.Internal
+}
+
+// isUnavailableErr returns true if the given error is an unavailable error
+func isUnavailableErr(ctx context.Context, err error) bool {
+	if ctx != nil && ctx.Err() != nil {
+		return false
+	}
+	if err == nil {
+		return false
+	}
+	ev, _ := status.FromError(err)
+	// Unavailable codes mean the system will be right back.
+	// (e.g., can't connect, lost leader)
+	return ev.Code() == codes.Unavailable
 }
 
 func toErr(ctx context.Context, err error) error {

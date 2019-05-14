@@ -22,11 +22,10 @@ import (
 	"testing"
 	"time"
 
+	uuid "github.com/satori/go.uuid"
 	"github.com/sorintlab/stolon/internal/cluster"
 	"github.com/sorintlab/stolon/internal/common"
 	"github.com/sorintlab/stolon/internal/store"
-
-	"github.com/satori/go.uuid"
 )
 
 func TestInitStandbyCluster(t *testing.T) {
@@ -291,7 +290,7 @@ func TestPromoteStandbyCluster(t *testing.T) {
 	}
 
 	// promote the standby cluster to a primary cluster
-	err = StolonCtl(clusterName, tstore.storeBackend, storeEndpoints, "promote", "-y")
+	err = StolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "promote", "-y")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -451,7 +450,7 @@ func TestPromoteStandbyClusterArchiveRecovery(t *testing.T) {
 	}
 
 	// promote the standby cluster to a primary cluster
-	err = StolonCtl(clusterName, tstore.storeBackend, storeEndpoints, "promote", "-y")
+	err = StolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "promote", "-y")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}

@@ -324,10 +324,9 @@ func (s *Sentinel) updateKeepersStatus(cd *cluster.ClusterData, keepersInfo clus
 // exclude any possible active proxy from the checks in updateCluster and not
 // remove them from the enabled proxies list. At worst a stale proxy will be
 // added to the enabled proxies list.
-func (s *Sentinel) activeProxiesInfos(proxiesInfo cluster.ProxiesInfo) cluster.ProxiesInfo {
+func (s *Sentinel) activeProxiesInfos(proxiesInfo cluster.ProxiesInfo, proxyTimeout time.Duration) cluster.ProxiesInfo {
 	pihs := s.proxyInfoHistories.DeepCopy()
 
-	tmpPihs := pihs.DeepCopy()
 	// remove missing proxyInfos from the history
 	for proxyUID, _ := range pihs {
 		if _, ok := proxiesInfo[proxyUID]; !ok {
@@ -335,14 +334,13 @@ func (s *Sentinel) activeProxiesInfos(proxiesInfo cluster.ProxiesInfo) cluster.P
 		}
 
 	}
-	pihs = tmpPihs
 
 	activeProxiesInfo := proxiesInfo.DeepCopy()
 	// keep only updated proxies info
 	for _, pi := range proxiesInfo {
 		if pih, ok := pihs[pi.UID]; ok {
 			if pih.ProxyInfo.InfoUID == pi.InfoUID {
-				if timer.Since(pih.Timer) > 2*cluster.DefaultProxyTimeoutInterval {
+				if timer.Since(pih.Timer) > proxyTimeout {
 					delete(activeProxiesInfo, pi.UID)
 				}
 			} else {
@@ -1896,7 +1894,7 @@ func (s *Sentinel) clusterSentinelCheck(pctx context.Context) {
 	newcd, newKeeperInfoHistories := s.updateKeepersStatus(cd, keepersInfo, firstRun)
 	log.Debugf("newcd dump after updateKeepersStatus: %s", spew.Sdump(newcd))
 
-	activeProxiesInfos := s.activeProxiesInfos(proxiesInfo)
+	activeProxiesInfos := s.activeProxiesInfos(proxiesInfo, 2*cd.Cluster.DefSpec().ProxyTimeoutInterval.Duration)
 
 	newcd, err = s.updateCluster(newcd, activeProxiesInfos)
 	if err != nil {
@@ -1919,6 +1917,11 @@ func (s *Sentinel) clusterSentinelCheck(pctx context.Context) {
 
 	// Update db convergence timers using the new cluster data
 	s.updateDBConvergenceInfos(newcd)
+
+	// We only update this metric when we've completed all actions in this method
+	// successfully. That enables us to alert on when Sentinels are failing to
+	// correctly sync.
+	lastCheckSuccessSeconds.SetToCurrentTime()
 }
 
 func sigHandler(sigs chan os.Signal, cancel context.CancelFunc) {
@@ -1958,6 +1961,8 @@ func sentinel(c *cobra.Command, args []string) {
 		log.Fatalf(err.Error())
 	}
 
+	cmd.SetMetrics(&cfg.CommonConfig, "sentinel")
+
 	uid := common.UID()
 	log.Infow("sentinel uid", "uid", uid)
 
@@ -1983,6 +1988,9 @@ func sentinel(c *cobra.Command, args []string) {
 		log.Fatalf("cannot create sentinel: %v", err)
 	}
 	go s.Start(ctx)
+
+	// Ensure we collect Sentinel metrics prior to providing Prometheus with an update
+	mustRegisterSentinelCollector(s)
 
 	<-end
 }

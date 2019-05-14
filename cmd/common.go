@@ -19,6 +19,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sorintlab/stolon/internal/cluster"
 	"github.com/sorintlab/stolon/internal/common"
 	"github.com/sorintlab/stolon/internal/store"
 	"github.com/sorintlab/stolon/internal/util"
@@ -75,6 +77,24 @@ func AddCommonFlags(cmd *cobra.Command, cfg *CommonConfig) {
 	}
 }
 
+var (
+	// clusterIdentifier provides a Prometheus metric that should uniquely identify the
+	// cluster that any stolon component is associated with. Users can then join between
+	// various metric series for the same cluster without making assumptions about service
+	// discovery labels.
+	clusterIdentifier = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "stolon_cluster_identifier",
+			Help: "Set to 1, is labelled with the cluster_name and component",
+		},
+		[]string{"cluster_name", "component"},
+	)
+)
+
+func init() {
+	prometheus.MustRegister(clusterIdentifier)
+}
+
 func CheckCommonConfig(cfg *CommonConfig) error {
 	if cfg.ClusterName == "" {
 		return fmt.Errorf("cluster name required")
@@ -102,6 +122,13 @@ func CheckCommonConfig(cfg *CommonConfig) error {
 	}
 
 	return nil
+}
+
+// SetMetrics should be called by any stolon component that outputs application metrics.
+// It sets the clusterIdentifier metric, which is key to joining across all the other
+// metric series.
+func SetMetrics(cfg *CommonConfig, component string) {
+	clusterIdentifier.WithLabelValues(cfg.ClusterName, component).Set(1)
 }
 
 func IsColorLoggerEnable(cmd *cobra.Command, cfg *CommonConfig) bool {
@@ -140,23 +167,7 @@ func NewStore(cfg *CommonConfig) (store.Store, error) {
 		}
 		s = store.NewKVBackedStore(kvstore, storePath)
 	case "kubernetes":
-		kubeClientConfig := util.NewKubeClientConfig(cfg.KubeConfig, cfg.KubeContext, cfg.KubeNamespace)
-		kubecfg, err := kubeClientConfig.ClientConfig()
-		if err != nil {
-			return nil, err
-		}
-		kubecli, err := kubernetes.NewForConfig(kubecfg)
-		if err != nil {
-			return nil, fmt.Errorf("cannot create kubernetes client: %v", err)
-		}
-		var podName string
-		if !cfg.IsStolonCtl {
-			podName, err = util.PodName()
-			if err != nil {
-				return nil, err
-			}
-		}
-		namespace, _, err := kubeClientConfig.Namespace()
+		kubecli, podName, namespace, err := getKubeValues(cfg)
 		if err != nil {
 			return nil, err
 		}
@@ -186,23 +197,7 @@ func NewElection(cfg *CommonConfig, uid string) (store.Election, error) {
 		}
 		election = store.NewKVBackedElection(kvstore, filepath.Join(storePath, common.SentinelLeaderKey), uid)
 	case "kubernetes":
-		kubeClientConfig := util.NewKubeClientConfig(cfg.KubeConfig, cfg.KubeContext, cfg.KubeNamespace)
-		kubecfg, err := kubeClientConfig.ClientConfig()
-		if err != nil {
-			return nil, err
-		}
-		kubecli, err := kubernetes.NewForConfig(kubecfg)
-		if err != nil {
-			return nil, fmt.Errorf("cannot create kubernetes client: %v", err)
-		}
-		var podName string
-		if !cfg.IsStolonCtl {
-			podName, err = util.PodName()
-			if err != nil {
-				return nil, err
-			}
-		}
-		namespace, _, err := kubeClientConfig.Namespace()
+		kubecli, podName, namespace, err := getKubeValues(cfg)
 		if err != nil {
 			return nil, err
 		}
@@ -213,4 +208,29 @@ func NewElection(cfg *CommonConfig, uid string) (store.Election, error) {
 	}
 
 	return election, nil
+}
+
+func getKubeValues(cfg *CommonConfig) (*kubernetes.Clientset, string, string, error) {
+	kubeClientConfig := util.NewKubeClientConfig(cfg.KubeConfig, cfg.KubeContext, cfg.KubeNamespace)
+	kubecfg, err := kubeClientConfig.ClientConfig()
+	if err != nil {
+		return nil, "", "", err
+	}
+	kubecfg.Timeout = cluster.DefaultStoreTimeout
+	kubecli, err := kubernetes.NewForConfig(kubecfg)
+	if err != nil {
+		return nil, "", "", fmt.Errorf("cannot create kubernetes client: %v", err)
+	}
+	var podName string
+	if !cfg.IsStolonCtl {
+		podName, err = util.PodName()
+		if err != nil {
+			return nil, "", "", err
+		}
+	}
+	namespace, _, err := kubeClientConfig.Namespace()
+	if err != nil {
+		return nil, "", "", err
+	}
+	return kubecli, podName, namespace, nil
 }
