@@ -295,6 +295,9 @@ func (c *ClusterChecker) Start() error {
 	checkCh := make(chan error)
 	timerCh := time.NewTimer(0).C
 
+	log.Infow("check interval seconds is ", c.checkIntervalSeconds)
+	log.Infow("request timeout seconds is ", c.requestTimeoutSeconds)
+
 	// TODO(sgotti) TimeoutCecker is needed to forcefully close connection also
 	// if the Check method is blocked somewhere.
 	// The idomatic/cleaner solution will be to use a context instead of this
@@ -316,6 +319,7 @@ func (c *ClusterChecker) Start() error {
 				checkOkCh <- struct{}{}
 			}
 			timerCh = time.NewTimer(c.checkIntervalSeconds * time.Second).C
+			
 		case err := <-c.endPollonProxyCh:
 			if err != nil {
 				return fmt.Errorf("proxy error: %v", err)
