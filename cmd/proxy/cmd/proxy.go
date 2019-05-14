@@ -74,8 +74,8 @@ func init() {
 	CmdProxy.PersistentFlags().IntVar(&cfg.keepAliveCount, "tcp-keepalive-count", 0, "set tcp keepalive probe count number")
 	CmdProxy.PersistentFlags().IntVar(&cfg.keepAliveInterval, "tcp-keepalive-interval", 0, "set tcp keepalive interval (seconds)")
 
-	CmdProxy.PersistentFlags().IntVar(&cfg.checkIntervalSeconds, "check-interval-seconds", cluster.DefaultProxyCheckInterval / time.Second, "set check interval (seconds)")
-	CmdProxy.PersistentFlags().IntVar(&cfg.requestTimeoutSeconds, "request-timeout-seconds", cluster.DefaultProxyTimeoutInterval / time.Second, "request timeout (seconds)")
+	CmdProxy.PersistentFlags().IntVar(&cfg.checkIntervalSeconds, "check-interval-seconds", int(cluster.DefaultProxyCheckInterval / time.Second), "set check interval (seconds)")
+	CmdProxy.PersistentFlags().IntVar(&cfg.requestTimeoutSeconds, "request-timeout-seconds", int(cluster.DefaultProxyTimeoutInterval / time.Second), "request timeout (seconds)")
 
 	CmdProxy.PersistentFlags().MarkDeprecated("debug", "use --log-level=debug instead")
 }
@@ -265,7 +265,7 @@ func (c *ClusterChecker) Check() error {
 }
 
 func (c *ClusterChecker) TimeoutChecker(checkOkCh chan struct{}) error {
-	timeoutTimer := time.NewTimer(c.requestTimeoutSeconds * time.Second)
+	timeoutTimer := time.NewTimer(time.Duration(c.requestTimeoutSeconds) * time.Second)
 
 	for true {
 		select {
@@ -284,7 +284,7 @@ func (c *ClusterChecker) TimeoutChecker(checkOkCh chan struct{}) error {
 
 			// ignore if stop succeeded or not due to timer already expired
 			timeoutTimer.Stop()
-			timeoutTimer = time.NewTimer(c.requestTimeoutSeconds * time.Second)
+			timeoutTimer = time.NewTimer(time.Duration(c.requestTimeoutSeconds) * time.Second)
 		}
 	}
 	return nil
@@ -318,7 +318,7 @@ func (c *ClusterChecker) Start() error {
 				// report that check was ok
 				checkOkCh <- struct{}{}
 			}
-			timerCh = time.NewTimer(c.checkIntervalSeconds * time.Second).C
+			timerCh = time.NewTimer(time.Duration(c.checkIntervalSeconds) * time.Second).C
 			
 		case err := <-c.endPollonProxyCh:
 			if err != nil {
