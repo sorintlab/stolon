@@ -295,8 +295,8 @@ func (c *ClusterChecker) Start() error {
 	checkCh := make(chan error)
 	timerCh := time.NewTimer(0).C
 
-	log.Infow("check interval seconds is ", c.checkIntervalSeconds)
-	log.Infow("request timeout seconds is ", c.requestTimeoutSeconds)
+	log.Infow("check interval seconds is ", "seconds", c.checkIntervalSeconds)
+	log.Infow("request timeout seconds is ", "seconds", c.requestTimeoutSeconds)
 
 	// TODO(sgotti) TimeoutCecker is needed to forcefully close connection also
 	// if the Check method is blocked somewhere.
