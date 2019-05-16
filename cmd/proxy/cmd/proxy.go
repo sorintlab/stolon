@@ -56,9 +56,9 @@ type config struct {
 	keepAliveIdle     int
 	keepAliveCount    int
 	keepAliveInterval int
-	
-	checkIntervalSeconds   int
-	requestTimeoutSeconds  int
+
+	checkIntervalSeconds  int
+	requestTimeoutSeconds int
 }
 
 var cfg config
@@ -74,8 +74,8 @@ func init() {
 	CmdProxy.PersistentFlags().IntVar(&cfg.keepAliveCount, "tcp-keepalive-count", 0, "set tcp keepalive probe count number")
 	CmdProxy.PersistentFlags().IntVar(&cfg.keepAliveInterval, "tcp-keepalive-interval", 0, "set tcp keepalive interval (seconds)")
 
-	CmdProxy.PersistentFlags().IntVar(&cfg.checkIntervalSeconds, "check-interval-seconds", int(cluster.DefaultProxyCheckInterval / time.Second), "set check interval (seconds)")
-	CmdProxy.PersistentFlags().IntVar(&cfg.requestTimeoutSeconds, "request-timeout-seconds", int(cluster.DefaultProxyTimeoutInterval / time.Second), "request timeout (seconds)")
+	CmdProxy.PersistentFlags().IntVar(&cfg.checkIntervalSeconds, "check-interval-seconds", int(cluster.DefaultProxyCheckInterval/time.Second), "set check interval (seconds)")
+	CmdProxy.PersistentFlags().IntVar(&cfg.requestTimeoutSeconds, "request-timeout-seconds", int(cluster.DefaultProxyTimeoutInterval/time.Second), "request timeout (seconds)")
 
 	CmdProxy.PersistentFlags().MarkDeprecated("debug", "use --log-level=debug instead")
 }
@@ -94,8 +94,8 @@ type ClusterChecker struct {
 
 	pollonMutex sync.Mutex
 
-	checkIntervalSeconds   int
-	requestTimeoutSeconds  int
+	checkIntervalSeconds  int
+	requestTimeoutSeconds int
 }
 
 func NewClusterChecker(uid string, cfg config) (*ClusterChecker, error) {
@@ -105,13 +105,13 @@ func NewClusterChecker(uid string, cfg config) (*ClusterChecker, error) {
 	}
 
 	return &ClusterChecker{
-		uid:              uid,
-		listenAddress:    cfg.listenAddress,
-		port:             cfg.port,
-		stopListening:    cfg.stopListening,
-		e:                e,
-		endPollonProxyCh: make(chan error),
-		checkIntervalSeconds: cfg.checkIntervalSeconds,
+		uid:                   uid,
+		listenAddress:         cfg.listenAddress,
+		port:                  cfg.port,
+		stopListening:         cfg.stopListening,
+		e:                     e,
+		endPollonProxyCh:      make(chan error),
+		checkIntervalSeconds:  cfg.checkIntervalSeconds,
 		requestTimeoutSeconds: cfg.requestTimeoutSeconds,
 	}, nil
 }
@@ -319,7 +319,7 @@ func (c *ClusterChecker) Start() error {
 				checkOkCh <- struct{}{}
 			}
 			timerCh = time.NewTimer(time.Duration(c.checkIntervalSeconds) * time.Second).C
-			
+
 		case err := <-c.endPollonProxyCh:
 			if err != nil {
 				return fmt.Errorf("proxy error: %v", err)
