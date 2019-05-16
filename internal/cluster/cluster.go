@@ -222,6 +222,8 @@ type ClusterSpec struct {
 	InitTimeout *Duration `json:"initTimeout,omitempty"`
 	// Interval to wait for a db to be synced with a master
 	SyncTimeout *Duration `json:"syncTimeout,omitempty"`
+	// Interval to wait for a db to boot and become ready
+	DBWaitReadyTimeout *Duration `json:"dbWaitReadyTimeout,omitempty"`
 	// Interval after the first fail to declare a keeper or a db as not healthy.
 	FailInterval *Duration `json:"failInterval,omitempty"`
 	// Interval after which a dead keeper will be removed from the cluster data
@@ -353,6 +355,9 @@ func (os *ClusterSpec) WithDefaults() *ClusterSpec {
 	if s.SyncTimeout == nil {
 		s.SyncTimeout = &Duration{Duration: DefaultSyncTimeout}
 	}
+	if s.DBWaitReadyTimeout == nil {
+		s.DBWaitReadyTimeout = &Duration{Duration: DefaultDBWaitReadyTimeout}
+	}
 	if s.FailInterval == nil {
 		s.FailInterval = &Duration{Duration: DefaultFailInterval}
 	}
@@ -417,6 +422,9 @@ func (os *ClusterSpec) Validate() error {
 	}
 	if s.SyncTimeout.Duration < 0 {
 		return fmt.Errorf("syncTimeout must be positive")
+	}
+	if s.DBWaitReadyTimeout.Duration < 0 {
+		return fmt.Errorf("dbWaitReadyTimeout must be positive")
 	}
 	if s.DeadKeeperRemovalInterval.Duration < 0 {
 		return fmt.Errorf("deadKeeperRemovalInterval must be positive")
