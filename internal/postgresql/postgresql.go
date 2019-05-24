@@ -71,6 +71,7 @@ type Manager struct {
 	replUsername          string
 	replPassword          string
 	requestTimeout        time.Duration
+	pgBasebackupMaxRate   string
 }
 
 type SystemData struct {
@@ -137,6 +138,11 @@ func (p *Manager) SetHba(hba []string) {
 
 func (p *Manager) CurHba() []string {
 	return p.curHba
+}
+
+// SetPGBasebackupMaxRate is a setter for pgBasebackupMaxRate
+func (p *Manager) SetPGBasebackupMaxRate(rate string) {
+	p.pgBasebackupMaxRate = rate
 }
 
 func (p *Manager) UpdateCurParameters() {
@@ -826,6 +832,9 @@ func (p *Manager) SyncFromFollowed(followedConnParams ConnParams, replSlot strin
 	args := []string{"-R", "-Xs", "-D", p.dataDir, "-d", followedConnString}
 	if replSlot != "" {
 		args = append(args, "--slot", replSlot)
+	}
+	if p.pgBasebackupMaxRate != "" {
+		args = append(args, "--max-rate", p.pgBasebackupMaxRate)
 	}
 	cmd := exec.Command(name, args...)
 

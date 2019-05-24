@@ -286,6 +286,8 @@ type ClusterSpec struct {
 	PGHBA []string `json:"pgHBA"`
 	// Enable automatic pg restart when pg parameters that requires restart changes
 	AutomaticPgRestart *bool `json:"automaticPgRestart"`
+	// PGBasebackupMaxRate will be passed as --max-rate flag to pg_basebackup
+	PGBasebackupMaxRate string `json:"pgBasebackupMaxRate"`
 }
 
 type ClusterStatus struct {
@@ -442,6 +444,17 @@ func (os *ClusterSpec) Validate() error {
 	if s.InitMode == nil {
 		return fmt.Errorf("initMode undefined")
 	}
+	if s.PGBasebackupMaxRate != "" {
+		rate, err := common.ParseBytesize(s.PGBasebackupMaxRate)
+		if err != nil {
+			return fmt.Errorf("pgBasebackupMaxRate is invalid: %v", err)
+		}
+
+		if rate < 32*common.Kilobyte || rate > 1024*common.Megabyte {
+			return fmt.Errorf("pgBasebackupMaxRate should be >= 32k and <=1024M")
+		}
+	}
+
 	for _, replicationSlot := range s.AdditionalMasterReplicationSlots {
 		if err := validateReplicationSlot(replicationSlot); err != nil {
 			return err

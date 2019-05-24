@@ -65,3 +65,41 @@ func TestValidateReplicationSlots(t *testing.T) {
 		}
 	}
 }
+
+func TestClusterSpec_Validate(t *testing.T) {
+	t.Run("should validate PGBasebackupMaxRate", func(t *testing.T) {
+		var initMode = ClusterInitMode("new")
+		var spec *ClusterSpec
+
+		tests := []struct {
+			rate        string
+			shouldError bool
+		}{
+			{"10", true},
+			{"10k", true},
+			{"32k", false},
+			{"10M", false},
+			{"1024M", false},
+			{"1023M", false},
+			{"1025M", true},
+			{"fM", true},
+			{"", false},
+		}
+		for i, tt := range tests {
+			spec = &ClusterSpec{
+				InitMode:            &initMode,
+				PGBasebackupMaxRate: tt.rate,
+			}
+
+			err := spec.Validate()
+
+			if tt.shouldError && (err == nil) {
+				t.Errorf("#%d: expected error for max-rate: %s, actual no error", i, tt.rate)
+			}
+
+			if !tt.shouldError && (err != nil) {
+				t.Errorf("#%d: unexpected error for max-rate: %s, error: %v", i, tt.rate, err)
+			}
+		}
+	})
+}

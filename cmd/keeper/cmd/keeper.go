@@ -1014,6 +1014,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 
 	// Generate hba auth from clusterData
 	pgm.SetHba(p.generateHBA(cd, db, p.waitSyncStandbysSynced))
+	pgm.SetPGBasebackupMaxRate(cd.Cluster.Spec.PGBasebackupMaxRate)
 
 	var pgParameters common.Parameters
 
