@@ -57,6 +57,8 @@ var CmdKeeper = &cobra.Command{
 	Version: cmd.Version,
 }
 
+const maxPostgresTimelinesHistory = 2
+
 type KeeperLocalState struct {
 	UID        string
 	ClusterUID string
@@ -676,27 +678,12 @@ func (p *PostgresKeeper) GetPGState(pctx context.Context) (*cluster.PostgresStat
 		pgState.TimelineID = sd.TimelineID
 		pgState.XLogPos = sd.XLogPos
 
-		// if timeline <= 1 then no timeline history file exists.
-		pgState.TimelinesHistory = cluster.PostgresTimelinesHistory{}
-		if pgState.TimelineID > 1 {
-			var tlsh []*postgresql.TimelineHistory
-			tlsh, err = p.pgm.GetTimelinesHistory(pgState.TimelineID)
-			if err != nil {
-				log.Errorw("error getting timeline history", zap.Error(err))
-				return pgState, nil
-			}
-			ctlsh := cluster.PostgresTimelinesHistory{}
-
-			for _, tlh := range tlsh {
-				ctlh := &cluster.PostgresTimelineHistory{
-					TimelineID:  tlh.TimelineID,
-					SwitchPoint: tlh.SwitchPoint,
-					Reason:      tlh.Reason,
-				}
-				ctlsh = append(ctlsh, ctlh)
-			}
-			pgState.TimelinesHistory = ctlsh
+		ctlsh, err := getTimeLinesHistory(pgState, p.pgm, maxPostgresTimelinesHistory)
+		if err != nil {
+			log.Errorw("error getting timeline history", zap.Error(err))
+			return pgState, nil
 		}
+		pgState.TimelinesHistory = ctlsh
 
 		ow, err := p.pgm.OlderWalFile()
 		if err != nil {
@@ -709,6 +696,31 @@ func (p *PostgresKeeper) GetPGState(pctx context.Context) (*cluster.PostgresStat
 	}
 
 	return pgState, nil
+}
+
+func getTimeLinesHistory(pgState *cluster.PostgresState, pgm postgresql.PGManager, maxPostgresTimelinesHistory int) (cluster.PostgresTimelinesHistory, error) {
+	ctlsh := cluster.PostgresTimelinesHistory{}
+	// if timeline <= 1 then no timeline history file exists.
+	if pgState.TimelineID > 1 {
+		var tlsh []*postgresql.TimelineHistory
+		tlsh, err := pgm.GetTimelinesHistory(pgState.TimelineID)
+		if err != nil {
+			log.Errorw("error getting timeline history", zap.Error(err))
+			return ctlsh, err
+		}
+		if len(tlsh) > maxPostgresTimelinesHistory {
+			tlsh = tlsh[len(tlsh)-maxPostgresTimelinesHistory:]
+		}
+		for _, tlh := range tlsh {
+			ctlh := &cluster.PostgresTimelineHistory{
+				TimelineID:  tlh.TimelineID,
+				SwitchPoint: tlh.SwitchPoint,
+				Reason:      tlh.Reason,
+			}
+			ctlsh = append(ctlsh, ctlh)
+		}
+	}
+	return ctlsh, nil
 }
 
 func (p *PostgresKeeper) getLastPGState() *cluster.PostgresState {

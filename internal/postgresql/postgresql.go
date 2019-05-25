@@ -38,6 +38,8 @@ import (
 	"go.uber.org/zap"
 )
 
+//go:generate mockgen -destination=../mock/postgresql/postgresql.go -package=mocks -source=$GOFILE
+
 const (
 	postgresConf         = "postgresql.conf"
 	postgresRecoveryConf = "recovery.conf"
@@ -52,6 +54,10 @@ var (
 )
 
 var log = slog.S()
+
+type PGManager interface {
+	GetTimelinesHistory(timeline uint64) ([]*TimelineHistory, error)
+}
 
 type Manager struct {
 	pgBinPath             string
