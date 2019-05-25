@@ -15,18 +15,24 @@
 package postgresql
 
 import (
+	"bytes"
+	"fmt"
+	"math/rand"
 	"reflect"
+	"strconv"
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
 )
 
+type parseTHTest struct {
+	contents string
+	tlsh     []*TimelineHistory
+	err      error
+}
+
 func TestParseTimelineHistory(t *testing.T) {
-	tests := []struct {
-		contents string
-		tlsh     []*TimelineHistory
-		err      error
-	}{
+	tests := []parseTHTest{
 		{
 			contents: "",
 			tlsh:     []*TimelineHistory{},
@@ -43,6 +49,17 @@ func TestParseTimelineHistory(t *testing.T) {
 			},
 			err: nil,
 		},
+		{
+			contents: `1	5000090	bad file`,
+			tlsh: nil,
+			err:  fmt.Errorf("cannot parse start lsn in timeline history line \"1\\t5000090\\tbad file\": bad pg_lsn: 5000090"),
+		},
+		{
+			contents: `1	0/abcdz	bad file`,
+			tlsh: nil,
+			err:  fmt.Errorf("cannot parse start lsn in timeline history line \"1\\t0/abcdz\\tbad file\": strconv.ParseUint: parsing \"abcdz\": invalid syntax"),
+		},
+		generateLargeTimelineHistory(t),
 	}
 
 	for i, tt := range tests {
@@ -58,12 +75,45 @@ func TestParseTimelineHistory(t *testing.T) {
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
+			if len(tlsh) != len(tt.tlsh) {
+				t.Errorf(spew.Sprintf("#%d: wrong timeline history length: got: %d, want: %d", i, len(tlsh), len(tt.tlsh)))
+			}
 			if !reflect.DeepEqual(tlsh, tt.tlsh) {
 				t.Errorf(spew.Sprintf("#%d: wrong timeline history: got: %#+v, want: %#+v", i, tlsh, tt.tlsh))
 			}
 		}
 	}
+}
 
+func generateLargeTimelineHistory(t *testing.T) parseTHTest {
+	reason := "no recovery target specified"
+	baseSwitchPoint := 5000090
+	buf := bytes.Buffer{}
+	sizeOfTimelineHistory := TimelineHistoryLimit + rand.Intn(TimelineHistoryLimit)
+	for i := 0; i < sizeOfTimelineHistory; i++ {
+		buf.WriteString(fmt.Sprintf("%d	0/%d	%s\n", i+1, baseSwitchPoint+i, reason))
+	}
+
+	expectedTH := make([]*TimelineHistory, 0, sizeOfTimelineHistory)
+	for i := sizeOfTimelineHistory - TimelineHistoryLimit; i < sizeOfTimelineHistory; i++ {
+		switchPoint, err := PGLsnToInt("0/" + strconv.Itoa(baseSwitchPoint+i))
+		if err != nil {
+			t.Errorf("error generating LargeTimelineHistory: %v", err)
+			t.FailNow()
+		}
+
+		expectedTH = append(expectedTH, &TimelineHistory{
+			TimelineID:  uint64(i + 1),
+			SwitchPoint: uint64(switchPoint),
+			Reason:      reason,
+		})
+	}
+
+	return parseTHTest{
+		contents: buf.String(),
+		tlsh:     expectedTH,
+		err:      nil,
+	}
 }
 
 func TestValidReplSlotName(t *testing.T) {

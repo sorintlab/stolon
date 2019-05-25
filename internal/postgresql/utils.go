@@ -33,6 +33,8 @@ import (
 const (
 	// TODO(sgotti) for now we assume wal size is the default 16MiB size
 	WalSegSize = (16 * 1024 * 1024) // 16MiB
+	// TimelineHistoryLimit is the number of timehistory maintained in clusterdata
+	TimelineHistoryLimit = 1000
 )
 
 var (
@@ -270,6 +272,9 @@ func parseTimelinesHistory(contents string) ([]*TimelineHistory, error) {
 			tlh.Reason = m[3]
 			tlsh = append(tlsh, &tlh)
 		}
+	}
+	if len(tlsh) > TimelineHistoryLimit {
+		return tlsh[len(tlsh)-TimelineHistoryLimit:], nil
 	}
 	return tlsh, err
 }
