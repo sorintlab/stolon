@@ -1100,7 +1100,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				log.Errorw("failed to start instance", zap.Error(err))
 				return
 			}
-			if err = pgm.WaitReady(cluster.DefaultDBWaitReadyTimeout); err != nil {
+			if err = pgm.WaitReady(cd.Cluster.DefSpec().DBWaitReadyTimeout.Duration); err != nil {
 				log.Errorw("timeout waiting for instance to be ready", zap.Error(err))
 				return
 			}
@@ -1279,7 +1279,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				fullResync := false
 				// if not accepting connection assume that it's blocked waiting for missing wal
 				// (see above TODO), so do a full resync using pg_basebackup.
-				if err = pgm.WaitReady(cluster.DefaultDBWaitReadyTimeout); err != nil {
+				if err = pgm.WaitReady(cd.Cluster.DefSpec().DBWaitReadyTimeout.Duration); err != nil {
 					log.Errorw("pg_rewinded standby is not accepting connection. it's probably waiting for unavailable wals. Forcing a full resync")
 					fullResync = true
 				} else {
@@ -1333,7 +1333,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				log.Errorw("failed to start instance", zap.Error(err))
 				return
 			}
-			if err = pgm.WaitReady(cluster.DefaultDBWaitReadyTimeout); err != nil {
+			if err = pgm.WaitReady(cd.Cluster.DefSpec().DBWaitReadyTimeout.Duration); err != nil {
 				log.Errorw("timeout waiting for instance to be ready", zap.Error(err))
 				return
 			}
@@ -1429,7 +1429,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				log.Errorw("failed to start postgres", zap.Error(err))
 				return
 			}
-			if err = pgm.WaitReady(cluster.DefaultDBWaitReadyTimeout); err != nil {
+			if err = pgm.WaitReady(cd.Cluster.DefSpec().DBWaitReadyTimeout.Duration); err != nil {
 				log.Errorw("timeout waiting for instance to be ready", zap.Error(err))
 				return
 			}
