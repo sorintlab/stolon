@@ -58,7 +58,10 @@ if [ -n "${vetRes}" ]; then
 fi
 
 echo "Checking govet -shadow ..."
-vetRes=$(go vet -shadow ${PACKAGES})
+go install golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow
+export PATH=${GOPATH}/bin:${PATH}
+shadow_tool=$(which shadow)
+vetRes=$(go vet -vettool="${shadow_tool}" ${PACKAGES})
 if [ -n "${vetRes}" ]; then
 	echo -e "govet checking ${path} failed:\n${vetRes}"
 	exit 255
