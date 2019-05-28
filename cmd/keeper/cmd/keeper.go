@@ -1873,7 +1873,7 @@ func keeper(c *cobra.Command, args []string) {
 		log.Fatalf(err.Error())
 	}
 
-	cmd.SetMetrics(&cfg.CommonConfig)
+	cmd.SetMetrics(&cfg.CommonConfig, "keeper")
 
 	if err = os.MkdirAll(cfg.dataDir, 0700); err != nil {
 		log.Fatalf("cannot create data dir: %v", err)

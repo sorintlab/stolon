@@ -85,9 +85,9 @@ var (
 	clusterIdentifier = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "stolon_cluster_identifier",
-			Help: "Set to 1, is labelled with the cluster_name",
+			Help: "Set to 1, is labelled with the cluster_name and component",
 		},
-		[]string{"cluster_name"},
+		[]string{"cluster_name", "component"},
 	)
 )
 
@@ -127,8 +127,8 @@ func CheckCommonConfig(cfg *CommonConfig) error {
 // SetMetrics should be called by any stolon component that outputs application metrics.
 // It sets the clusterIdentifier metric, which is key to joining across all the other
 // metric series.
-func SetMetrics(cfg *CommonConfig) {
-	clusterIdentifier.WithLabelValues(cfg.ClusterName).Set(1)
+func SetMetrics(cfg *CommonConfig, component string) {
+	clusterIdentifier.WithLabelValues(cfg.ClusterName, component).Set(1)
 }
 
 func IsColorLoggerEnable(cmd *cobra.Command, cfg *CommonConfig) bool {

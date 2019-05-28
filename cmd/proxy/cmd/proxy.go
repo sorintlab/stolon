@@ -352,6 +352,8 @@ func proxy(c *cobra.Command, args []string) {
 		log.Fatalf(err.Error())
 	}
 
+	cmd.SetMetrics(&cfg.CommonConfig, "proxy")
+
 	if cfg.keepAliveIdle < 0 {
 		log.Fatalf("tcp keepalive idle value must be greater or equal to 0")
 	}
