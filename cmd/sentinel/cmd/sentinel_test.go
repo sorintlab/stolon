@@ -16,6 +16,7 @@ package cmd
 
 import (
 	"fmt"
+	"github.com/sorintlab/stolon/internal/timer"
 	"strconv"
 	"strings"
 	"testing"
@@ -4996,6 +4997,79 @@ func TestUpdateCluster(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestActiveProxiesInfos(t *testing.T) {
+	proxyInfo1 := cluster.ProxyInfo{UID: "proxy1", InfoUID: "infoUID1"}
+	proxyInfo2 := cluster.ProxyInfo{UID: "proxy2", InfoUID: "infoUID2"}
+	proxyInfoWithDifferentInfoUID := cluster.ProxyInfo{UID: "proxy2", InfoUID: "differentInfoUID"}
+	var secToNanoSecondMultiplier int64 = 1000000000
+	tests := []struct {
+		name                       string
+		proxyInfoHistories         ProxyInfoHistories
+		proxiesInfos               cluster.ProxiesInfo
+		expectedActiveProxies      cluster.ProxiesInfo
+		expectedProxyInfoHistories ProxyInfoHistories
+	}{
+		{
+			name:                       "should do nothing when called with empty proxyInfos",
+			proxyInfoHistories:         nil,
+			proxiesInfos:               cluster.ProxiesInfo{},
+			expectedActiveProxies:      cluster.ProxiesInfo{},
+			expectedProxyInfoHistories: nil,
+		},
+		{
+			name:                       "should append to histories when called with proxyInfos",
+			proxyInfoHistories:         make(ProxyInfoHistories),
+			proxiesInfos:               cluster.ProxiesInfo{"proxy1": &proxyInfo1, "proxy2": &proxyInfo2},
+			expectedActiveProxies:      cluster.ProxiesInfo{"proxy1": &proxyInfo1, "proxy2": &proxyInfo2},
+			expectedProxyInfoHistories: ProxyInfoHistories{"proxy1": &ProxyInfoHistory{ProxyInfo: &proxyInfo1}, "proxy2": &ProxyInfoHistory{ProxyInfo: &proxyInfo2}},
+		},
+		{
+			name:                       "should update to histories if infoUID is different",
+			proxyInfoHistories:         ProxyInfoHistories{"proxy1": &ProxyInfoHistory{ProxyInfo: &proxyInfo1, Timer: timer.Now()}, "proxy2": &ProxyInfoHistory{ProxyInfo: &proxyInfo2, Timer: timer.Now()}},
+			proxiesInfos:               cluster.ProxiesInfo{"proxy1": &proxyInfo1, "proxy2": &proxyInfoWithDifferentInfoUID},
+			expectedActiveProxies:      cluster.ProxiesInfo{"proxy1": &proxyInfo1, "proxy2": &proxyInfoWithDifferentInfoUID},
+			expectedProxyInfoHistories: ProxyInfoHistories{"proxy1": &ProxyInfoHistory{ProxyInfo: &proxyInfo1}, "proxy2": &ProxyInfoHistory{ProxyInfo: &proxyInfoWithDifferentInfoUID}},
+		},
+		{
+			name:                       "should remove from active proxies if is not updated for twice the DefaultProxyTimeoutInterval",
+			proxyInfoHistories:         ProxyInfoHistories{"proxy1": &ProxyInfoHistory{ProxyInfo: &proxyInfo1, Timer: timer.Now() - (3 * 15 * secToNanoSecondMultiplier)}, "proxy2": &ProxyInfoHistory{ProxyInfo: &proxyInfo2, Timer: timer.Now() - (1 * 15 * secToNanoSecondMultiplier)}},
+			proxiesInfos:               cluster.ProxiesInfo{"proxy1": &proxyInfo1, "proxy2": &proxyInfo2},
+			expectedActiveProxies:      cluster.ProxiesInfo{"proxy2": &proxyInfo2},
+			expectedProxyInfoHistories: ProxyInfoHistories{"proxy1": &ProxyInfoHistory{ProxyInfo: &proxyInfo1}, "proxy2": &ProxyInfoHistory{ProxyInfo: &proxyInfo2}},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			s := &Sentinel{uid: "sentinel01", UIDFn: testUIDFn, RandFn: testRandFn, dbConvergenceInfos: make(map[string]*DBConvergenceInfo), proxyInfoHistories: test.proxyInfoHistories}
+			actualActiveProxies := s.activeProxiesInfos(test.proxiesInfos)
+
+			if !reflect.DeepEqual(actualActiveProxies, test.expectedActiveProxies) {
+				t.Errorf("Expected proxiesInfos to be %v but got %v", test.expectedActiveProxies, actualActiveProxies)
+			}
+			if !isProxyInfoHistoriesEqual(s.proxyInfoHistories, test.expectedProxyInfoHistories) {
+				t.Errorf("Expected proxyInfoHistories to be %v but got %v", test.expectedProxyInfoHistories, s.proxyInfoHistories)
+			}
+		})
+	}
+}
+
+func isProxyInfoHistoriesEqual(actualProxyInfoHistories ProxyInfoHistories, expectedProxyInfoHistories ProxyInfoHistories) bool {
+	if len(actualProxyInfoHistories) != len(expectedProxyInfoHistories) {
+		return false
+	}
+	for k, expectedProxyInfoHistory := range expectedProxyInfoHistories {
+		actualProxyInfoHistory, ok := actualProxyInfoHistories[k]
+		if !ok {
+			return false
+		}
+		if actualProxyInfoHistory.ProxyInfo.InfoUID != expectedProxyInfoHistory.ProxyInfo.InfoUID ||
+			actualProxyInfoHistory.ProxyInfo.UID != expectedProxyInfoHistory.ProxyInfo.UID {
+			return false
+		}
+	}
+	return true
 }
 
 func testUIDFn() string {
