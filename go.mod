@@ -7,8 +7,8 @@ require (
 	github.com/armon/go-metrics v0.0.0-20180917152333-f0300d1749da // indirect
 	github.com/boltdb/bolt v1.3.1 // indirect
 	github.com/cockroachdb/cmux v0.0.0-20170110192607-30d10be49292 // indirect
-	github.com/coreos/bbolt v1.3.0 // indirect
-	github.com/coreos/etcd v3.2.11+incompatible
+	github.com/coreos/bbolt v1.3.2 // indirect
+	github.com/coreos/etcd v3.3.13+incompatible
 	github.com/coreos/go-semver v0.0.0-20150725033620-d043ae190b32 // indirect
 	github.com/coreos/go-systemd v0.0.0-20181004131557-b14d3eb023cc // indirect
 	github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f // indirect
@@ -31,7 +31,9 @@ require (
 	github.com/google/gofuzz v0.0.0-20170612174753-24818f796faf // indirect
 	github.com/googleapis/gnostic v0.1.0 // indirect
 	github.com/gophercloud/gophercloud v0.0.0-20190410012400-2c55d17f707c // indirect
+	github.com/gorilla/websocket v1.4.0 // indirect
 	github.com/gregjones/httpcache v0.0.0-20171119193500-2bcd89a1743f // indirect
+	github.com/grpc-ecosystem/go-grpc-middleware v1.0.0 // indirect
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway v1.8.5 // indirect
 	github.com/hashicorp/consul v1.0.2
@@ -48,7 +50,7 @@ require (
 	github.com/imdario/mergo v0.0.0-20141206190957-6633656539c1 // indirect
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
 	github.com/jonboulle/clockwork v0.1.0 // indirect
-	github.com/json-iterator/go v0.0.0-20180128090011-28452fcdec4e // indirect
+	github.com/json-iterator/go v1.1.6 // indirect
 	github.com/juju/ratelimit v1.0.1 // indirect
 	github.com/kballard/go-shellquote v0.0.0-20140719004912-e5c918b80c17 // indirect
 	github.com/lib/pq v0.0.0-20160831222520-50761b0867bd
@@ -59,6 +61,8 @@ require (
 	github.com/mitchellh/go-homedir v0.0.0-20161203194507-b8bc1bf76747 // indirect
 	github.com/mitchellh/go-testing-interface v1.0.0 // indirect
 	github.com/mitchellh/reflectwalk v0.0.0-20170726202117-63d60e9d0dbc // indirect
+	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
+	github.com/modern-go/reflect2 v1.0.1 // indirect
 	github.com/pascaldekloe/goe v0.0.0-20180627143212-57f6aae5913c // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/prometheus/client_golang v0.9.3-0.20190127221311-3c4408c8b829
@@ -66,10 +70,12 @@ require (
 	github.com/satori/go.uuid v1.1.0
 	github.com/sean-/seed v0.0.0-20170313163322-e2103e2c3529 // indirect
 	github.com/sgotti/gexpect v0.0.0-20161123102107-0afc6c19f50a
+	github.com/soheilhy/cmux v0.1.4 // indirect
 	github.com/sorintlab/pollon v0.0.0-20171012155008-1475a2b45268
 	github.com/sorintlab/tcpkeepalive v0.2.0 // indirect
 	github.com/spf13/cobra v0.0.0-20171204131325-de2d9c4eca8f
 	github.com/spf13/pflag v1.0.0
+	github.com/tmc/grpc-websocket-proxy v0.0.0-20190109142713-0ad062ec5ee5 // indirect
 	github.com/ugorji/go v0.0.0-20151028022000-f1f1a805ed36 // indirect
 	github.com/xiang90/probing v0.0.0-20160813154853-07dd2e8dfe18 // indirect
 	go.uber.org/atomic v1.3.1 // indirect
