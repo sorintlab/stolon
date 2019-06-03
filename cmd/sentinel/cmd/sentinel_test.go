@@ -5039,6 +5039,13 @@ func TestActiveProxiesInfos(t *testing.T) {
 			expectedActiveProxies:      cluster.ProxiesInfo{"proxy2": &proxyInfo2},
 			expectedProxyInfoHistories: ProxyInfoHistories{"proxy1": &ProxyInfoHistory{ProxyInfo: &proxyInfo1}, "proxy2": &ProxyInfoHistory{ProxyInfo: &proxyInfo2}},
 		},
+		{
+			name:                       "should remove proxy from sentinel's local history if the proxy is removed in store",
+			proxyInfoHistories:         ProxyInfoHistories{"proxy1": &ProxyInfoHistory{ProxyInfo: &proxyInfo1, Timer: timer.Now()}, "proxy2": &ProxyInfoHistory{ProxyInfo: &proxyInfo2, Timer: timer.Now()}},
+			proxiesInfos:               cluster.ProxiesInfo{"proxy2": &proxyInfo2},
+			expectedActiveProxies:      cluster.ProxiesInfo{"proxy2": &proxyInfo2},
+			expectedProxyInfoHistories: ProxyInfoHistories{"proxy2": &ProxyInfoHistory{ProxyInfo: &proxyInfo2}},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
