@@ -1919,6 +1919,11 @@ func (s *Sentinel) clusterSentinelCheck(pctx context.Context) {
 
 	// Update db convergence timers using the new cluster data
 	s.updateDBConvergenceInfos(newcd)
+
+	// We only update this metric when we've completed all actions in this method
+	// successfully. That enables us to alert on when Sentinels are failing to
+	// correctly sync.
+	lastCheckSuccessSeconds.SetToCurrentTime()
 }
 
 func sigHandler(sigs chan os.Signal, cancel context.CancelFunc) {
@@ -1958,6 +1963,8 @@ func sentinel(c *cobra.Command, args []string) {
 		log.Fatalf(err.Error())
 	}
 
+	cmd.SetMetrics(&cfg.CommonConfig)
+
 	uid := common.UID()
 	log.Infow("sentinel uid", "uid", uid)
 
@@ -1983,6 +1990,9 @@ func sentinel(c *cobra.Command, args []string) {
 		log.Fatalf("cannot create sentinel: %v", err)
 	}
 	go s.Start(ctx)
+
+	// Ensure we collect Sentinel metrics prior to providing Prometheus with an update
+	mustRegisterSentinelCollector(s)
 
 	<-end
 }
