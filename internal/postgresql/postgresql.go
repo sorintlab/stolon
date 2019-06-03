@@ -829,7 +829,7 @@ func (p *Manager) SyncFromFollowed(followedConnParams ConnParams, replSlot strin
 
 	log.Infow("running pg_basebackup")
 	name := filepath.Join(p.pgBinPath, "pg_basebackup")
-	args := []string{"-R", "-Xs", "-D", p.dataDir, "-d", followedConnString}
+	args := []string{"-R", "-v", "-P", "-Xs", "-D", p.dataDir, "-d", followedConnString}
 	if replSlot != "" {
 		args = append(args, "--slot", replSlot)
 	}
@@ -838,11 +838,30 @@ func (p *Manager) SyncFromFollowed(followedConnParams ConnParams, replSlot strin
 	cmd.Env = append(os.Environ(), fmt.Sprintf("PGPASSFILE=%s", pgpass.Name()))
 	log.Debugw("execing cmd", "cmd", cmd)
 
-	// Pipe command's std[err|out] to parent.
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("error: %v", err)
+	// Pipe pg_basebackup's stderr to our stderr.
+	// We do this indirectly so that pg_basebackup doesn't think it's connected to a tty.
+	// This ensures that it doesn't print any bare line feeds, which could corrupt other
+	// logs.
+	// pg_basebackup uses stderr for diagnostic messages and stdout for streaming the backup
+	// itself (in some modes; we don't use this). As a result we only need to deal with
+	// stderr.
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return err
+	}
+
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+
+	go func() {
+		if _, err := io.Copy(os.Stderr, stderr); err != nil {
+			log.Errorf("pg_basebackup failed to copy stderr: %v", err)
+		}
+	}()
+
+	if err := cmd.Wait(); err != nil {
+		return err
 	}
 	return nil
 }
