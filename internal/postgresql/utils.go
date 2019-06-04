@@ -68,7 +68,7 @@ func setPassword(ctx context.Context, connParams ConnParams, username, password 
 	}
 	defer db.Close()
 
-	_, err = dbExec(ctx, db, fmt.Sprintf(`alter role %s with password '%s';`, username, password))
+	_, err = dbExec(ctx, db, fmt.Sprintf(`alter role "%s" with password '%s';`, username, password))
 	return err
 }
 
