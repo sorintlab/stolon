@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sorintlab/stolon/internal/cluster"
 	"github.com/sorintlab/stolon/internal/common"
 	"github.com/sorintlab/stolon/internal/store"
 	"github.com/sorintlab/stolon/internal/util"
@@ -215,6 +216,7 @@ func getKubeValues(cfg *CommonConfig) (*kubernetes.Clientset, string, string, er
 	if err != nil {
 		return nil, "", "", err
 	}
+	kubecfg.Timeout = cluster.DefaultStoreTimeout
 	kubecli, err := kubernetes.NewForConfig(kubecfg)
 	if err != nil {
 		return nil, "", "", fmt.Errorf("cannot create kubernetes client: %v", err)
