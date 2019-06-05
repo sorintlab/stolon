@@ -57,7 +57,10 @@ var CmdKeeper = &cobra.Command{
 	Version: cmd.Version,
 }
 
-const maxPostgresTimelinesHistory = 2
+const (
+	maxPostgresTimelinesHistory = 2
+	minWalKeepSegments          = 8
+)
 
 type KeeperLocalState struct {
 	UID        string
@@ -212,11 +215,27 @@ func (p *PostgresKeeper) walLevel(db *cluster.DB) string {
 	return walLevel
 }
 
+func (p *PostgresKeeper) walKeepSegments(db *cluster.DB) int {
+	walKeepSegments := minWalKeepSegments
+	if db.Spec.PGParameters != nil {
+		if v, ok := db.Spec.PGParameters["wal_keep_segments"]; ok {
+			// ignore wrong wal_keep_segments values
+			if configuredWalKeepSegments, err := strconv.Atoi(v); err == nil {
+				if configuredWalKeepSegments > walKeepSegments {
+					walKeepSegments = configuredWalKeepSegments
+				}
+			}
+		}
+	}
+
+	return walKeepSegments
+}
+
 func (p *PostgresKeeper) mandatoryPGParameters(db *cluster.DB) common.Parameters {
 	return common.Parameters{
 		"unix_socket_directories": common.PgUnixSocketDirectories,
 		"wal_level":               p.walLevel(db),
-		"wal_keep_segments":       "8",
+		"wal_keep_segments":       fmt.Sprintf("%d", p.walKeepSegments(db)),
 		"hot_standby":             "on",
 	}
 }
