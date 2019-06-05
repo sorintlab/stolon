@@ -1633,15 +1633,15 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 
 		needsRestart, err := pgm.IsRestartRequired(changedParams)
 		if err != nil {
-			log.Errorw("Failed to checked if restart is required", err)
+			log.Errorw("failed to check if restart is required", zap.Error(err))
 		}
 
 		if needsRestart {
 			needsRestartGauge.Set(1) // mark as restart needed
 			if automaticPgRestartEnabled {
-				log.Infow("Restarting postgres")
+				log.Infow("restarting postgres")
 				if err := pgm.Restart(true); err != nil {
-					log.Errorw("Failed to restart postgres instance", err)
+					log.Errorw("failed to restart postgres instance", zap.Error(err))
 				} else {
 					needsRestartGauge.Set(0) // successful restart implies no longer required
 				}

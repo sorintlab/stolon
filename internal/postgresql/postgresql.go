@@ -935,7 +935,7 @@ func (p *Manager) OlderWalFile() (string, error) {
 func (p *Manager) IsRestartRequired(changedParams []string) (bool, error) {
 	maj, min, err := p.BinaryVersion()
 	if err != nil {
-		return false, fmt.Errorf("Error fetching pg version for checking IsRestartRequired, %v", err)
+		return false, fmt.Errorf("error fetching pg version: %v", err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), p.requestTimeout)
