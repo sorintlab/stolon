@@ -327,7 +327,6 @@ func (s *Sentinel) updateKeepersStatus(cd *cluster.ClusterData, keepersInfo clus
 func (s *Sentinel) activeProxiesInfos(proxiesInfo cluster.ProxiesInfo) cluster.ProxiesInfo {
 	pihs := s.proxyInfoHistories.DeepCopy()
 
-	tmpPihs := pihs.DeepCopy()
 	// remove missing proxyInfos from the history
 	for proxyUID, _ := range pihs {
 		if _, ok := proxiesInfo[proxyUID]; !ok {
@@ -335,7 +334,6 @@ func (s *Sentinel) activeProxiesInfos(proxiesInfo cluster.ProxiesInfo) cluster.P
 		}
 
 	}
-	pihs = tmpPihs
 
 	activeProxiesInfo := proxiesInfo.DeepCopy()
 	// keep only updated proxies info
