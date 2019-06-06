@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sorintlab/stolon/internal/cluster"
 	"github.com/sorintlab/stolon/internal/common"
 	"github.com/sorintlab/stolon/internal/store"
 	"github.com/sorintlab/stolon/internal/util"
@@ -166,23 +167,7 @@ func NewStore(cfg *CommonConfig) (store.Store, error) {
 		}
 		s = store.NewKVBackedStore(kvstore, storePath)
 	case "kubernetes":
-		kubeClientConfig := util.NewKubeClientConfig(cfg.KubeConfig, cfg.KubeContext, cfg.KubeNamespace)
-		kubecfg, err := kubeClientConfig.ClientConfig()
-		if err != nil {
-			return nil, err
-		}
-		kubecli, err := kubernetes.NewForConfig(kubecfg)
-		if err != nil {
-			return nil, fmt.Errorf("cannot create kubernetes client: %v", err)
-		}
-		var podName string
-		if !cfg.IsStolonCtl {
-			podName, err = util.PodName()
-			if err != nil {
-				return nil, err
-			}
-		}
-		namespace, _, err := kubeClientConfig.Namespace()
+		kubecli, podName, namespace, err := getKubeValues(cfg)
 		if err != nil {
 			return nil, err
 		}
@@ -212,23 +197,7 @@ func NewElection(cfg *CommonConfig, uid string) (store.Election, error) {
 		}
 		election = store.NewKVBackedElection(kvstore, filepath.Join(storePath, common.SentinelLeaderKey), uid)
 	case "kubernetes":
-		kubeClientConfig := util.NewKubeClientConfig(cfg.KubeConfig, cfg.KubeContext, cfg.KubeNamespace)
-		kubecfg, err := kubeClientConfig.ClientConfig()
-		if err != nil {
-			return nil, err
-		}
-		kubecli, err := kubernetes.NewForConfig(kubecfg)
-		if err != nil {
-			return nil, fmt.Errorf("cannot create kubernetes client: %v", err)
-		}
-		var podName string
-		if !cfg.IsStolonCtl {
-			podName, err = util.PodName()
-			if err != nil {
-				return nil, err
-			}
-		}
-		namespace, _, err := kubeClientConfig.Namespace()
+		kubecli, podName, namespace, err := getKubeValues(cfg)
 		if err != nil {
 			return nil, err
 		}
@@ -239,4 +208,29 @@ func NewElection(cfg *CommonConfig, uid string) (store.Election, error) {
 	}
 
 	return election, nil
+}
+
+func getKubeValues(cfg *CommonConfig) (*kubernetes.Clientset, string, string, error) {
+	kubeClientConfig := util.NewKubeClientConfig(cfg.KubeConfig, cfg.KubeContext, cfg.KubeNamespace)
+	kubecfg, err := kubeClientConfig.ClientConfig()
+	if err != nil {
+		return nil, "", "", err
+	}
+	kubecfg.Timeout = cluster.DefaultStoreTimeout
+	kubecli, err := kubernetes.NewForConfig(kubecfg)
+	if err != nil {
+		return nil, "", "", fmt.Errorf("cannot create kubernetes client: %v", err)
+	}
+	var podName string
+	if !cfg.IsStolonCtl {
+		podName, err = util.PodName()
+		if err != nil {
+			return nil, "", "", err
+		}
+	}
+	namespace, _, err := kubeClientConfig.Namespace()
+	if err != nil {
+		return nil, "", "", err
+	}
+	return kubecli, podName, namespace, nil
 }
