@@ -29,6 +29,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const noRole = "no role assigned"
+
 var cmdStatus = &cobra.Command{
 	Use:   "status",
 	Run:   status,
@@ -64,13 +66,13 @@ type ProxyStatus struct {
 }
 
 type KeeperStatus struct {
-	UID                 string `json:"uid"`
-	Role                string `json:"role"`
-	ListenAddress       string `json:"listen_address"`
-	Healthy             bool   `json:"healthy"`
-	PgHealthy           bool   `json:"pg_healthy"`
-	PgWantedGeneration  int64  `json:"pg_wanted_generation"`
-	PgCurrentGeneration int64  `json:"pg_current_generation"`
+	UID                 string  `json:"uid"`
+	Role                *string `json:"role"`
+	ListenAddress       string  `json:"listen_address"`
+	Healthy             bool    `json:"healthy"`
+	PgHealthy           bool    `json:"pg_healthy"`
+	PgWantedGeneration  int64   `json:"pg_wanted_generation"`
+	PgCurrentGeneration int64   `json:"pg_current_generation"`
 }
 
 type ClusterStatus struct {
@@ -206,6 +208,8 @@ func printTree(dbuid string, cd *cluster.ClusterData, keeperRoles map[string]str
 	out += cd.DBs[dbuid].Spec.KeeperUID
 	if role, ok := keeperRoles[dbuid]; ok {
 		out += " (" + role + ")"
+	} else {
+		out += " (" + noRole + ")"
 	}
 	stdout(out)
 	db := cd.DBs[dbuid]
@@ -305,12 +309,14 @@ func generateStatus() (Status, error) {
 		k := cd.Keepers[kuid]
 		db := cd.FindDB(k)
 		dbListenAddress := "(no db assigned)"
-		role := ""
+		role := noRole
+
 		var (
 			pgHealthy           bool
 			pgCurrentGeneration int64
 			pgWantedGeneration  int64
 		)
+
 		if db != nil {
 			pgHealthy = db.Status.Healthy
 			pgCurrentGeneration = db.Status.CurrentGeneration
@@ -325,9 +331,14 @@ func generateStatus() (Status, error) {
 			}
 		}
 
+		var rolePtr *string
+		if role != noRole {
+			rolePtr = &role
+		}
+
 		keeper := KeeperStatus{
 			UID:                 kuid,
-			Role:                role,
+			Role:                rolePtr,
 			ListenAddress:       dbListenAddress,
 			Healthy:             k.Status.Healthy,
 			PgHealthy:           pgHealthy,
@@ -342,28 +353,38 @@ func generateStatus() (Status, error) {
 }
 
 func getKeeperRoles(dbuid string, cd *cluster.ClusterData) map[string]string {
-	var buildRoles func(parentDbuid, dbuid string, cd *cluster.ClusterData, keeperRoles map[string]string) map[string]string
-	buildRoles = func(parentDbuid, dbuid string, cd *cluster.ClusterData, keeperRoles map[string]string) map[string]string {
-		if dbuid == cd.Cluster.Status.Master {
-			keeperRoles[dbuid] = "master"
-		} else if isSynchronousStandby(parentDbuid, dbuid, cd) {
-			keeperRoles[dbuid] = "sync"
-		} else if isExternalSynchronousStandby(parentDbuid, dbuid, cd) {
-			keeperRoles[dbuid] = "external sync"
-		} else {
-			keeperRoles[dbuid] = "async"
-		}
-		db := cd.DBs[dbuid]
-		followers := db.Spec.Followers
-		for _, f := range followers {
-			buildRoles(dbuid, f, cd, keeperRoles)
-		}
-		return keeperRoles
-	}
-
 	keeperRoles := make(map[string]string)
 
-	return buildRoles("", dbuid, cd, keeperRoles)
+	// Avoid panicking if dbuid is empty.
+	if dbuid != "" {
+		var buildRoles func(parentDbuid, dbuid string, cd *cluster.ClusterData, keeperRoles map[string]string) map[string]string
+		buildRoles = func(parentDbuid, dbuid string, cd *cluster.ClusterData, keeperRoles map[string]string) map[string]string {
+			if dbuid == cd.Cluster.Status.Master {
+				keeperRoles[dbuid] = "master"
+			} else if isSynchronousStandby(parentDbuid, dbuid, cd) {
+				keeperRoles[dbuid] = "sync"
+			} else if isExternalSynchronousStandby(parentDbuid, dbuid, cd) {
+				keeperRoles[dbuid] = "external sync"
+			} else {
+				keeperRoles[dbuid] = "async"
+			}
+			db := cd.DBs[dbuid]
+
+			// Only iterate over Followers if there are roles to avoid panicking.
+			if db.Spec.Followers != nil {
+				followers := db.Spec.Followers
+				for _, f := range followers {
+					buildRoles(dbuid, f, cd, keeperRoles)
+				}
+			}
+
+			return keeperRoles
+		}
+
+		keeperRoles = buildRoles("", dbuid, cd, keeperRoles)
+	}
+
+	return keeperRoles
 }
 
 func isSynchronousStandby(parentDbuid, dbuid string, cd *cluster.ClusterData) bool {
@@ -382,6 +403,5 @@ func isExternalSynchronousStandby(parentDbuid, dbuid string, cd *cluster.Cluster
 			return true
 		}
 	}
-
 	return false
 }
