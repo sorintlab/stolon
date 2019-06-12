@@ -840,8 +840,10 @@ func (p *PostgresKeeper) resync(db, followedDB *cluster.DB, tryPgrewind bool) er
 	// fallback to pg_basebackup
 	if tryPgrewind && p.usePgrewind(db) {
 		connParams := p.getSUConnParams(db, followedDB)
-		log.Infow("syncing using pg_rewind", "followedDB", followedDB.UID, "keeper", followedDB.Spec.KeeperUID)
-		if err := pgm.SyncFromFollowedPGRewind(connParams, p.pgSUPassword); err != nil {
+		checkpointBeforePgrewind := db.Spec.CheckpointBeforePgrewind
+		log.Infow("syncing using pg_rewind", "followedDB", followedDB.UID,
+			"keeper", followedDB.Spec.KeeperUID, "forcingCheckpoint", checkpointBeforePgrewind)
+		if err := pgm.SyncFromFollowedPGRewind(connParams, p.pgSUPassword, checkpointBeforePgrewind); err != nil {
 			// log pg_rewind error and fallback to pg_basebackup
 			log.Errorw("error syncing with pg_rewind", zap.Error(err))
 		} else {
@@ -1284,19 +1286,18 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				tryPgrewind = false
 			}
 
-			// TODO(sgotti) pg_rewind considers databases on the same timeline
-			// as in sync and doesn't check if they diverged at different
-			// position in previous timelines.
-			// So check that the db as been synced or resync again with
-			// pg_rewind disabled. Will need to report this upstream.
+			// TODO(sgotti) pg_rewind considers databases on the same timeline as in sync and
+			// doesn't check if they diverged at different position in previous timelines. So
+			// check that the db has been synced or resync again with pg_rewind disabled. Will
+			// need to report this upstream.
 
-			// TODO(sgotti) The rewinded standby needs wal from the master
-			// starting from the common ancestor, if they aren't available the
-			// instance will keep waiting for them, now we assume that if the
-			// instance isn't ready after the start timeout, it's waiting for
-			// wals and we'll force a full resync.
-			// We have to find a better way to detect if a standby is waiting
-			// for unavailable wals.
+			// TODO(sgotti) The rewinded standby needs wal from the master starting from the
+			// common ancestor, if they aren't available the instance will keep waiting for
+			// them, now we assume that if the instance isn't ready after the start timeout,
+			// it's waiting for wals and we'll force a full resync.
+			//
+			// We have to find a better way to detect if a standby is waiting for unavailable
+			// wals.
 			if err = p.resync(db, followedDB, tryPgrewind); err != nil {
 				log.Errorw("failed to resync from followed instance", zap.Error(err))
 				return

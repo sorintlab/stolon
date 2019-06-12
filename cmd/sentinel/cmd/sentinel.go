@@ -383,6 +383,7 @@ func (s *Sentinel) setDBSpecFromClusterSpec(cd *cluster.ClusterData) {
 		db.Spec.RequestTimeout = *clusterSpec.RequestTimeout
 		db.Spec.MaxStandbys = *clusterSpec.MaxStandbys
 		db.Spec.UsePgrewind = *clusterSpec.UsePgrewind
+		db.Spec.CheckpointBeforePgrewind = *clusterSpec.CheckpointBeforePgrewind
 		db.Spec.PGParameters = clusterSpec.PGParameters
 		db.Spec.PGHBA = clusterSpec.PGHBA
 		if db.Spec.FollowConfig != nil && db.Spec.FollowConfig.Type == cluster.FollowTypeExternal {
