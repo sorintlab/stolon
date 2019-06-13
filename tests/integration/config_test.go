@@ -303,7 +303,7 @@ func TestWalKeepSegments(t *testing.T) {
 	}
 
 	// "archive" isn't an accepted wal_level
-	err = StolonCtl(clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "pgParameters" : { "wal_level": "archive" } }`)
+	err = StolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "pgParameters" : { "wal_level": "archive" } }`)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -330,7 +330,7 @@ func TestWalKeepSegments(t *testing.T) {
 	}
 
 	// test setting a wal_keep_segments value greater than the default
-	err = StolonCtl(clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "pgParameters" : { "wal_keep_segments": "20" } }`)
+	err = StolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "pgParameters" : { "wal_keep_segments": "20" } }`)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -357,7 +357,7 @@ func TestWalKeepSegments(t *testing.T) {
 	}
 
 	// test setting a wal_keep_segments value less than the default
-	err = StolonCtl(clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "pgParameters" : { "wal_keep_segments": "5" } }`)
+	err = StolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "pgParameters" : { "wal_keep_segments": "5" } }`)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -384,7 +384,7 @@ func TestWalKeepSegments(t *testing.T) {
 	}
 
 	// test setting a bad wal_keep_segments value
-	err = StolonCtl(clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "pgParameters" : { "wal_keep_segments": "badvalue" } }`)
+	err = StolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "pgParameters" : { "wal_keep_segments": "badvalue" } }`)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
