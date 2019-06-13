@@ -90,7 +90,7 @@ func TestServerParameters(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	err = StolonCtl(clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "pgParameters" : { "unexistent_parameter": "value" } }`)
+	err = StolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "pgParameters" : { "unexistent_parameter": "value" } }`)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -117,7 +117,7 @@ func TestServerParameters(t *testing.T) {
 	}
 
 	// Fix wrong parameters
-	err = StolonCtl(clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "pgParameters" : null }`)
+	err = StolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "pgParameters" : null }`)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -188,7 +188,7 @@ func TestWalLevel(t *testing.T) {
 	}
 
 	// "archive" isn't an accepted wal_level
-	err = StolonCtl(clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "pgParameters" : { "wal_level": "archive" } }`)
+	err = StolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "pgParameters" : { "wal_level": "archive" } }`)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -215,7 +215,7 @@ func TestWalLevel(t *testing.T) {
 	}
 
 	// "logical" is an accepted wal_level
-	err = StolonCtl(clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "pgParameters" : { "wal_level": "logical" } }`)
+	err = StolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "pgParameters" : { "wal_level": "logical" } }`)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -543,7 +543,7 @@ func TestAdditionalReplicationSlots(t *testing.T) {
 	}
 
 	// create additional replslots on master
-	err = StolonCtl(clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "additionalMasterReplicationSlots" : [ "replslot01", "replslot02" ] }`)
+	err = StolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "additionalMasterReplicationSlots" : [ "replslot01", "replslot02" ] }`)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -556,7 +556,7 @@ func TestAdditionalReplicationSlots(t *testing.T) {
 	}
 
 	// remove replslot02
-	err = StolonCtl(clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "additionalMasterReplicationSlots" : [ "replslot01" ] }`)
+	err = StolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "additionalMasterReplicationSlots" : [ "replslot01" ] }`)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -569,7 +569,7 @@ func TestAdditionalReplicationSlots(t *testing.T) {
 	}
 
 	// remove additional replslots on master
-	err = StolonCtl(clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "additionalMasterReplicationSlots" : null }`)
+	err = StolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "additionalMasterReplicationSlots" : null }`)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -582,7 +582,7 @@ func TestAdditionalReplicationSlots(t *testing.T) {
 	}
 
 	// create additional replslots on master
-	err = StolonCtl(clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "additionalMasterReplicationSlots" : [ "replslot01", "replslot02" ] }`)
+	err = StolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "additionalMasterReplicationSlots" : [ "replslot01", "replslot02" ] }`)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -693,13 +693,13 @@ func TestAutomaticPgRestart(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	err = StolonCtl(clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "pgParameters" : { "max_connections": "150" } }`)
+	err = StolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "pgParameters" : { "max_connections": "150" } }`)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
 	// Wait for restart to happen
-	time.Sleep(10 * time.Second)
+	time.Sleep(20 * time.Second)
 
 	rows, err := tk.Query("select setting from pg_settings where name = 'max_connections'")
 	if err != nil {
@@ -720,12 +720,12 @@ func TestAutomaticPgRestart(t *testing.T) {
 	}
 
 	// Allow users to opt out
-	err = StolonCtl(clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "automaticPgRestart" : false }`)
+	err = StolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "automaticPgRestart" : false }`)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	err = StolonCtl(clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "pgParameters" : { "max_connections": "200" } }`)
+	err = StolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "pgParameters" : { "max_connections": "200" } }`)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
