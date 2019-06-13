@@ -1961,7 +1961,7 @@ func sentinel(c *cobra.Command, args []string) {
 		log.Fatalf(err.Error())
 	}
 
-	cmd.SetMetrics(&cfg.CommonConfig)
+	cmd.SetMetrics(&cfg.CommonConfig, "sentinel")
 
 	uid := common.UID()
 	log.Infow("sentinel uid", "uid", uid)
