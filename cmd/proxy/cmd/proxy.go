@@ -325,7 +325,7 @@ func (c *ClusterChecker) Start() error {
 			}
 			if previousRequestTimeoutSeconds != c.requestTimeoutSeconds {
 				log.Infow("updated request timeout seconds is ", "seconds", c.requestTimeoutSeconds)
-				previousRequestTimeoutSeconds := c.requestTimeoutSeconds
+				previousRequestTimeoutSeconds = c.requestTimeoutSeconds
 			}
 
 			timerCh = time.NewTimer(time.Duration(c.checkIntervalSeconds) * time.Second).C
