@@ -74,9 +74,6 @@ func init() {
 	CmdProxy.PersistentFlags().IntVar(&cfg.keepAliveCount, "tcp-keepalive-count", 0, "set tcp keepalive probe count number")
 	CmdProxy.PersistentFlags().IntVar(&cfg.keepAliveInterval, "tcp-keepalive-interval", 0, "set tcp keepalive interval (seconds)")
 
-	CmdProxy.PersistentFlags().IntVar(&cfg.checkIntervalSeconds, "check-interval-seconds", int(cluster.DefaultProxyCheckInterval/time.Second), "set check interval (seconds)")
-	CmdProxy.PersistentFlags().IntVar(&cfg.requestTimeoutSeconds, "request-timeout-seconds", int(cluster.DefaultProxyTimeoutInterval/time.Second), "request timeout (seconds)")
-
 	CmdProxy.PersistentFlags().MarkDeprecated("debug", "use --log-level=debug instead")
 }
 
@@ -111,8 +108,8 @@ func NewClusterChecker(uid string, cfg config) (*ClusterChecker, error) {
 		stopListening:         cfg.stopListening,
 		e:                     e,
 		endPollonProxyCh:      make(chan error),
-		checkIntervalSeconds:  cfg.checkIntervalSeconds,
-		requestTimeoutSeconds: cfg.requestTimeoutSeconds,
+		checkIntervalSeconds:  cluster.DefaultProxyCheckInterval,
+		requestTimeoutSeconds: cluster.DefaultProxyTimeoutInterval,
 	}, nil
 }
 
@@ -215,6 +212,9 @@ func (c *ClusterChecker) Check() error {
 	}
 
 	proxy := cd.Proxy
+	checkIntervalSeconds := cd.Cluster.Spec.ProxyCheckInterval
+	requestTimeoutSeconds := cd.Cluster.Spec.ProxyTimeoutInterval
+
 	if proxy == nil {
 		log.Infow("no proxy object available, closing connections to master")
 		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
@@ -318,6 +318,9 @@ func (c *ClusterChecker) Start() error {
 				// report that check was ok
 				checkOkCh <- struct{}{}
 			}
+			log.Infow("->check interval seconds is ", "seconds", c.checkIntervalSeconds)
+			log.Infow("->request timeout seconds is ", "seconds", c.requestTimeoutSeconds)
+
 			timerCh = time.NewTimer(time.Duration(c.checkIntervalSeconds) * time.Second).C
 
 		case err := <-c.endPollonProxyCh:
