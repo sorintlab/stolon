@@ -209,8 +209,8 @@ func (c *ClusterChecker) Check() error {
 	}
 
 	proxy := cd.Proxy
-	c.checkIntervalSeconds = int(cd.Cluster.Spec.ProxyCheckInterval.Duration / time.Second)
-	c.requestTimeoutSeconds = int(cd.Cluster.Spec.ProxyTimeoutInterval.Duration / time.Second)
+	c.checkIntervalSeconds = int(cd.Cluster.DefSpec().ProxyCheckInterval.Duration / time.Second)
+	c.requestTimeoutSeconds = int(cd.Cluster.DefSpec().ProxyTimeoutInterval.Duration / time.Second)
 
 	if proxy == nil {
 		log.Infow("no proxy object available, closing connections to master")
