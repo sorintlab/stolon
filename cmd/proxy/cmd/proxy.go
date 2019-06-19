@@ -57,8 +57,6 @@ type config struct {
 	keepAliveCount    int
 	keepAliveInterval int
 
-	checkIntervalSeconds  int
-	requestTimeoutSeconds int
 }
 
 var cfg config
@@ -108,8 +106,8 @@ func NewClusterChecker(uid string, cfg config) (*ClusterChecker, error) {
 		stopListening:         cfg.stopListening,
 		e:                     e,
 		endPollonProxyCh:      make(chan error),
-		checkIntervalSeconds:  cluster.DefaultProxyCheckInterval,
-		requestTimeoutSeconds: cluster.DefaultProxyTimeoutInterval,
+		checkIntervalSeconds:  int(cluster.DefaultProxyCheckInterval / time.Second),
+		requestTimeoutSeconds: int(cluster.DefaultProxyTimeoutInterval / time.Second),
 	}, nil
 }
 
@@ -212,8 +210,8 @@ func (c *ClusterChecker) Check() error {
 	}
 
 	proxy := cd.Proxy
-	checkIntervalSeconds := cd.Cluster.Spec.ProxyCheckInterval
-	requestTimeoutSeconds := cd.Cluster.Spec.ProxyTimeoutInterval
+	c.checkIntervalSeconds = int(cd.Cluster.Spec.ProxyCheckInterval.Duration / time.Second)
+	c.requestTimeoutSeconds = int(cd.Cluster.Spec.ProxyTimeoutInterval.Duration / time.Second)
 
 	if proxy == nil {
 		log.Infow("no proxy object available, closing connections to master")
