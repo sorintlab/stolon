@@ -216,9 +216,9 @@ type ClusterSpec struct {
 	// Time after which any request (keepers checks from sentinel etc...) will fail.
 	RequestTimeout *Duration `json:"requestTimeout,omitempty"`
 	// Proxy check interval
-	ProxyCheckInterval Duration `json:"proxyCheckInterval,omitempty"`
+	ProxyCheckInterval *Duration `json:"proxyCheckInterval,omitempty"`
 	// Proxy check timeout interval
-	ProxyTimeoutInterval Duration `json:"proxyTimeoutInterval,omitempty"`
+	ProxyTimeoutInterval *Duration `json:"proxyTimeoutInterval,omitempty"`
 	// Interval to wait for a db to be converged to the required state when
 	// no long operation are expected.
 	ConvergenceTimeout *Duration `json:"convergenceTimeout,omitempty"`
