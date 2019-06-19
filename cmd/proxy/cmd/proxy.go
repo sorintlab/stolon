@@ -292,6 +292,9 @@ func (c *ClusterChecker) Start() error {
 	checkCh := make(chan error)
 	timerCh := time.NewTimer(0).C
 
+	previousCheckIntervalSeconds := c.checkIntervalSeconds
+	previousRequestTimeoutSeconds := c.requestTimeoutSeconds
+
 	log.Infow("check interval seconds is ", "seconds", c.checkIntervalSeconds)
 	log.Infow("request timeout seconds is ", "seconds", c.requestTimeoutSeconds)
 
@@ -315,8 +318,15 @@ func (c *ClusterChecker) Start() error {
 				// report that check was ok
 				checkOkCh <- struct{}{}
 			}
-			log.Infow("->check interval seconds is ", "seconds", c.checkIntervalSeconds)
-			log.Infow("->request timeout seconds is ", "seconds", c.requestTimeoutSeconds)
+
+			if previousCheckIntervalSeconds != c.checkIntervalSeconds {
+				log.Infow("updated check interval seconds is ", "seconds", c.checkIntervalSeconds)
+				previousCheckIntervalSeconds = c.checkIntervalSeconds
+			}
+			if previousRequestTimeoutSeconds != c.requestTimeoutSeconds {
+				log.Infow("updated request timeout seconds is ", "seconds", c.requestTimeoutSeconds)
+				previousRequestTimeoutSeconds := c.requestTimeoutSeconds
+			}
 
 			timerCh = time.NewTimer(time.Duration(c.checkIntervalSeconds) * time.Second).C
 
