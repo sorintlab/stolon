@@ -56,7 +56,6 @@ type config struct {
 	keepAliveIdle     int
 	keepAliveCount    int
 	keepAliveInterval int
-
 }
 
 var cfg config
