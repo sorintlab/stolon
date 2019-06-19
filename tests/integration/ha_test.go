@@ -26,7 +26,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/satori/go.uuid"
+	uuid "github.com/satori/go.uuid"
 	"github.com/sorintlab/stolon/internal/cluster"
 	"github.com/sorintlab/stolon/internal/common"
 	pg "github.com/sorintlab/stolon/internal/postgresql"
@@ -1372,7 +1372,7 @@ func TestLoweredMaxStandbysPerSender(t *testing.T) {
 	}
 
 	// Set MaxStandbysPerSender to 1
-	err = StolonCtl(clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "maxStandbysPerSender" : 1 }`)
+	err = StolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "maxStandbysPerSender" : 1 }`)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -1561,7 +1561,7 @@ func testKeeperRemovalStolonCtl(t *testing.T, syncRepl bool) {
 	}
 
 	// remove master from the cluster data, must fail
-	err = StolonCtl(clusterName, tstore.storeBackend, storeEndpoints, "removekeeper", master.uid)
+	err = StolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "removekeeper", master.uid)
 	if err == nil {
 		t.Fatalf("expected err")
 	}
@@ -1571,7 +1571,7 @@ func testKeeperRemovalStolonCtl(t *testing.T, syncRepl bool) {
 	standbys[0].Stop()
 
 	// remove standby[0] from the cluster data
-	err = StolonCtl(clusterName, tstore.storeBackend, storeEndpoints, "removekeeper", standbys[0].uid)
+	err = StolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "removekeeper", standbys[0].uid)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -1883,7 +1883,7 @@ func testForceFail(t *testing.T, syncRepl bool, standbyCluster bool) {
 	}
 
 	// mark master as failed
-	err = StolonCtl(clusterName, tstore.storeBackend, storeEndpoints, "failkeeper", master.uid)
+	err = StolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "failkeeper", master.uid)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}

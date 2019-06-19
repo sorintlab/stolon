@@ -38,6 +38,8 @@ import (
 	"go.uber.org/zap"
 )
 
+//go:generate mockgen -destination=../mock/postgresql/postgresql.go -package=mocks -source=$GOFILE
+
 const (
 	postgresConf         = "postgresql.conf"
 	postgresRecoveryConf = "recovery.conf"
@@ -52,6 +54,10 @@ var (
 )
 
 var log = slog.S()
+
+type PGManager interface {
+	GetTimelinesHistory(timeline uint64) ([]*TimelineHistory, error)
+}
 
 type Manager struct {
 	pgBinPath             string
@@ -929,7 +935,7 @@ func (p *Manager) OlderWalFile() (string, error) {
 func (p *Manager) IsRestartRequired(changedParams []string) (bool, error) {
 	maj, min, err := p.BinaryVersion()
 	if err != nil {
-		return false, fmt.Errorf("Error fetching pg version for checking IsRestartRequired, %v", err)
+		return false, fmt.Errorf("error fetching pg version: %v", err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), p.requestTimeout)
