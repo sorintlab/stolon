@@ -89,6 +89,9 @@ type ClusterChecker struct {
 	endPollonProxyCh chan error
 
 	pollonMutex sync.Mutex
+
+	checkIntervalSeconds  int
+	requestTimeoutSeconds int
 }
 
 func NewClusterChecker(uid string, cfg config) (*ClusterChecker, error) {
@@ -98,12 +101,14 @@ func NewClusterChecker(uid string, cfg config) (*ClusterChecker, error) {
 	}
 
 	return &ClusterChecker{
-		uid:              uid,
-		listenAddress:    cfg.listenAddress,
-		port:             cfg.port,
-		stopListening:    cfg.stopListening,
-		e:                e,
-		endPollonProxyCh: make(chan error),
+		uid:                   uid,
+		listenAddress:         cfg.listenAddress,
+		port:                  cfg.port,
+		stopListening:         cfg.stopListening,
+		e:                     e,
+		endPollonProxyCh:      make(chan error),
+		checkIntervalSeconds:  int(cluster.DefaultProxyCheckInterval / time.Second),
+		requestTimeoutSeconds: int(cluster.DefaultProxyTimeoutInterval / time.Second),
 	}, nil
 }
 
@@ -206,6 +211,9 @@ func (c *ClusterChecker) Check() error {
 	}
 
 	proxy := cd.Proxy
+	c.checkIntervalSeconds = int(cd.Cluster.DefSpec().ProxyCheckInterval.Duration / time.Second)
+	c.requestTimeoutSeconds = int(cd.Cluster.DefSpec().ProxyTimeoutInterval.Duration / time.Second)
+
 	if proxy == nil {
 		log.Infow("no proxy object available, closing connections to master")
 		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
@@ -256,7 +264,7 @@ func (c *ClusterChecker) Check() error {
 }
 
 func (c *ClusterChecker) TimeoutChecker(checkOkCh chan struct{}) {
-	timeoutTimer := time.NewTimer(cluster.DefaultProxyTimeoutInterval)
+	timeoutTimer := time.NewTimer(time.Duration(c.requestTimeoutSeconds) * time.Second)
 
 	for {
 		select {
@@ -275,7 +283,7 @@ func (c *ClusterChecker) TimeoutChecker(checkOkCh chan struct{}) {
 
 			// ignore if stop succeeded or not due to timer already expired
 			timeoutTimer.Stop()
-			timeoutTimer = time.NewTimer(cluster.DefaultProxyTimeoutInterval)
+			timeoutTimer = time.NewTimer(time.Duration(c.requestTimeoutSeconds) * time.Second)
 		}
 	}
 }
@@ -284,6 +292,12 @@ func (c *ClusterChecker) Start() error {
 	checkOkCh := make(chan struct{})
 	checkCh := make(chan error)
 	timerCh := time.NewTimer(0).C
+
+	previousCheckIntervalSeconds := c.checkIntervalSeconds
+	previousRequestTimeoutSeconds := c.requestTimeoutSeconds
+
+	log.Infow("check interval seconds is ", "seconds", c.checkIntervalSeconds)
+	log.Infow("request timeout seconds is ", "seconds", c.requestTimeoutSeconds)
 
 	// TODO(sgotti) TimeoutCecker is needed to forcefully close connection also
 	// if the Check method is blocked somewhere.
@@ -305,7 +319,17 @@ func (c *ClusterChecker) Start() error {
 				// report that check was ok
 				checkOkCh <- struct{}{}
 			}
-			timerCh = time.NewTimer(cluster.DefaultProxyCheckInterval).C
+
+			if previousCheckIntervalSeconds != c.checkIntervalSeconds {
+				log.Infow("updated check interval seconds is ", "seconds", c.checkIntervalSeconds)
+				previousCheckIntervalSeconds = c.checkIntervalSeconds
+			}
+			if previousRequestTimeoutSeconds != c.requestTimeoutSeconds {
+				log.Infow("updated request timeout seconds is ", "seconds", c.requestTimeoutSeconds)
+				previousRequestTimeoutSeconds = c.requestTimeoutSeconds
+			}
+
+			timerCh = time.NewTimer(time.Duration(c.checkIntervalSeconds) * time.Second).C
 		case err := <-c.endPollonProxyCh:
 			if err != nil {
 				return fmt.Errorf("proxy error: %v", err)

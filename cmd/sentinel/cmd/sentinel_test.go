@@ -5050,7 +5050,7 @@ func TestActiveProxiesInfos(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			s := &Sentinel{uid: "sentinel01", UIDFn: testUIDFn, RandFn: testRandFn, dbConvergenceInfos: make(map[string]*DBConvergenceInfo), proxyInfoHistories: test.proxyInfoHistories}
-			actualActiveProxies := s.activeProxiesInfos(test.proxiesInfos)
+			actualActiveProxies := s.activeProxiesInfos(test.proxiesInfos, 2*cluster.DefaultProxyTimeoutInterval)
 
 			if !reflect.DeepEqual(actualActiveProxies, test.expectedActiveProxies) {
 				t.Errorf("Expected proxiesInfos to be %v but got %v", test.expectedActiveProxies, actualActiveProxies)

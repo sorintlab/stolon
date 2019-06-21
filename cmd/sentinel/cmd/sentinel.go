@@ -326,7 +326,7 @@ func (s *Sentinel) updateKeepersStatus(cd *cluster.ClusterData, keepersInfo clus
 // exclude any possible active proxy from the checks in updateCluster and not
 // remove them from the enabled proxies list. At worst a stale proxy will be
 // added to the enabled proxies list.
-func (s *Sentinel) activeProxiesInfos(proxiesInfo cluster.ProxiesInfo) cluster.ProxiesInfo {
+func (s *Sentinel) activeProxiesInfos(proxiesInfo cluster.ProxiesInfo, proxyTimeout time.Duration) cluster.ProxiesInfo {
 	pihs := s.proxyInfoHistories.DeepCopy()
 
 	// remove missing proxyInfos from the history
@@ -342,7 +342,7 @@ func (s *Sentinel) activeProxiesInfos(proxiesInfo cluster.ProxiesInfo) cluster.P
 	for _, pi := range proxiesInfo {
 		if pih, ok := pihs[pi.UID]; ok {
 			if pih.ProxyInfo.InfoUID == pi.InfoUID {
-				if timer.Since(pih.Timer) > 2*cluster.DefaultProxyTimeoutInterval {
+				if timer.Since(pih.Timer) > proxyTimeout {
 					delete(activeProxiesInfo, pi.UID)
 				}
 			} else {
@@ -1888,7 +1888,7 @@ func (s *Sentinel) clusterSentinelCheck(pctx context.Context) {
 	newcd, newKeeperInfoHistories := s.updateKeepersStatus(cd, keepersInfo, firstRun)
 	log.Debugf("newcd dump after updateKeepersStatus: %s", spew.Sdump(newcd))
 
-	activeProxiesInfos := s.activeProxiesInfos(proxiesInfo)
+	activeProxiesInfos := s.activeProxiesInfos(proxiesInfo, 2*cd.Cluster.DefSpec().ProxyTimeoutInterval.Duration)
 
 	newcd, err = s.updateCluster(newcd, activeProxiesInfos)
 	if err != nil {

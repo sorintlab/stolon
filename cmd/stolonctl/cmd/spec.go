@@ -44,6 +44,8 @@ func init() {
 type ClusterSpecNoDefaults struct {
 	SleepInterval                    *cluster.Duration         `json:"sleepInterval,omitempty"`
 	RequestTimeout                   *cluster.Duration         `json:"requestTimeout,omitempty"`
+	ProxyCheckInterval               *cluster.Duration         `json:"proxyCheckInterval,omitempty"`
+	ProxyTimeoutInterval             *cluster.Duration         `json:"proxyTimeoutInterval,omitempty"`
 	ConvergenceTimeout               *cluster.Duration         `json:"convergenceTimeout,omitempty"`
 	InitTimeout                      *cluster.Duration         `json:"initTimeout,omitempty"`
 	SyncTimeout                      *cluster.Duration         `json:"syncTimeout,omitempty"`
@@ -75,6 +77,8 @@ type ClusterSpecNoDefaults struct {
 type ClusterSpecDefaults struct {
 	SleepInterval                    *cluster.Duration         `json:"sleepInterval"`
 	RequestTimeout                   *cluster.Duration         `json:"requestTimeout"`
+	ProxyCheckInterval               *cluster.Duration         `json:"proxyCheckInterval"`
+	ProxyTimeoutInterval             *cluster.Duration         `json:"proxyTimeoutInterval"`
 	ConvergenceTimeout               *cluster.Duration         `json:"convergenceTimeout"`
 	InitTimeout                      *cluster.Duration         `json:"initTimeout"`
 	SyncTimeout                      *cluster.Duration         `json:"syncTimeout"`
