@@ -17,15 +17,20 @@ package store
 import (
 	"context"
 
-	"github.com/docker/leadership"
-	libkvstore "github.com/docker/libkv/store"
-	"github.com/docker/libkv/store/consul"
-	"github.com/docker/libkv/store/etcd"
+	"github.com/abronan/leadership"
+	libkvstore "github.com/abronan/valkeyrie/store"
+	"github.com/abronan/valkeyrie/store/consul"
+	"github.com/abronan/valkeyrie/store/etcd/v2"
+	"github.com/abronan/valkeyrie/store/etcd/v3"
+	"github.com/abronan/valkeyrie/store/redis"
 )
 
 func init() {
 	etcd.Register()
 	consul.Register()
+	etcd.Register()
+	etcdv3.Register()
+	redis.Register()
 }
 
 func fromLibKVStoreErr(err error) error {
@@ -52,7 +57,7 @@ func (s *libKVStore) Put(ctx context.Context, key string, value []byte, options 
 }
 
 func (s *libKVStore) Get(ctx context.Context, key string) (*KVPair, error) {
-	pair, err := s.store.Get(key)
+	pair, err := s.store.Get(key, nil)
 	if err != nil {
 		return nil, fromLibKVStoreErr(err)
 	}
@@ -60,7 +65,7 @@ func (s *libKVStore) Get(ctx context.Context, key string) (*KVPair, error) {
 }
 
 func (s *libKVStore) List(ctx context.Context, directory string) ([]*KVPair, error) {
-	pairs, err := s.store.List(directory)
+	pairs, err := s.store.List(directory, nil)
 	if err != nil {
 		return nil, fromLibKVStoreErr(err)
 	}
