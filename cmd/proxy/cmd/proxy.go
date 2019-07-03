@@ -48,10 +48,11 @@ var CmdProxy = &cobra.Command{
 type config struct {
 	cmd.CommonConfig
 
-	listenAddress string
-	port          string
-	stopListening bool
-	debug         bool
+	listenAddress    string
+	advertiseAddress string
+	port             string
+	stopListening    bool
+	debug            bool
 
 	keepAliveIdle     int
 	keepAliveCount    int
@@ -64,6 +65,7 @@ func init() {
 	cmd.AddCommonFlags(CmdProxy, &cfg.CommonConfig)
 
 	CmdProxy.PersistentFlags().StringVar(&cfg.listenAddress, "listen-address", "127.0.0.1", "proxy listening address")
+	CmdProxy.PersistentFlags().StringVar(&cfg.advertiseAddress, "advertise-address", "", "listening address published to the store. It can be used to get the cluster entrypoint by applications. If omitted, --listen-address is used.")
 	CmdProxy.PersistentFlags().StringVar(&cfg.port, "port", "5432", "proxy listening port")
 	CmdProxy.PersistentFlags().BoolVar(&cfg.stopListening, "stop-listening", true, "stop listening on store error")
 	CmdProxy.PersistentFlags().BoolVar(&cfg.debug, "debug", false, "enable debug logging")
@@ -164,9 +166,11 @@ func (c *ClusterChecker) sendPollonConfData(confData pollon.ConfData) {
 
 func (c *ClusterChecker) SetProxyInfo(e store.Store, generation int64, ttl time.Duration) error {
 	proxyInfo := &cluster.ProxyInfo{
-		InfoUID:    common.UID(),
-		UID:        c.uid,
-		Generation: generation,
+		InfoUID:       common.UID(),
+		UID:           c.uid,
+		Generation:    generation,
+		ListenAddress: cfg.advertiseAddress,
+		Port:          cfg.port,
 	}
 	log.Debugf("proxyInfo dump: %s", spew.Sdump(proxyInfo))
 
@@ -375,6 +379,10 @@ func proxy(c *cobra.Command, args []string) {
 				log.Fatalf("metrics http server error", zap.Error(err))
 			}
 		}()
+	}
+
+	if cfg.advertiseAddress == "" {
+		cfg.advertiseAddress = cfg.listenAddress
 	}
 
 	clusterChecker, err := NewClusterChecker(uid, cfg)

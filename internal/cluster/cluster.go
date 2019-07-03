@@ -685,8 +685,12 @@ type ProxySpec struct {
 }
 
 type ProxyStatus struct {
+	ListenAddress string `json:"listenAddress,omitempty"`
+	Port          string `json:"port,omitempty"`
+	Generation    int64  `json:"generation,omitempty"`
 }
 
+// Proxy is a bit different from sentinels and keepers: it has only single spec.
 type Proxy struct {
 	UID        string    `json:"uid,omitempty"`
 	Generation int64     `json:"generation,omitempty"`
@@ -694,7 +698,7 @@ type Proxy struct {
 
 	Spec ProxySpec `json:"spec,omitempty"`
 
-	Status ProxyStatus `json:"status,omitempty"`
+	Status map[string]*ProxyStatus `json:"status,omitempty"`
 }
 
 // Duration is needed to be able to marshal/unmarshal json strings with time
@@ -741,7 +745,7 @@ func NewClusterData(c *Cluster) *ClusterData {
 		Cluster:       c,
 		Keepers:       make(Keepers),
 		DBs:           make(DBs),
-		Proxy:         &Proxy{},
+		Proxy:         &Proxy{Status: make(map[string]*ProxyStatus)},
 	}
 }
 

@@ -317,14 +317,15 @@ func (s *Sentinel) updateKeepersStatus(cd *cluster.ClusterData, keepersInfo clus
 	return cd, kihs
 }
 
-// activeProxiesInfos takes the provided proxyInfo list and returns a list of
-// proxiesInfo considered active. We also consider as active the proxies not yet
-// in the proxyInfoHistories since only after some time we'll know if they are
-// really active (updating their proxyInfo) or stale. This is needed to not
-// exclude any possible active proxy from the checks in updateCluster and not
-// remove them from the enabled proxies list. At worst a stale proxy will be
-// added to the enabled proxies list.
-func (s *Sentinel) activeProxiesInfos(proxiesInfo cluster.ProxiesInfo) cluster.ProxiesInfo {
+// activeProxiesInfos takes the provided proxyInfo list and returns a new cd with
+// Proxy.Status map containing proxies considered active.
+// We also consider as active the proxies not yet in the proxyInfoHistories
+// since only after some time we'll know if they are // really active (updating
+// their proxyInfo) or stale. This is needed to not exclude any possible active
+// proxy from the checks in updateCluster and not remove them from the enabled
+// proxies list. At worst a stale proxy will be added to the enabled proxies
+// list.
+func (s *Sentinel) activeProxiesInfos(cd *cluster.ClusterData, proxiesInfo cluster.ProxiesInfo) *cluster.ClusterData {
 	pihs := s.proxyInfoHistories.DeepCopy()
 
 	// remove missing proxyInfos from the history
@@ -354,7 +355,18 @@ func (s *Sentinel) activeProxiesInfos(proxiesInfo cluster.ProxiesInfo) cluster.P
 
 	s.proxyInfoHistories = pihs
 
-	return activeProxiesInfo
+	// Create a copy of cd
+	cd = cd.DeepCopy()
+	cd.Proxy.Status = map[string]*cluster.ProxyStatus{}
+	for _, pi := range activeProxiesInfo {
+		cd.Proxy.Status[pi.UID] = &cluster.ProxyStatus{
+			ListenAddress: pi.ListenAddress,
+			Port:          pi.Port,
+			Generation:    pi.Generation,
+		}
+	}
+
+	return cd
 }
 
 func (s *Sentinel) findInitialKeeper(cd *cluster.ClusterData) (*cluster.Keeper, error) {
@@ -749,7 +761,7 @@ func (s *Sentinel) findBestNewMasters(cd *cluster.ClusterData, masterDB *cluster
 	return bestNewMasters
 }
 
-func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInfo) (*cluster.ClusterData, error) {
+func (s *Sentinel) updateCluster(cd *cluster.ClusterData) (*cluster.ClusterData, error) {
 	// take a cd deepCopy to check that the code isn't changing it (it'll be a bug)
 	origcd := cd.DeepCopy()
 	newcd := cd.DeepCopy()
@@ -1082,9 +1094,9 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 				// to previous master or disappear (in this case we assume that they
 				// have closed connections to previous master)
 				unconvergedProxiesUIDs := []string{}
-				for _, pi := range pis {
-					if pi.Generation != newcd.Proxy.Generation {
-						unconvergedProxiesUIDs = append(unconvergedProxiesUIDs, pi.UID)
+				for pUID, p := range newcd.Proxy.Status {
+					if p.Generation != newcd.Proxy.Generation {
+						unconvergedProxiesUIDs = append(unconvergedProxiesUIDs, pUID)
 					}
 				}
 				if len(unconvergedProxiesUIDs) > 0 {
@@ -1099,8 +1111,8 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 				// proxies to have converged and we can set enabled proxies to
 				// the currently available proxies in proxyInfo.
 				enabledProxies := []string{}
-				for _, pi := range pis {
-					enabledProxies = append(enabledProxies, pi.UID)
+				for pUID := range newcd.Proxy.Status {
+					enabledProxies = append(enabledProxies, pUID)
 				}
 				sort.Strings(enabledProxies)
 				if !reflect.DeepEqual(newcd.Proxy.Spec.EnabledProxies, enabledProxies) {
@@ -1894,9 +1906,10 @@ func (s *Sentinel) clusterSentinelCheck(pctx context.Context) {
 	newcd, newKeeperInfoHistories := s.updateKeepersStatus(cd, keepersInfo, firstRun)
 	log.Debugf("newcd dump after updateKeepersStatus: %s", spew.Sdump(newcd))
 
-	activeProxiesInfos := s.activeProxiesInfos(proxiesInfo)
+	newcd = s.activeProxiesInfos(newcd, proxiesInfo)
+	log.Debugf("newcd dump after activeProxiesInfos: %s", spew.Sdump(newcd))
 
-	newcd, err = s.updateCluster(newcd, activeProxiesInfos)
+	newcd, err = s.updateCluster(newcd)
 	if err != nil {
 		log.Errorw("failed to update cluster data", zap.Error(err))
 		return

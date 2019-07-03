@@ -131,8 +131,10 @@ type ProxyInfo struct {
 	// has been updated
 	InfoUID string `json:"infoUID,omitempty"`
 
-	UID        string
-	Generation int64
+	UID           string
+	Generation    int64
+	ListenAddress string `json:"listenAddress,omitempty"`
+	Port          string `json:"port,omitempty"`
 }
 
 type ProxiesInfo map[string]*ProxyInfo
