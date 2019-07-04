@@ -27,7 +27,7 @@ Sentinels and proxies don't need a local data directory but only use the store (
 
 #### Store
 
-Currently the store can be etcd (using v2 or v3 api), consul or kubernetes, we leverage their features to achieve consistent and persistent cluster data.
+Currently the store can be etcd (using v2 or v3 api), consul, redis or kubernetes, we leverage their features to achieve consistent and persistent cluster data.
 
 The store should be highly available (at least three nodes).
 

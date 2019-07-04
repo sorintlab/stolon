@@ -25,10 +25,9 @@ import (
 	"strings"
 	"time"
 
-	etcdclientv3 "github.com/coreos/etcd/clientv3"
-	"github.com/docker/leadership"
-	"github.com/docker/libkv"
-	libkvstore "github.com/docker/libkv/store"
+	"github.com/abronan/leadership"
+	"github.com/abronan/valkeyrie"
+	libkvstore "github.com/abronan/valkeyrie/store"
 	"github.com/sorintlab/stolon/internal/cluster"
 	"github.com/sorintlab/stolon/internal/common"
 )
@@ -40,6 +39,7 @@ const (
 	CONSUL Backend = "consul"
 	ETCDV2 Backend = "etcdv2"
 	ETCDV3 Backend = "etcdv3"
+	REDIS  Backend = "redis"
 )
 
 const (
@@ -55,6 +55,7 @@ const (
 const (
 	DefaultEtcdEndpoints   = "http://127.0.0.1:2379"
 	DefaultConsulEndpoints = "http://127.0.0.1:8500"
+	DefaultRedisEndpoints  = "127.0.0.1:6379"
 )
 
 const (
@@ -114,6 +115,9 @@ func NewKVStore(cfg Config) (KVStore, error) {
 	case ETCDV2:
 		kvBackend = libkvstore.ETCD
 	case ETCDV3:
+		kvBackend = libkvstore.ETCDV3
+	case REDIS:
+		kvBackend = libkvstore.REDIS
 	default:
 		return nil, fmt.Errorf("Unknown store backend: %q", cfg.Backend)
 	}
@@ -125,6 +129,8 @@ func NewKVStore(cfg Config) (KVStore, error) {
 			endpointsStr = DefaultConsulEndpoints
 		case ETCDV2, ETCDV3:
 			endpointsStr = DefaultEtcdEndpoints
+		case REDIS:
+			endpointsStr = DefaultRedisEndpoints
 		}
 	}
 	endpoints := strings.Split(endpointsStr, ",")
@@ -172,28 +178,17 @@ func NewKVStore(cfg Config) (KVStore, error) {
 	}
 
 	switch cfg.Backend {
-	case CONSUL, ETCDV2:
+	case CONSUL, ETCDV2, ETCDV3, REDIS:
 		config := &libkvstore.Config{
 			TLS:               tlsConfig,
 			ConnectionTimeout: cluster.DefaultStoreTimeout,
 		}
 
-		store, err := libkv.NewStore(kvBackend, addrs, config)
+		store, err := valkeyrie.NewStore(kvBackend, addrs, config)
 		if err != nil {
 			return nil, err
 		}
 		return &libKVStore{store: store}, nil
-	case ETCDV3:
-		config := etcdclientv3.Config{
-			Endpoints: addrs,
-			TLS:       tlsConfig,
-		}
-
-		c, err := etcdclientv3.New(config)
-		if err != nil {
-			return nil, err
-		}
-		return &etcdV3Store{c: c, requestTimeout: cluster.DefaultStoreTimeout}, nil
 	default:
 		return nil, fmt.Errorf("Unknown store backend: %q", cfg.Backend)
 	}
@@ -353,15 +348,6 @@ func NewKVBackedElection(kvStore KVStore, path, candidateUID string) Election {
 		s := kvStore.(*libKVStore)
 		candidate := leadership.NewCandidate(s.store, path, candidateUID, MinTTL)
 		return &libkvElection{store: s, path: path, candidate: candidate}
-	case *etcdV3Store:
-		etcdV3Store := kvStore.(*etcdV3Store)
-		return &etcdv3Election{
-			c:              etcdV3Store.c,
-			path:           path,
-			candidateUID:   candidateUID,
-			ttl:            MinTTL,
-			requestTimeout: cluster.DefaultStoreTimeout,
-		}
 	default:
 		panic("unknown kvstore")
 	}
