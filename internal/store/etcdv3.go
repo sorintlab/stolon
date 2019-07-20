@@ -199,14 +199,12 @@ func (e *etcdv3Election) campaign() {
 		e.electedCh <- false
 		s, err := concurrency.NewSession(e.c, concurrency.WithTTL(int(e.ttl.Seconds())), concurrency.WithContext(e.ctx))
 		if err != nil {
-			e.running = false
 			e.errCh <- err
 			return
 		}
 
 		etcdElection := concurrency.NewElection(s, e.path)
 		if err = etcdElection.Campaign(e.ctx, e.candidateUID); err != nil {
-			e.running = false
 			e.errCh <- err
 			return
 		}
@@ -215,11 +213,8 @@ func (e *etcdv3Election) campaign() {
 
 		select {
 		case <-e.ctx.Done():
-			e.running = false
-			etcdElection.Resign(context.TODO())
 			return
 		case <-s.Done():
-			etcdElection.Resign(context.TODO())
 			e.electedCh <- false
 		}
 	}

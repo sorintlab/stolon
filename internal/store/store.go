@@ -47,6 +47,11 @@ type Election interface {
 	// TODO(sgotti) this mimics the current docker/leadership API and the etcdv3
 	// implementations adapt to it. In future it could be replaced with a better
 	// api like the current one implemented by etcdclientv3/concurrency.
+	//
+	// WARNING: If the election error channel receives any error, it is vital that
+	// the consuming code calls election.Stop(). Failure to do so can cause
+	// subsequent elections to hang indefinitely across all participants of an
+	// election.
 	RunForElection() (<-chan bool, <-chan error)
 	Leader() (string, error)
 	Stop()
