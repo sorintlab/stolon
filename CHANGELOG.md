@@ -1,9 +1,52 @@
 ### v0.14.0
 
+#### New features
+
+* Add sentinel prometheus metrics [#656](https://github.com/sorintlab/stolon/pull/656))
+* Store only the last 2 postgres timeline histories to not exceed the max value size of the underlying store [#651](https://github.com/sorintlab/stolon/pull/651))
+* Add keeper prometheus metrics [#639](https://github.com/sorintlab/stolon/pull/639))
+* stolonctl status can output status in json format ([#628](https://github.com/sorintlab/stolon/pull/628))
+* Enable all k8s client auth plugins ([#625](https://github.com/sorintlab/stolon/pull/625) [#632](https://github.com/sorintlab/stolon/pull/632))
+* It's now possible to define the advertise address and port in stolon keeper ([#581](https://github.com/sorintlab/stolon/pull/581))
+* A new `stolonctl register` command was added to set service discovery information about keepers to an external service (currently only consul) ([#557](https://github.com/sorintlab/stolon/pull/557))
+* Ability to auto restart an instance when updating a postgres parameter that requries a restart [#568](https://github.com/sorintlab/stolon/pull/568))
+* Add stolon clusterdata read/write subcommands [#578](https://github.com/sorintlab/stolon/pull/578))
+* Enable verbose e progress logging for pg_basebackup [#665](https://github.com/sorintlab/stolon/pull/665))
+* Implement timeouts for kubernetes api calls [#666](https://github.com/sorintlab/stolon/pull/666))
+
+#### Bug Fixes
+* Avoid unneeded postgres instance reloads [#558](https://github.com/sorintlab/stolon/pull/558))
+* Allow special characters in pg-su-username [#658](https://github.com/sorintlab/stolon/pull/658))
+* Fix failover process if a keeper has filesystem errors [#637](https://github.com/sorintlab/stolon/pull/637))
+* postgres: use go database/sql context functions [#635](https://github.com/sorintlab/stolon/pull/635))
+* Use go database/sql context functions [#635](https://github.com/sorintlab/stolon/pull/635))
+* Fix hanging sentinels [#659](https://github.com/sorintlab/stolon/pull/659))
+
+and [many other](https://github.com/sorintlab/stolon/milestone/13) changes.
+
 #### Upgrades notes.
- * The `stolonctl clusterdata` command has been splitted into two:
-    1. `stolonctl clusterdata read` which will be used to read the current clusterdata.
-    2. `stolonctl clusterdata write` which will be used to write the new clusterdata into the new store.
+* The `stolonctl clusterdata` command has been split into two subcommands:
+  1. `stolonctl clusterdata read` which will be used to read the current clusterdata.
+  2. `stolonctl clusterdata write` which will be used to write the new clusterdata into the new store.
+
+
+A big Thank You to everybody who contributed to this release:
+
+* Anton Markelov (@strangeman)
+* Arunvel Sriram (@arunvelsriram)
+* Aswin Karthik (@aswinkarthik)
+* Ben Wheatley (@benwh)
+* David Eichin (@daMupfel)
+* Dinesh B (@dineshba)
+* Don Bowman (@donbowman)
+* Harry Maclean (@hmac)
+* Krishnaswamy Subramanian (@jskswamy)
+* Lawrence Jones (@lawrencejones)
+* Milyutin Maksim (@maksm90)
+* Mosab Ibrahim (@mos3abof)
+* Nicolas Juhel (@nabbar)
+* Prabhu Jayakumar (@prabhu43)
+
 
 ### v0.13.0
 
