@@ -35,7 +35,7 @@ var cmdInit = &cobra.Command{
 type InitOptions struct {
 	file          string
 	forceYes      bool
-	skipIfPresent bool
+	skipIfInitialized bool
 }
 
 var initOpts InitOptions
@@ -43,7 +43,7 @@ var initOpts InitOptions
 func init() {
 	cmdInit.PersistentFlags().StringVarP(&initOpts.file, "file", "f", "", "file contaning the new cluster spec")
 	cmdInit.PersistentFlags().BoolVarP(&initOpts.forceYes, "yes", "y", false, "don't ask for confirmation")
-	cmdInit.PersistentFlags().BoolVarP(&initOpts.skipIfPresent, "skip-if-present", "s", false, "skip if cluster is already initialized")
+	cmdInit.PersistentFlags().BoolVarP(&initOpts.skipIfInitialized, "skip-if-initialized", "s", false, "skip if cluster is already initialized")
 
 	CmdStolonCtl.AddCommand(cmdInit)
 }
@@ -84,7 +84,7 @@ func initCluster(cmd *cobra.Command, args []string) {
 		die("cannot get cluster data: %v", err)
 	}
 	if cd != nil {
-		if !initOpts.skipIfPresent {
+		if initOpts.skipIfInitialized {
 			stdout("Exiting as cluster is already initialized")
 			os.Exit(0)
 		}
