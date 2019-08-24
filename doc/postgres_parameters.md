@@ -49,6 +49,8 @@ Since postgresql.auto.conf overrides postgresql.conf parameters, changing some o
 
 To avoid this stolon disables the execution of ALTER SYSTEM commands making postgresql.auto.conf a symlink to /dev/null. When an ALTER SYSTEM command is executed it'll return an error.
 
+ALTER SYSTEM command can be re-enabled by using `--disable-alter-system=false` parameter to `stolon-keeper` or using `STKEEPER_DISABLE_ALTER_SYSTEM=false` environment variable. This can be useful for extensions that use this command like the citus extension.
+
 ## Restart postgres on changing some pg parameters
 
 There are some pg parameters which requires postgres restart to take effect after changing. For example, changing `max_connections` will not take effect till the underlying postgres is restarted. This is disabled by default and can be enabled using the clusterSpecification `automaticPgRestart`. This is achieved using `pending_restart` in [pg_settings](https://www.postgresql.org/docs/9.5/static/view-pg-settings.html) for postgres 9.5 and above and the `context` column of `pg_settings` for lower versions (<= 9.4).

@@ -61,6 +61,7 @@ type PGManager interface {
 
 type Manager struct {
 	pgBinPath             string
+	disableAlterSystem    bool
 	dataDir               string
 	parameters            common.Parameters
 	recoveryParameters    common.Parameters
@@ -101,10 +102,11 @@ func SetLogger(l *zap.SugaredLogger) {
 	log = l
 }
 
-func NewManager(pgBinPath string, dataDir string, localConnParams, replConnParams ConnParams, suAuthMethod, suUsername, suPassword, replAuthMethod, replUsername, replPassword string, requestTimeout time.Duration) *Manager {
+func NewManager(pgBinPath string, dataDir string, localConnParams, replConnParams ConnParams, suAuthMethod, suUsername, suPassword, replAuthMethod, replUsername, replPassword string, requestTimeout time.Duration, disableAlterSystem bool) *Manager {
 	return &Manager{
 		pgBinPath:             pgBinPath,
 		dataDir:               filepath.Join(dataDir, "postgres"),
+		disableAlterSystem:    disableAlterSystem,
 		parameters:            make(common.Parameters),
 		recoveryParameters:    make(common.Parameters),
 		curParameters:         make(common.Parameters),
@@ -306,8 +308,10 @@ func (p *Manager) start(args ...string) error {
 	// the instance parent is the keeper instead of the defined system reaper
 	// (since pg_ctl forks and then exits leaving the postmaster orphaned).
 
-	if err := p.createPostgresqlAutoConf(); err != nil {
-		return err
+	if p.disableAlterSystem {
+		if err := p.createPostgresqlAutoConf(); err != nil {
+			return err
+		}
 	}
 
 	log.Infow("starting database")

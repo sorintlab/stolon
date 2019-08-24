@@ -98,6 +98,7 @@ type config struct {
 
 	uid                     string
 	dataDir                 string
+	disableAlterSystem      bool
 	debug                   bool
 	pgListenAddress         string
 	pgAdvertiseAddress      string
@@ -142,6 +143,7 @@ func init() {
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgSUUsername, "pg-su-username", user, "postgres superuser user name. Used for keeper managed instance access and pg_rewind based synchronization. It'll be created on db initialization. Defaults to the name of the effective user running stolon-keeper. Must be the same for all keepers.")
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgSUPassword, "pg-su-password", "", "postgres superuser password. Only one of --pg-su-password or --pg-su-passwordfile must be provided. Must be the same for all keepers.")
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgSUPasswordFile, "pg-su-passwordfile", "", "postgres superuser password file. Only one of --pg-su-password or --pg-su-passwordfile must be provided. Must be the same for all keepers)")
+	CmdKeeper.PersistentFlags().BoolVar(&cfg.disableAlterSystem, "disable-alter-system", true, "disable alter system command")
 	CmdKeeper.PersistentFlags().BoolVar(&cfg.debug, "debug", false, "enable debug logging")
 
 	CmdKeeper.PersistentFlags().MarkDeprecated("id", "please use --uid")
@@ -424,6 +426,8 @@ type PostgresKeeper struct {
 
 	bootUUID string
 
+	disableAlterSystem bool
+
 	dataDir             string
 	listenAddress       string
 	port                string
@@ -476,6 +480,8 @@ func NewPostgresKeeper(cfg *config, end chan error) (*PostgresKeeper, error) {
 		bootUUID: common.UUID(),
 
 		dataDir: dataDir,
+
+		disableAlterSystem: cfg.disableAlterSystem,
 
 		pgListenAddress:     cfg.pgListenAddress,
 		pgAdvertiseAddress:  cfg.pgAdvertiseAddress,
@@ -772,7 +778,7 @@ func (p *PostgresKeeper) Start(ctx context.Context) {
 
 	// TODO(sgotti) reconfigure the various configurations options
 	// (RequestTimeout) after a changed cluster config
-	pgm := postgresql.NewManager(p.pgBinPath, p.dataDir, p.getLocalConnParams(), p.getLocalReplConnParams(), p.pgSUAuthMethod, p.pgSUUsername, p.pgSUPassword, p.pgReplAuthMethod, p.pgReplUsername, p.pgReplPassword, p.requestTimeout)
+	pgm := postgresql.NewManager(p.pgBinPath, p.dataDir, p.getLocalConnParams(), p.getLocalReplConnParams(), p.pgSUAuthMethod, p.pgSUUsername, p.pgSUPassword, p.pgReplAuthMethod, p.pgReplUsername, p.pgReplPassword, p.requestTimeout, p.disableAlterSystem)
 	p.pgm = pgm
 
 	p.pgm.StopIfStarted(true)
