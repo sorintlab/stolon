@@ -65,3 +65,50 @@ func TestValidateReplicationSlots(t *testing.T) {
 		}
 	}
 }
+
+func TestClusterData_FindDB(t *testing.T) {
+	db := DB{
+		UID:  "dbUUID",
+		Spec: &DBSpec{KeeperUID: "sameKeeperUUID"},
+	}
+	tests := []struct {
+		name        string
+		clusterData ClusterData
+		keeper      *Keeper
+		expectedDB  *DB
+	}{
+		{
+			name:        "should return nil if the clusterData is empty",
+			clusterData: ClusterData{},
+			keeper:      &Keeper{},
+			expectedDB:  nil,
+		},
+		{
+			name: "should return nil if DB is not found for given keeper",
+			clusterData: ClusterData{
+				DBs: map[string]*DB{
+					"dbUUID": &db,
+				},
+			},
+			keeper:     &Keeper{UID: "differentUUID"},
+			expectedDB: nil,
+		},
+		{
+			name: "should return the DB if DB is found for given keeper",
+			clusterData: ClusterData{
+				DBs: map[string]*DB{
+					"dbUUID": &db,
+				},
+			},
+			keeper:     &Keeper{UID: "sameKeeperUUID"},
+			expectedDB: &db,
+		},
+	}
+
+	for _, tt := range tests {
+		actual := tt.clusterData.FindDB(tt.keeper)
+		if actual != tt.expectedDB {
+			t.Errorf("Expected %v, but got %v", tt.expectedDB, actual)
+		}
+	}
+}
