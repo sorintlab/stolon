@@ -308,7 +308,7 @@ func (p *Manager) start(args ...string) error {
 	// the instance parent is the keeper instead of the defined system reaper
 	// (since pg_ctl forks and then exits leaving the postmaster orphaned).
 
-	if err := p.createPostgresqlAutoConf(p.disableAlterSystem); err != nil {
+	if err := p.createPostgresqlAutoConf(); err != nil {
 		return err
 	}
 
@@ -749,7 +749,7 @@ func (p *Manager) writePgHba() error {
 		})
 }
 
-// createPostgresqlAutoConf creates postgresql.auto.conf as a symlink to
+// disablePostgresqlAutoConf creates postgresql.auto.conf as a symlink to
 // /dev/null to block alter systems commands (they'll return an error)
 func (p *Manager) disablePostgresqlAutoConf() error {
 	pgAutoConfPath := filepath.Join(p.dataDir, postgresAutoConf)
@@ -786,10 +786,11 @@ func (p *Manager) enablePostgresqlAutoConf() error {
 			return fmt.Errorf("error creating postgresql.auto.conf: %v", err)
 		}
 	}
+	return nil
 }
 
-func (p *Manager, disableAlterSystem bool) createPostgresqlAutoConf() error {
-	if disableAlterSystem {
+func (p *Manager) createPostgresqlAutoConf() error {
+	if p.disableAlterSystem {
 		return p.disablePostgresqlAutoConf()
 	} else {
 		return p.enablePostgresqlAutoConf()
