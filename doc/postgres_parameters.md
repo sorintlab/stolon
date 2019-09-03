@@ -49,7 +49,7 @@ Since postgresql.auto.conf overrides postgresql.conf parameters, changing some o
 
 To avoid this stolon disables the execution of ALTER SYSTEM commands making postgresql.auto.conf a symlink to /dev/null. When an ALTER SYSTEM command is executed it'll return an error.
 
-ALTER SYSTEM command can be re-enabled by using `--disable-alter-system=false` parameter to `stolon-keeper` or using `STKEEPER_DISABLE_ALTER_SYSTEM=false` environment variable. This can be useful for extensions that use this command like the citus extension.
+ALTER SYSTEM command can be re-enabled by using `--disable-alter-system=false` parameter to `stolon-keeper` or using `STKEEPER_DISABLE_ALTER_SYSTEM=false` environment variable. This can be useful to occasionally verify the effect of a change on just the primary/replica first before rolling it out across the cluster.
 
 ## Restart postgres on changing some pg parameters
 
