@@ -61,7 +61,6 @@ type PGManager interface {
 
 type Manager struct {
 	pgBinPath             string
-	disableAlterSystem    bool
 	dataDir               string
 	parameters            common.Parameters
 	recoveryParameters    common.Parameters
@@ -78,6 +77,7 @@ type Manager struct {
 	replUsername          string
 	replPassword          string
 	requestTimeout        time.Duration
+  disableAlterSystem    bool
 }
 
 type SystemData struct {

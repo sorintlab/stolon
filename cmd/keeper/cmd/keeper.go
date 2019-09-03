@@ -426,8 +426,6 @@ type PostgresKeeper struct {
 
 	bootUUID string
 
-	disableAlterSystem bool
-
 	dataDir             string
 	listenAddress       string
 	port                string
@@ -446,6 +444,8 @@ type PostgresKeeper struct {
 
 	sleepInterval  time.Duration
 	requestTimeout time.Duration
+
+  disableAlterSystem bool
 
 	e   store.Store
 	pgm *postgresql.Manager
