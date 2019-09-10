@@ -828,7 +828,7 @@ func (p *PostgresKeeper) Start(ctx context.Context) {
 	}
 }
 
-func (p *PostgresKeeper) resync(db, followedDB *cluster.DB, tryPgrewind bool) error {
+func (p *PostgresKeeper) resync(db, masterDB, followedDB *cluster.DB, tryPgrewind bool) error {
 	pgm := p.pgm
 	replConnParams := p.getReplConnParams(db, followedDB)
 	standbySettings := &cluster.StandbySettings{PrimaryConninfo: replConnParams.ConnString(), PrimarySlotName: common.StolonName(db.UID)}
@@ -839,8 +839,13 @@ func (p *PostgresKeeper) resync(db, followedDB *cluster.DB, tryPgrewind bool) er
 	// doesn't exists pgm.SyncFromFollowedPGRewind will return an error and
 	// fallback to pg_basebackup
 	if tryPgrewind && p.usePgrewind(db) {
-		connParams := p.getSUConnParams(db, followedDB)
-		log.Infow("syncing using pg_rewind", "followedDB", followedDB.UID, "keeper", followedDB.Spec.KeeperUID)
+		// pg_rewind doesn't support running against a database that is in recovery, as it
+		// builds temporary tables and this is not supported on a hot-standby. Stolon doesn't
+		// currently support cascading replication, but we should be clear when issuing a
+		// rewind that it targets the current primary, rather than whatever database we
+		// follow.
+		connParams := p.getSUConnParams(db, masterDB)
+		log.Infow("syncing using pg_rewind", "masterDB", masterDB.UID, "keeper", followedDB.Spec.KeeperUID)
 		if err := pgm.SyncFromFollowedPGRewind(connParams, p.pgSUPassword); err != nil {
 			// log pg_rewind error and fallback to pg_basebackup
 			log.Errorw("error syncing with pg_rewind", zap.Error(err))
@@ -1284,6 +1289,12 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				tryPgrewind = false
 			}
 
+			masterDB, ok := cd.DBs[cd.Cluster.Status.Master]
+			if tryPgrewind && !ok {
+				log.Warn("no current master, disabling pg_rewind for this resync")
+				tryPgrewind = false
+			}
+
 			// TODO(sgotti) pg_rewind considers databases on the same timeline
 			// as in sync and doesn't check if they diverged at different
 			// position in previous timelines.
@@ -1297,7 +1308,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 			// wals and we'll force a full resync.
 			// We have to find a better way to detect if a standby is waiting
 			// for unavailable wals.
-			if err = p.resync(db, followedDB, tryPgrewind); err != nil {
+			if err = p.resync(db, masterDB, followedDB, tryPgrewind); err != nil {
 				log.Errorw("failed to resync from followed instance", zap.Error(err))
 				return
 			}
@@ -1331,7 +1342,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 						log.Errorw("failed to stop pg instance", zap.Error(err))
 						return
 					}
-					if err = p.resync(db, followedDB, false); err != nil {
+					if err = p.resync(db, masterDB, followedDB, false); err != nil {
 						log.Errorw("failed to resync from followed instance", zap.Error(err))
 						return
 					}
