@@ -52,7 +52,11 @@ const (
 )
 
 var (
-	defaultPGParameters = cluster.PGParameters{"log_destination": "stderr", "logging_collector": "false"}
+	defaultPGParameters = cluster.PGParameters{
+		"log_destination":   "stderr",
+		"logging_collector": "false",
+		"log_checkpoints":   "on",
+	}
 )
 
 var curPort = MinPort
@@ -438,6 +442,42 @@ func (tk *TestKeeper) PGDataVersion() (int, int, error) {
 	return pg.ParseVersion(version)
 }
 
+// GetPGControldata calls pg_controldata for the Postgres database directory. This can be
+// useful in debugging database state, especially when comparing what was successfully
+// checkpointed.
+func (tk *TestKeeper) GetPGControldata() string {
+	cmd := exec.Command("pg_controldata", filepath.Join(tk.dataDir, "postgres"))
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		tk.t.Fatalf("failed to run pg_controldata: %v:\n%s", err, output)
+	}
+
+	return string(output)
+}
+
+// GetPGWalReceiverPIDs provides the system pids for each wal receiver process of this
+// Postgres, enabling a test to SIGSTOP the receiving component of Postgres.
+func (tk *TestKeeper) GetPGWalReceiverPIDs() ([]int, error) {
+	rows, err := tk.Query("SELECT pid FROM pg_stat_wal_receiver;")
+	if err != nil {
+		return nil, err
+	}
+
+	defer rows.Close()
+	var pids = []int{}
+
+	for rows.Next() {
+		var pid int
+		if err := rows.Scan(&pid); err != nil {
+			return nil, err
+		}
+
+		pids = append(pids, pid)
+	}
+
+	return pids, nil
+}
+
 func (tk *TestKeeper) GetPrimaryConninfo() (pg.ConnParams, error) {
 	regex := regexp.MustCompile(`\s*primary_conninfo\s*=\s*'(.*)'$`)
 
@@ -571,6 +611,32 @@ func (tk *TestKeeper) SignalPG(sig os.Signal) error {
 		return err
 	}
 	return p.Signal(sig)
+}
+
+// SignalPGWalReceivers should be used to pause and resume WAL replay on a given keeper.
+// As our test environment runs all keepers next to each other, it's difficult to simulate
+// delayed or dropped network traffic. SIGSTOP'ing WAL receivers can indefinitely 'delay'
+// the receipt of WAL, and a subsequent SIGKILL will drop the associated receiver and TCP
+// socket as if the WAL had never been received.
+func (tk *TestKeeper) SignalPGWalReceivers(sig os.Signal) error {
+	pids, err := tk.GetPGWalReceiverPIDs()
+	if err != nil {
+		return err
+	}
+
+	for _, pid := range pids {
+		proc, err := os.FindProcess(pid)
+		if err != nil {
+			return err
+		}
+
+		err = proc.Signal(sig)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (tk *TestKeeper) isInRecovery() (bool, error) {

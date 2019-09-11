@@ -124,18 +124,21 @@ func TestInitWithMultipleKeepers(t *testing.T) {
 }
 
 func setupServers(t *testing.T, clusterName, dir string, numKeepers, numSentinels uint8, syncRepl bool, usePgrewind bool, primaryKeeper *TestKeeper) (testKeepers, testSentinels, *TestProxy, *TestStore) {
-	var initialClusterSpec *cluster.ClusterSpec
+	var initialClusterSpec = &cluster.ClusterSpec{
+		SleepInterval:          &cluster.Duration{Duration: 2 * time.Second},
+		FailInterval:           &cluster.Duration{Duration: 5 * time.Second},
+		ConvergenceTimeout:     &cluster.Duration{Duration: 30 * time.Second},
+		MaxStandbyLag:          cluster.Uint32P(50 * 1024), // limit lag to 50kiB
+		SynchronousReplication: cluster.BoolP(syncRepl),
+		PGParameters:           defaultPGParameters,
+		// If we want to pg_rewind then also checkpoint beforehand, otherwise we may fail due
+		// to uncheckpoint'ed timeline changes that have us silently fallback to basebackup.
+		UsePgrewind:              cluster.BoolP(usePgrewind),
+		CheckpointBeforePgrewind: cluster.BoolP(usePgrewind),
+	}
+
 	if primaryKeeper == nil {
-		initialClusterSpec = &cluster.ClusterSpec{
-			InitMode:               cluster.ClusterInitModeP(cluster.ClusterInitModeNew),
-			SleepInterval:          &cluster.Duration{Duration: 2 * time.Second},
-			FailInterval:           &cluster.Duration{Duration: 5 * time.Second},
-			ConvergenceTimeout:     &cluster.Duration{Duration: 30 * time.Second},
-			MaxStandbyLag:          cluster.Uint32P(50 * 1024), // limit lag to 50kiB
-			SynchronousReplication: cluster.BoolP(syncRepl),
-			UsePgrewind:            cluster.BoolP(usePgrewind),
-			PGParameters:           defaultPGParameters,
-		}
+		initialClusterSpec.InitMode = cluster.ClusterInitModeP(cluster.ClusterInitModeNew)
 	} else {
 		// if primaryKeeper is provided then we should create a standby cluster and do a
 		// pitr recovery from the external primary database
@@ -147,22 +150,14 @@ func setupServers(t *testing.T, clusterName, dir string, numKeepers, numSentinel
 		pgpass.WriteString(fmt.Sprintf("%s:%s:*:%s:%s\n", primaryKeeper.pgListenAddress, primaryKeeper.pgPort, primaryKeeper.pgReplUsername, primaryKeeper.pgReplPassword))
 		pgpass.Close()
 
-		initialClusterSpec = &cluster.ClusterSpec{
-			InitMode:               cluster.ClusterInitModeP(cluster.ClusterInitModePITR),
-			Role:                   cluster.ClusterRoleP(cluster.ClusterRoleStandby),
-			SleepInterval:          &cluster.Duration{Duration: 2 * time.Second},
-			FailInterval:           &cluster.Duration{Duration: 5 * time.Second},
-			ConvergenceTimeout:     &cluster.Duration{Duration: 30 * time.Second},
-			MaxStandbyLag:          cluster.Uint32P(50 * 1024), // limit lag to 50kiB
-			SynchronousReplication: cluster.BoolP(syncRepl),
-			PGParameters:           defaultPGParameters,
-			PITRConfig: &cluster.PITRConfig{
-				DataRestoreCommand: fmt.Sprintf("PGPASSFILE=%s pg_basebackup -D %%d -h %s -p %s -U %s", pgpass.Name(), primaryKeeper.pgListenAddress, primaryKeeper.pgPort, primaryKeeper.pgReplUsername),
-			},
-			StandbyConfig: &cluster.StandbyConfig{
-				StandbySettings: &cluster.StandbySettings{
-					PrimaryConninfo: fmt.Sprintf("sslmode=disable host=%s port=%s user=%s password=%s", primaryKeeper.pgListenAddress, primaryKeeper.pgPort, primaryKeeper.pgReplUsername, primaryKeeper.pgReplPassword),
-				},
+		initialClusterSpec.InitMode = cluster.ClusterInitModeP(cluster.ClusterInitModePITR)
+		initialClusterSpec.Role = cluster.ClusterRoleP(cluster.ClusterRoleStandby)
+		initialClusterSpec.PITRConfig = &cluster.PITRConfig{
+			DataRestoreCommand: fmt.Sprintf("PGPASSFILE=%s pg_basebackup -D %%d -h %s -p %s -U %s", pgpass.Name(), primaryKeeper.pgListenAddress, primaryKeeper.pgPort, primaryKeeper.pgReplUsername),
+		}
+		initialClusterSpec.StandbyConfig = &cluster.StandbyConfig{
+			StandbySettings: &cluster.StandbySettings{
+				PrimaryConninfo: fmt.Sprintf("sslmode=disable host=%s port=%s user=%s password=%s", primaryKeeper.pgListenAddress, primaryKeeper.pgPort, primaryKeeper.pgReplUsername, primaryKeeper.pgReplPassword),
 			},
 		}
 	}
@@ -217,6 +212,25 @@ func setupServersCustom(t *testing.T, clusterName, dir string, numKeepers, numSe
 	return tks, tss, tp, tstore
 }
 
+// generateDataTables can be used to create some junk data across many tables in a given
+// keeper. This is useful if you want to simulate actual database activity, or create some
+// changes that are unlikely to be checkpointed.
+func generateDataTables(t *testing.T, tk *TestKeeper, tables, rows int) error {
+	for table := 0; table < tables; table++ {
+		_, err := tk.Exec(fmt.Sprintf("CREATE TABLE table_data%d(ID INT PRIMARY KEY NOT NULL, PAYLOAD TEXT NOT NULL)", table))
+		if err != nil {
+			return err
+		}
+
+		_, err = tk.Exec(fmt.Sprintf("INSERT INTO table_data%d (ID, PAYLOAD) SELECT n, md5(random()::text) FROM generate_series(1, %d) as n", table, rows))
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func populate(t *testing.T, tk *TestKeeper) error {
 	_, err := tk.Exec("CREATE TABLE table01(ID INT PRIMARY KEY NOT NULL, VALUE INT NOT NULL)")
 	return err
@@ -254,6 +268,32 @@ func waitLines(t *testing.T, q Querier, num int, timeout time.Duration) error {
 		time.Sleep(2 * time.Second)
 	}
 	return fmt.Errorf("timeout waiting for %d lines, got: %d", num, c)
+}
+
+// waitForLine waits until a row with the expected ID appears in table01
+func waitForLine(t *testing.T, q Querier, expected int, timeout time.Duration) error {
+	expired := time.After(timeout)
+	for {
+		select {
+		case <-expired:
+			return fmt.Errorf("timeout waiting for line with value %d", expected)
+		case <-time.After(2 * time.Second):
+			rows, err := q.Query("SELECT FROM table01 WHERE ID=$1", expected)
+			if err != nil {
+				continue
+			}
+
+			count := 0
+			for rows.Next() {
+				count++
+			}
+
+			rows.Close()
+			if count == 1 {
+				return nil
+			}
+		}
+	}
 }
 
 func shutdown(tks map[string]*TestKeeper, tss map[string]*TestSentinel, tp *TestProxy, tstore *TestStore) {
@@ -1128,6 +1168,145 @@ func TestTimelineForkPgrewind(t *testing.T) {
 func TestTimelineForkSyncReplPgrewind(t *testing.T) {
 	t.Parallel()
 	testTimelineFork(t, true, true)
+}
+
+// This test verifies that pg_rewind isn't subject to a race against a newly promoted
+// Postgres promoting into a new timeline and only checkpointing after the fact. We
+// simulate this with a two node cluster and:
+//
+// 1. Write junk data that we assume to be un-CHECKPOINT'ed
+// 2. Pause the standby at 1a and advance the master to 1b
+// 3. Shutdown master on timeline 1b
+// 4. Resume the standby on timeline 1a and wait for it to promote into 2b
+// 5. Start old master at 1b which can never rejoin the current 2b timeline, so it will
+//    resync. This resync should use pg_rewind and we verify the pg_rewind works as
+//    expected, despite our expectation that the new master would not have independently
+//    checkpointed after promotion without stolon having requested it
+//
+// This will only pass when CheckpointBeforePgrewind is set to true in the cluster spec.
+func TestTimelineForkPgRewindCheckpoint(t *testing.T) {
+	dir, err := ioutil.TempDir("", "stolon")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer os.RemoveAll(dir)
+
+	clusterName := uuid.NewV4().String()
+
+	tks, tss, tp, tstore := setupServers(t, clusterName, dir, 2, 1, false, true, nil)
+	defer shutdown(tks, tss, tp, tstore)
+
+	storePath := filepath.Join(common.StorePrefix, clusterName)
+	sm := store.NewKVBackedStore(tstore.store, storePath)
+	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
+
+	master, standbys := waitMasterStandbysReady(t, sm, tks)
+
+	// Set infrequent checkpoint settings to better identify poor assumptions about when
+	// checkpoints might occur.
+	err = StolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "checkpointCompletionTarget": "0.9", "checkpointTimeout": "86400" }`)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	t.Logf("Waiting 2 * sleepInterval for checkpoint configuration to be applied")
+	time.Sleep(4 * time.Second)
+
+	t.Logf("Creating lots of un-CHECKPOINT'd data")
+	if err := generateDataTables(t, master, 100, 1000); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	t.Logf("Write token 1 to master: %s", master.uid)
+	if err := populate(t, master); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := write(t, master, 1, 1); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// Wait for data to replicate to the standby
+	if err := waitLines(t, standbys[0], 1, 30*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	t.Logf("SIGSTOPping current standby keeper: %s", standbys[0].uid)
+	if err := standbys[0].Signal(syscall.SIGSTOP); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	t.Logf("SIGSTOPping current standby wal receivers: %s", standbys[0].uid)
+	if err := standbys[0].SignalPGWalReceivers(syscall.SIGSTOP); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	t.Logf("Writing token 2 to master, advancing current timeline: %s", master.uid)
+	if err := write(t, master, 2, 2); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	t.Logf("Stopping master: %s", master.uid)
+	master.Stop()
+	if err := master.WaitDBDown(60 * time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// Kill old receivers to prevent processing of buffered WAL from when they were paused
+	t.Logf("SIGKILLing current standby wal receivers: %s", standbys[0].uid)
+	if err := standbys[0].SignalPGWalReceivers(syscall.SIGKILL); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// Resume the keeper so we can re-activate stolon
+	t.Logf("SIGCONTing current standby keeper: %s", standbys[0].uid)
+	if err := standbys[0].Signal(syscall.SIGCONT); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// Wait for standby to be healthy
+	t.Logf("Waiting for new master to assume role: %s", standbys[0].uid)
+	if err = standbys[0].WaitDBRole(common.RoleMaster, nil, 60*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	t.Logf("Write token 3 to new master, advancing current timeline: %s", standbys[0].uid)
+	if err := write(t, standbys[0], 3, 3); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// Start old master who should be ahead of current master on the previous timeline. This
+	// should cause a resync when booting fails due to divergent timelines.
+	t.Logf("Starting old master and verifying it successfully rewinds: %s", master.uid)
+	master.Start()
+
+	// If enabled, it should be possible to recover from forked timelines by using
+	// pg_rewind. It's possible that pg_rewind will fail and we'd still recover the cluster
+	// by falling-back to pg_basebackup.
+	//
+	// Most people who enable pg_rewind really don't want basebackup to happen, as it may
+	// take hours to recover when pg_rewind is <1m. Here we verify that the keeper
+	// successfully recovered the forked timeline via a rewind rather than basebackup.
+	if err := master.cmd.ExpectTimeout("syncing using pg_rewind", 120*time.Second); err != nil {
+		t.Fatalf(err.Error())
+	}
+	if err := master.cmd.ExpectTimeout("running pg_rewind", 5*time.Second); err != nil {
+		t.Fatalf(err.Error())
+	}
+
+	// This will occur whenever pg_rewind is run against a Postgres that has not
+	// checkpointed since its timeline previously forked. pg_rewind first grabs the
+	// pg_control file to check if timelines are diverged, and this file won't have been
+	// updated until a checkpoint takes place.
+	if err := master.cmd.ExpectTimeout("no rewind required", 5*time.Second); err == nil {
+		t.Fatalf("keeper tried rewinding but rewind thought it was not required: %s", master.uid)
+	}
+
+	t.Logf("Waiting for the old master to receive token 3 from forked timeline: %s", master.uid)
+	if err := waitForLine(t, master, 3, 60*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := master.WaitDBRole(common.RoleStandby, nil, 60*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
 }
 
 // tests that a master restart with changed address for both keeper and

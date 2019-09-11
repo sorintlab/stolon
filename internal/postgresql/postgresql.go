@@ -760,7 +760,7 @@ func (p *Manager) createPostgresqlAutoConf() error {
 	return nil
 }
 
-func (p *Manager) SyncFromFollowedPGRewind(followedConnParams ConnParams, password string) error {
+func (p *Manager) SyncFromFollowedPGRewind(followedConnParams ConnParams, password string, forceCheckpoint bool) error {
 	// Remove postgresql.auto.conf since pg_rewind will error if it's a symlink to /dev/null
 	pgAutoConfPath := filepath.Join(p.dataDir, postgresAutoConf)
 	if err := os.Remove(pgAutoConfPath); err != nil && !os.IsNotExist(err) {
@@ -785,6 +785,32 @@ func (p *Manager) SyncFromFollowedPGRewind(followedConnParams ConnParams, passwo
 	// enabled and there're no active standbys it will hang.
 	followedConnParams.Set("options", "-c synchronous_commit=off")
 	followedConnString := followedConnParams.ConnString()
+
+	// We need to issue a checkpoint on the source before pg_rewind'ing as until the primary
+	// checkpoints the global/pg_control file won't contain up-to-date information about
+	// what timeline the primary exists in.
+	//
+	// Imagine everyone is on timeline 1, then we promote a node to timeline 2. Standbys
+	// attempt to replicate from the newly promoted node but fail due to diverged timelines.
+	// pg_rewind is then used to resync the standbys, but if the new primary hasn't yet
+	// checkpointed, the pg_control file will tell us we're both on the same timeline (1)
+	// and pg_rewind will exit without performing any action.
+	//
+	// If we checkpoint before invoking pg_rewind we will avoid this problem, at the slight
+	// cost of forcing a checkpoint on a newly promoted node, which might hurt performance.
+	// We (GoCardless) can't afford this, so we take the performance penalty to avoid hours
+	// of downtime.
+	if forceCheckpoint {
+		log.Infow("issuing checkpoint on primary")
+		psqlName := filepath.Join(p.pgBinPath, "psql")
+		cmd := exec.Command(psqlName, followedConnString, "-c", "CHECKPOINT;")
+		cmd.Env = append(os.Environ(), fmt.Sprintf("PGPASSFILE=%s", pgpass.Name()))
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("error: %v", err)
+		}
+	}
 
 	log.Infow("running pg_rewind")
 	name := filepath.Join(p.pgBinPath, "pg_rewind")
