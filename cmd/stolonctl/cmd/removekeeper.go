@@ -18,7 +18,6 @@ import (
 	"context"
 
 	cmdcommon "github.com/sorintlab/stolon/cmd"
-	"github.com/sorintlab/stolon/internal/cluster"
 	"github.com/spf13/cobra"
 )
 
@@ -32,7 +31,7 @@ func init() {
 	CmdStolonCtl.AddCommand(removeKeeperCmd)
 }
 
-func removeKeeper(cmd *cobra.Command, args []string) {
+func removeKeeper(_ *cobra.Command, args []string) {
 	if len(args) > 1 {
 		die("too many arguments")
 	}
@@ -65,7 +64,7 @@ func removeKeeper(cmd *cobra.Command, args []string) {
 		die("keeper doesn't exist")
 	}
 
-	keeperDb := getDbForKeeper(newCd.DBs, keeperID)
+	keeperDb := newCd.FindDB(keeperInfo)
 
 	if keeperDb != nil {
 		if newCd.Cluster.Status.Master == keeperDb.UID {
@@ -85,14 +84,4 @@ func removeKeeper(cmd *cobra.Command, args []string) {
 	if err != nil {
 		die("cannot update cluster data: %v", err)
 	}
-}
-
-func getDbForKeeper(dbs cluster.DBs, keeperID string) *cluster.DB {
-	for _, db := range dbs {
-		if db.Spec.KeeperUID == keeperID {
-			return db
-		}
-	}
-
-	return nil
 }
