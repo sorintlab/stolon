@@ -98,7 +98,7 @@ type config struct {
 
 	uid                     string
 	dataDir                 string
-	disableAlterSystem      bool
+	enableAlterSystem       bool
 	debug                   bool
 	pgListenAddress         string
 	pgAdvertiseAddress      string
@@ -143,7 +143,7 @@ func init() {
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgSUUsername, "pg-su-username", user, "postgres superuser user name. Used for keeper managed instance access and pg_rewind based synchronization. It'll be created on db initialization. Defaults to the name of the effective user running stolon-keeper. Must be the same for all keepers.")
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgSUPassword, "pg-su-password", "", "postgres superuser password. Only one of --pg-su-password or --pg-su-passwordfile must be provided. Must be the same for all keepers.")
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgSUPasswordFile, "pg-su-passwordfile", "", "postgres superuser password file. Only one of --pg-su-password or --pg-su-passwordfile must be provided. Must be the same for all keepers)")
-	CmdKeeper.PersistentFlags().BoolVar(&cfg.disableAlterSystem, "disable-alter-system", true, "disable ALTER SYSTEM command. Since postgresql.auto.conf overrides postgresql.conf parameters, changing some of them with ALTER SYSTEM could break the cluster and make pg parameters different between the instances. (use it with caution !!!)")
+	CmdKeeper.PersistentFlags().BoolVar(&cfg.enableAlterSystem, "enable-alter-system", false, "enable ALTER SYSTEM command. Since postgresql.auto.conf overrides postgresql.conf parameters, changing some of them with ALTER SYSTEM could break the cluster and make pg parameters different between the instances. (use it with caution !!!)")
 	CmdKeeper.PersistentFlags().BoolVar(&cfg.debug, "debug", false, "enable debug logging")
 
 	CmdKeeper.PersistentFlags().MarkDeprecated("id", "please use --uid")
@@ -445,7 +445,7 @@ type PostgresKeeper struct {
 	sleepInterval  time.Duration
 	requestTimeout time.Duration
 
-	disableAlterSystem bool
+	enableAlterSystem bool
 
 	e   store.Store
 	pgm *postgresql.Manager
@@ -481,7 +481,7 @@ func NewPostgresKeeper(cfg *config, end chan error) (*PostgresKeeper, error) {
 
 		dataDir: dataDir,
 
-		disableAlterSystem: cfg.disableAlterSystem,
+		enableAlterSystem: cfg.enableAlterSystem,
 
 		pgListenAddress:     cfg.pgListenAddress,
 		pgAdvertiseAddress:  cfg.pgAdvertiseAddress,
@@ -778,7 +778,7 @@ func (p *PostgresKeeper) Start(ctx context.Context) {
 
 	// TODO(sgotti) reconfigure the various configurations options
 	// (RequestTimeout) after a changed cluster config
-	pgm := postgresql.NewManager(p.pgBinPath, p.dataDir, p.getLocalConnParams(), p.getLocalReplConnParams(), p.pgSUAuthMethod, p.pgSUUsername, p.pgSUPassword, p.pgReplAuthMethod, p.pgReplUsername, p.pgReplPassword, p.requestTimeout, p.disableAlterSystem)
+	pgm := postgresql.NewManager(p.pgBinPath, p.dataDir, p.getLocalConnParams(), p.getLocalReplConnParams(), p.pgSUAuthMethod, p.pgSUUsername, p.pgSUPassword, p.pgReplAuthMethod, p.pgReplUsername, p.pgReplPassword, p.requestTimeout, p.enableAlterSystem)
 	p.pgm = pgm
 
 	p.pgm.StopIfStarted(true)

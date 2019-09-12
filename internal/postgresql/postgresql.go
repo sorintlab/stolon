@@ -77,7 +77,7 @@ type Manager struct {
 	replUsername          string
 	replPassword          string
 	requestTimeout        time.Duration
-	disableAlterSystem    bool
+	enableAlterSystem     bool
 }
 
 type SystemData struct {
@@ -102,11 +102,11 @@ func SetLogger(l *zap.SugaredLogger) {
 	log = l
 }
 
-func NewManager(pgBinPath string, dataDir string, localConnParams, replConnParams ConnParams, suAuthMethod, suUsername, suPassword, replAuthMethod, replUsername, replPassword string, requestTimeout time.Duration, disableAlterSystem bool) *Manager {
+func NewManager(pgBinPath string, dataDir string, localConnParams, replConnParams ConnParams, suAuthMethod, suUsername, suPassword, replAuthMethod, replUsername, replPassword string, requestTimeout time.Duration, enableAlterSystem bool) *Manager {
 	return &Manager{
 		pgBinPath:             pgBinPath,
 		dataDir:               filepath.Join(dataDir, "postgres"),
-		disableAlterSystem:    disableAlterSystem,
+		enableAlterSystem:     enableAlterSystem,
 		parameters:            make(common.Parameters),
 		recoveryParameters:    make(common.Parameters),
 		curParameters:         make(common.Parameters),
@@ -790,10 +790,10 @@ func (p *Manager) enablePostgresqlAutoConf() error {
 }
 
 func (p *Manager) createPostgresqlAutoConf() error {
-	if p.disableAlterSystem {
-		return p.disablePostgresqlAutoConf()
-	} else {
+	if p.enableAlterSystem {
 		return p.enablePostgresqlAutoConf()
+	} else {
+		return p.disablePostgresqlAutoConf()
 	}
 }
 
