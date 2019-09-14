@@ -27,6 +27,7 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/sorintlab/stolon/internal/cluster"
 	"github.com/sorintlab/stolon/internal/common"
+	"github.com/sorintlab/stolon/internal/util"
 )
 
 var curUID int
@@ -4992,8 +4993,11 @@ func TestUpdateCluster(t *testing.T) {
 		} else {
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
-			} else if !testEqualCD(outcd, tt.outcd) {
-				t.Errorf("wrong outcd: got:\n%s\nwant:\n%s", spew.Sdump(outcd), spew.Sdump(tt.outcd))
+			} else {
+				equal, diff := testEqualCD(outcd, tt.outcd)
+				if !equal {
+					t.Errorf("wrong outcd: got:\n%s\nwant:\n%s\nfield path: %v\n  got: %v\n  want: %v ", spew.Sdump(outcd), spew.Sdump(tt.outcd), diff.Prefix, diff.V1, diff.V2)
+				}
 			}
 		}
 	}
@@ -5088,7 +5092,7 @@ func testRandFn(i int) int {
 	return 0
 }
 
-func testEqualCD(cd1, cd2 *cluster.ClusterData) bool {
+func testEqualCD(cd1, cd2 *cluster.ClusterData) (bool, util.DeepEqualDiff) {
 	// ignore times
 	for _, cd := range []*cluster.ClusterData{cd1, cd2} {
 		cd.Cluster.ChangeTime = time.Time{}
@@ -5100,6 +5104,10 @@ func testEqualCD(cd1, cd2 *cluster.ClusterData) bool {
 		}
 		cd.Proxy.ChangeTime = time.Time{}
 	}
-	return reflect.DeepEqual(cd1, cd2)
-
+	equal, diff := util.DeepEqualVerbose(cd1, cd2)
+	// sanity check
+	if equal != reflect.DeepEqual(cd1, cd2) {
+		panic("bug in DeepEqualVerbose")
+	}
+	return equal, diff
 }
