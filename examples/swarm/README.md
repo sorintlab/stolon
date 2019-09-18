@@ -127,6 +127,7 @@ sf79wnygtcmu        pg_proxy            replicated          2/2                 
 tkbnrfdj4axa        pg_sentinel         replicated          2/2                 sorintlab/master-pg10:latest
 ```
 
+
 ### Connect to the db
 
 #### Connect to the proxy service
@@ -137,6 +138,51 @@ The password for the stolon user will be the value specified in your `./etc/secr
 psql --host localhost --port 5432 postgres -U postgres -W
 Password for user postgres:
 psql (10.3, server 10.3)
+Type "help" for help.
+
+postgres=#
+```
+
+#### Additional info
+
+If you fail login to postgres like this
+
+```
+psql --host localhost --port 5432 -U postgres
+psql: server closed the connection unexpectedly
+        This probably means the server terminated abnormally
+        before or while processing the request.
+```
+
+Check logs pg_sentinel
+
+```
+docker service logs pg_sentinel
+pg_sentinel.1.13r0t5d3233s@node1    | 2019-09-18T03:37:27.514Z  INFO    cmd/sentinel.go:1843    no cluster data available, waiting for it to appear
+pg_sentinel.1.13r0t5d3233s@node1    | 2019-09-18T03:37:32.516Z  INFO    cmd/sentinel.go:1843    no cluster data available, waiting for it to appear
+```
+
+If you get result "no cluster data available", it means you not yet initialize cluster data  
+To initialize cluster data, run this script from pg_proxy container
+
+```
+docker exec -it your_pg_proxy_container_name stolonctl --cluster-name=stolon-cluster --store-backend=etcdv3 --store-endpoints http://etcd-00:2379,http://etcd-01:2379,http://etcd-02:2379 init
+WARNING: The databases managed by the keepers will be overwritten depending on the provided cluster spec.
+Are you sure you want to continue? [yes/no] yes
+```
+
+Update existing stack
+
+```
+docker stack deploy --compose-file docker-compose-pg.yml pg
+```
+
+Test login to postgres again
+
+```
+psql --host localhost --port 5432 -U postgres
+Password for user postgres:
+psql (10.10 (Ubuntu 10.10-0ubuntu0.18.04.1))
 Type "help" for help.
 
 postgres=#
