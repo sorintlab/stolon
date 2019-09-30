@@ -42,6 +42,13 @@ const (
 	RoleStandby   Role = "standby"
 )
 
+// Roles enumerates all possible Role values
+var Roles = []Role{
+	RoleUndefined,
+	RoleMaster,
+	RoleStandby,
+}
+
 func UID() string {
 	u := uuid.NewV4()
 	return fmt.Sprintf("%x", u[:4])

@@ -2,6 +2,9 @@
 
 [![Build Status](https://semaphoreci.com/api/v1/projects/fb01aecd-c3d5-407b-a157-7d5365e9e4b6/565617/badge.svg)](https://semaphoreci.com/sorintlab/stolon)
 [![Join the chat at https://gitter.im/sorintlab/stolon](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/sorintlab/stolon?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+[![Go Report Card](https://goreportcard.com/badge/github.com/sorintlab/stolon)](https://goreportcard.com/report/github.com/sorintlab/stolon)
+[![Downloads](https://img.shields.io/github/downloads/sorintlab/stolon/latest/total.svg)](https://github.com/sorintlab/stolon/releases)
+[![Latest release](https://img.shields.io/github/release/sorintlab/stolon.svg)](https://github.com/sorintlab/stolon/releases)
 
 ![Stolon Logo](logos/stolon-color.png)
 
@@ -38,6 +41,13 @@ For more details and requirements see [Stolon Architecture and Requirements](doc
 ## Documentation
 
 [Documentation Index](doc/README.md)
+
+## Installation
+
+Stolon is available in [brew](https://brew.sh/). It is **unofficial and not supported** by the project.
+So check the version before installing using `brew`.
+
+[Step to install using brew](doc/unofficial_packages.md)
 
 ## Quick start and examples
 

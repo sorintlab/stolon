@@ -40,7 +40,7 @@ import (
 	"github.com/sorintlab/stolon/internal/util"
 
 	_ "github.com/lib/pq"
-	"github.com/satori/go.uuid"
+	uuid "github.com/satori/go.uuid"
 	"github.com/sgotti/gexpect"
 )
 
@@ -862,18 +862,33 @@ func (tp *TestProxy) WaitRightMaster(tk *TestKeeper, timeout time.Duration) erro
 	return fmt.Errorf("timeout")
 }
 
-func StolonCtl(clusterName string, storeBackend store.Backend, storeEndpoints string, a ...string) error {
+func StolonCtl(t *testing.T, clusterName string, storeBackend store.Backend, storeEndpoints string, a ...string) error {
 	args := []string{}
 	args = append(args, fmt.Sprintf("--cluster-name=%s", clusterName))
 	args = append(args, fmt.Sprintf("--store-backend=%s", storeBackend))
 	args = append(args, fmt.Sprintf("--store-endpoints=%s", storeEndpoints))
 	args = append(args, a...)
 
+	t.Logf("executing stolonctl, args: %s", args)
+
 	bin := os.Getenv("STCTL_BIN")
 	if bin == "" {
 		return fmt.Errorf("missing STCTL_BIN env")
 	}
 	cmd := exec.Command(bin, args...)
+	pr, pw, err := os.Pipe()
+	if err != nil {
+		return err
+	}
+	cmd.Stdout = pw
+	cmd.Stderr = pw
+	go func() {
+		scanner := bufio.NewScanner(pr)
+		for scanner.Scan() {
+			t.Logf("[%s]: %s", "stolonctl", scanner.Text())
+		}
+	}()
+
 	return cmd.Run()
 }
 
