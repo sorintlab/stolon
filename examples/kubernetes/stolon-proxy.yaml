@@ -1,9 +1,13 @@
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: stolon-proxy
 spec:
   replicas: 2
+  selector:
+    matchLabels:
+      component: stolon-proxy
+      stolon-cluster: kube-stolon
   template:
     metadata:
       labels:
@@ -14,38 +18,38 @@ spec:
         prometheus.io/port: "8080"
     spec:
       containers:
-      - name: stolon-proxy
-        image: sorintlab/stolon:master-pg10
-        command:
-          - "/bin/bash"
-          - "-ec"
-          - |
-            exec gosu stolon stolon-proxy
-        env:
-          - name: POD_NAME
-            valueFrom:
-              fieldRef:
-                fieldPath: metadata.name
-          - name: STPROXY_CLUSTER_NAME
-            valueFrom:
-              fieldRef:
-                fieldPath: metadata.labels['stolon-cluster']
-          - name: STPROXY_STORE_BACKEND
-            value: "kubernetes"
-          - name: STPROXY_KUBE_RESOURCE_KIND
-            value: "configmap"
-          - name: STPROXY_LISTEN_ADDRESS
-            value: "0.0.0.0"
-          - name: STPROXY_METRICS_LISTEN_ADDRESS
-            value: "0.0.0.0:8080"
-          ## Uncomment this to enable debug logs
-          #- name: STPROXY_DEBUG
-          #  value: "true"
-        ports:
-          - containerPort: 5432
-          - containerPort: 8080
-        readinessProbe:
-          tcpSocket:
-            port: 5432
-          initialDelaySeconds: 10
-          timeoutSeconds: 5
+        - name: stolon-proxy
+          image: sorintlab/stolon:master-pg10
+          command:
+            - "/bin/bash"
+            - "-ec"
+            - |
+              exec gosu stolon stolon-proxy
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: STPROXY_CLUSTER_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['stolon-cluster']
+            - name: STPROXY_STORE_BACKEND
+              value: "kubernetes"
+            - name: STPROXY_KUBE_RESOURCE_KIND
+              value: "configmap"
+            - name: STPROXY_LISTEN_ADDRESS
+              value: "0.0.0.0"
+            - name: STPROXY_METRICS_LISTEN_ADDRESS
+              value: "0.0.0.0:8080"
+            ## Uncomment this to enable debug logs
+            #- name: STPROXY_DEBUG
+            #  value: "true"
+          ports:
+            - containerPort: 5432
+            - containerPort: 8080
+          readinessProbe:
+            tcpSocket:
+              port: 5432
+            initialDelaySeconds: 10
+            timeoutSeconds: 5
