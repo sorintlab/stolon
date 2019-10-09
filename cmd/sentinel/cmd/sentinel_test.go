@@ -16,17 +16,17 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/sorintlab/stolon/internal/timer"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
-	"reflect"
-
-	"github.com/davecgh/go-spew/spew"
 	"github.com/sorintlab/stolon/internal/cluster"
 	"github.com/sorintlab/stolon/internal/common"
+	"github.com/sorintlab/stolon/internal/timer"
+
+	"github.com/davecgh/go-spew/spew"
 )
 
 var curUID int
@@ -39,7 +39,7 @@ func TestUpdateCluster(t *testing.T) {
 		outcd *cluster.ClusterData
 		err   error
 	}{
-		// Init phase, also test dbSpec paramaters copied from clusterSpec.
+		// Init phase, also test dbSpec parameters copied from clusterSpec.
 		// #0 cluster initialization, no keepers
 		{
 			cd: &cluster.ClusterData{
@@ -195,7 +195,7 @@ func TestUpdateCluster(t *testing.T) {
 				Proxy: &cluster.Proxy{},
 			},
 		},
-		// #2 cluster initialization, more than one keeper, the first will be choosen to be the new master.
+		// #2 cluster initialization, more than one keeper, the first will be chosen to be the new master.
 		{
 			cd: &cluster.ClusterData{
 				Cluster: &cluster.Cluster{

@@ -816,7 +816,7 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 					log.Infow("db failed to initialize", "db", db.UID, "keeper", db.Spec.KeeperUID)
 					// Empty DBs
 					newcd.DBs = cluster.DBs{}
-					// Unset master so another keeper can be choosen
+					// Unset master so another keeper can be chosen
 					newcd.Cluster.Status.Master = ""
 				}
 			}
@@ -930,7 +930,7 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 					log.Infow("db failed to initialize", "db", db.UID, "keeper", db.Spec.KeeperUID)
 					// Empty DBs
 					newcd.DBs = cluster.DBs{}
-					// Unset master so another keeper can be choosen
+					// Unset master so another keeper can be chosen
 					newcd.Cluster.Status.Master = ""
 				}
 			}
@@ -1916,7 +1916,7 @@ func (s *Sentinel) clusterSentinelCheck(pctx context.Context) {
 		}
 	}
 
-	// Save the new keeperInfoHistories only on successfull cluster data
+	// Save the new keeperInfoHistories only on successful cluster data
 	// update or in the next run we'll think that the saved keeperInfo was
 	// already applied.
 	s.keeperInfoHistories = newKeeperInfoHistories
