@@ -42,12 +42,20 @@ if [ -w ${go_root_dir}/pkg ]; then
 fi
 
 for cmd in sentinel proxy; do
+  echo "Building stolon-${cmd} ..."
 	CGO_ENABLED=0 go build -installsuffix cgo -ldflags "$LD_FLAGS" -o ${BINDIR}/stolon-${cmd} ${REPO_PATH}/cmd/${cmd}
+  echo "Done building stolon-${cmd}"
 done
+
+echo "Building stolonctl ..."
 CGO_ENABLED=0 go build -installsuffix cgo -ldflags "$LD_FLAGS" -o ${BINDIR}/stolonctl ${REPO_PATH}/cmd/stolonctl
+echo "Done building stolonctl"
 
-go build -ldflags "$LD_FLAGS" -o ${BINDIR}/stolon-keeper ${REPO_PATH}/cmd/keeper 
+echo "Building stolon-keeper ..."
+go build -ldflags "$LD_FLAGS" -o ${BINDIR}/stolon-keeper ${REPO_PATH}/cmd/keeper
+echo "Done building stolon-keeper"
 
+echo "Copying binaries for docker images ..."
 # Copy binaries to Dockerfile image directories
 declare -a DOCKERFILE_PATHS
 DOCKERFILE_PATHS=(${BASEDIR}/examples/kubernetes/image/docker)
@@ -59,3 +67,4 @@ do
           cp ${BINDIR}/${cmd} $path/bin/
   done
 done
+echo "Done!"
