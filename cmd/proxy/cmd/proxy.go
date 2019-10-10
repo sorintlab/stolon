@@ -71,7 +71,9 @@ func init() {
 	CmdProxy.PersistentFlags().IntVar(&cfg.keepAliveCount, "tcp-keepalive-count", 0, "set tcp keepalive probe count number")
 	CmdProxy.PersistentFlags().IntVar(&cfg.keepAliveInterval, "tcp-keepalive-interval", 0, "set tcp keepalive interval (seconds)")
 
-	CmdProxy.PersistentFlags().MarkDeprecated("debug", "use --log-level=debug instead")
+	if err := CmdProxy.PersistentFlags().MarkDeprecated("debug", "use --log-level=debug instead"); err != nil {
+		log.Fatal(err)
+	}
 }
 
 type ClusterChecker struct {
@@ -253,10 +255,10 @@ func (c *ClusterChecker) Check() error {
 	return nil
 }
 
-func (c *ClusterChecker) TimeoutChecker(checkOkCh chan struct{}) error {
+func (c *ClusterChecker) TimeoutChecker(checkOkCh chan struct{}) {
 	timeoutTimer := time.NewTimer(cluster.DefaultProxyTimeoutInterval)
 
-	for true {
+	for {
 		select {
 		case <-timeoutTimer.C:
 			log.Infow("check timeout timer fired")
@@ -276,7 +278,6 @@ func (c *ClusterChecker) TimeoutChecker(checkOkCh chan struct{}) error {
 			timeoutTimer = time.NewTimer(cluster.DefaultProxyTimeoutInterval)
 		}
 	}
-	return nil
 }
 
 func (c *ClusterChecker) Start() error {
@@ -314,9 +315,13 @@ func (c *ClusterChecker) Start() error {
 }
 
 func Execute() {
-	flagutil.SetFlagsFromEnv(CmdProxy.PersistentFlags(), "STPROXY")
+	if err := flagutil.SetFlagsFromEnv(CmdProxy.PersistentFlags(), "STPROXY"); err != nil {
+		log.Fatal(err)
+	}
 
-	CmdProxy.Execute()
+	if err := CmdProxy.Execute(); err != nil {
+		log.Fatal(err)
+	}
 }
 
 func proxy(c *cobra.Command, args []string) {

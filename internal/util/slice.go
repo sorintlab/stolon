@@ -51,8 +51,8 @@ func CompareStringSliceNoOrder(a []string, b []string) bool {
 	a = append([]string(nil), a...)
 	b = append([]string(nil), b...)
 
-	sort.Sort(sort.StringSlice(a))
-	sort.Sort(sort.StringSlice(b))
+	sort.Strings(a)
+	sort.Strings(b)
 
 	for i, v := range a {
 		if v != b[i] {

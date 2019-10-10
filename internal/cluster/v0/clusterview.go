@@ -29,10 +29,10 @@ type KeepersState map[string]*KeeperState
 
 func (kss KeepersState) SortedKeys() []string {
 	keys := []string{}
-	for k, _ := range kss {
+	for k := range kss {
 		keys = append(keys, k)
 	}
-	sort.Sort(sort.StringSlice(keys))
+	sort.Strings(keys)
 	return keys
 }
 
@@ -187,13 +187,10 @@ func NewClusterView() *ClusterView {
 // Equals checks if the clusterViews are the same. It ignores the ChangeTime.
 func (cv *ClusterView) Equals(ncv *ClusterView) bool {
 	if cv == nil {
-		if ncv == nil {
-			return true
-		}
-		return false
+		return ncv == nil
 	}
 	return cv.Version == ncv.Version &&
-		cv.Master == cv.Master &&
+		cv.Master == ncv.Master &&
 		reflect.DeepEqual(cv.KeepersRole, ncv.KeepersRole) &&
 		reflect.DeepEqual(cv.ProxyConf, ncv.ProxyConf) &&
 		reflect.DeepEqual(cv.Config, ncv.Config)

@@ -43,13 +43,10 @@ const (
 )
 
 const (
-	sentinelLeaderKey = "sentinel-leader"
-
-	keepersInfoDir         = "/keepers/info/"
-	clusterDataFile        = "clusterdata"
-	leaderSentinelInfoFile = "/sentinels/leaderinfo"
-	sentinelsInfoDir       = "/sentinels/info/"
-	proxiesInfoDir         = "/proxies/info/"
+	keepersInfoDir   = "/keepers/info/"
+	clusterDataFile  = "clusterdata"
+	sentinelsInfoDir = "/sentinels/info/"
+	proxiesInfoDir   = "/proxies/info/"
 )
 
 const (
@@ -348,13 +345,13 @@ func (s *KVBackedStore) GetProxiesInfo(ctx context.Context) (cluster.ProxiesInfo
 }
 
 func NewKVBackedElection(kvStore KVStore, path, candidateUID string) Election {
-	switch kvStore.(type) {
+	switch kvStore := kvStore.(type) {
 	case *libKVStore:
-		s := kvStore.(*libKVStore)
+		s := kvStore
 		candidate := leadership.NewCandidate(s.store, path, candidateUID, MinTTL)
 		return &libkvElection{store: s, path: path, candidate: candidate}
 	case *etcdV3Store:
-		etcdV3Store := kvStore.(*etcdV3Store)
+		etcdV3Store := kvStore
 		return &etcdv3Election{
 			c:              etcdV3Store.c,
 			path:           path,

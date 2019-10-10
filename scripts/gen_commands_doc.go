@@ -16,6 +16,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 
 	keepercmd "github.com/sorintlab/stolon/cmd/keeper/cmd"
@@ -36,8 +37,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	doc.GenMarkdownTree(keepercmd.CmdKeeper, outDir)
-	doc.GenMarkdownTree(sentinelcmd.CmdSentinel, outDir)
-	doc.GenMarkdownTree(proxycmd.CmdProxy, outDir)
-	doc.GenMarkdownTree(stolonctlcmd.CmdStolonCtl, outDir)
+	if err := doc.GenMarkdownTree(keepercmd.CmdKeeper, outDir); err != nil {
+		log.Fatal(err)
+	}
+	if err := doc.GenMarkdownTree(sentinelcmd.CmdSentinel, outDir); err != nil {
+		log.Fatal(err)
+	}
+	if err := doc.GenMarkdownTree(proxycmd.CmdProxy, outDir); err != nil {
+		log.Fatal(err)
+	}
+	if err := doc.GenMarkdownTree(stolonctlcmd.CmdStolonCtl, outDir); err != nil {
+		log.Fatal(err)
+	}
 }

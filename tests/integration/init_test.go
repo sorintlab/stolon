@@ -145,6 +145,9 @@ func testInitNew(t *testing.T, merge bool) {
 	}
 
 	cd, _, err := sm.GetClusterData(context.TODO())
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
 	// max_connection should be set by initdb
 	_, ok := cd.Cluster.Spec.PGParameters["max_connections"]
 	if merge && !ok {
@@ -284,6 +287,9 @@ func testInitExisting(t *testing.T, merge bool) {
 	}
 
 	cd, _, err := sm.GetClusterData(context.TODO())
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
 	// max_connection should be set by initdb
 	v, ok = cd.Cluster.Spec.PGParameters["archive_mode"]
 	if merge && v != "on" {

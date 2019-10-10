@@ -77,7 +77,7 @@ func update(cmd *cobra.Command, args []string) {
 		die("only one of cluster spec provided as argument or file must provided (--file/-f option)")
 	}
 
-	data := []byte{}
+	var data []byte
 	if len(args) == 1 {
 		data = []byte(args[0])
 	} else {

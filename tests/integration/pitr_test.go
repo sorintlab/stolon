@@ -24,7 +24,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/satori/go.uuid"
+	uuid "github.com/satori/go.uuid"
 	"github.com/sorintlab/stolon/internal/cluster"
 	"github.com/sorintlab/stolon/internal/common"
 	"github.com/sorintlab/stolon/internal/store"
@@ -127,7 +127,9 @@ func testPITR(t *testing.T, recoveryTarget bool) {
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	pgpass.WriteString(fmt.Sprintf("%s:%s:*:%s:%s\n", tk.pgListenAddress, tk.pgPort, tk.pgReplUsername, tk.pgReplPassword))
+	if _, err := pgpass.WriteString(fmt.Sprintf("%s:%s:*:%s:%s\n", tk.pgListenAddress, tk.pgPort, tk.pgReplUsername, tk.pgReplPassword)); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
 	// Don't save the wal during the basebackup (-x). This to test that archive_command and restore command correctly work.
 	cmd := exec.Command("pg_basebackup", "-F", "tar", "-D", baseBackupDir, "-h", tk.pgListenAddress, "-p", tk.pgPort, "-U", tk.pgReplUsername)
 	cmd.Env = append(cmd.Env, fmt.Sprintf("PGPASSFILE=%s", pgpass.Name()))

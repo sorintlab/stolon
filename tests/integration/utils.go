@@ -103,7 +103,7 @@ func GetSystemData(q ReplQuerier) (*pg.SystemData, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	for rows.Next() {
+	if rows.Next() {
 		var sd pg.SystemData
 		var xLogPosLsn string
 		var unused *string
@@ -149,8 +149,11 @@ func getReplicationSlots(q Querier) ([]string, error) {
 	return replSlots, nil
 }
 
+/*
+// currently unused, keep for future needs
+
 func waitReplicationSlots(q Querier, replSlots []string, timeout time.Duration) error {
-	sort.Sort(sort.StringSlice(replSlots))
+	sort.Strings(replSlots)
 
 	start := time.Now()
 	curReplSlots := []string{}
@@ -160,7 +163,7 @@ func waitReplicationSlots(q Querier, replSlots []string, timeout time.Duration) 
 		if err != nil {
 			goto end
 		}
-		sort.Sort(sort.StringSlice(curReplSlots))
+		sort.Strings(curReplSlots)
 		if reflect.DeepEqual(replSlots, curReplSlots) {
 			return nil
 		}
@@ -169,13 +172,14 @@ func waitReplicationSlots(q Querier, replSlots []string, timeout time.Duration) 
 	}
 	return fmt.Errorf("timeout waiting for replSlots %v, got: %v, last err: %v", replSlots, curReplSlots, err)
 }
+*/
 
 func waitStolonReplicationSlots(q Querier, replSlots []string, timeout time.Duration) error {
 	// prefix with stolon_
 	for i, slot := range replSlots {
 		replSlots[i] = common.StolonName(slot)
 	}
-	sort.Sort(sort.StringSlice(replSlots))
+	sort.Strings(replSlots)
 
 	start := time.Now()
 	var curReplSlots []string
@@ -191,7 +195,7 @@ func waitStolonReplicationSlots(q Querier, replSlots []string, timeout time.Dura
 				curReplSlots = append(curReplSlots, s)
 			}
 		}
-		sort.Sort(sort.StringSlice(curReplSlots))
+		sort.Strings(curReplSlots)
 		if reflect.DeepEqual(replSlots, curReplSlots) {
 			return nil
 		}
@@ -202,7 +206,7 @@ func waitStolonReplicationSlots(q Querier, replSlots []string, timeout time.Dura
 }
 
 func waitNotStolonReplicationSlots(q Querier, replSlots []string, timeout time.Duration) error {
-	sort.Sort(sort.StringSlice(replSlots))
+	sort.Strings(replSlots)
 
 	start := time.Now()
 	var curReplSlots []string
@@ -218,7 +222,7 @@ func waitNotStolonReplicationSlots(q Querier, replSlots []string, timeout time.D
 				curReplSlots = append(curReplSlots, s)
 			}
 		}
-		sort.Sort(sort.StringSlice(curReplSlots))
+		sort.Strings(curReplSlots)
 		if reflect.DeepEqual(replSlots, curReplSlots) {
 			return nil
 		}
@@ -285,8 +289,8 @@ func (p *Process) Kill() {
 	if p.cmd == nil {
 		panic(fmt.Errorf("p: %s, cmd is empty", p.uid))
 	}
-	p.cmd.Cmd.Process.Signal(os.Kill)
-	p.cmd.Wait()
+	_ = p.cmd.Cmd.Process.Signal(os.Kill)
+	_ = p.cmd.Wait()
 	p.cmd = nil
 }
 
@@ -296,8 +300,8 @@ func (p *Process) Stop() {
 		panic(fmt.Errorf("p: %s, cmd is empty", p.uid))
 	}
 	p.cmd.Continue()
-	p.cmd.Cmd.Process.Signal(os.Interrupt)
-	p.cmd.Wait()
+	_ = p.cmd.Cmd.Process.Signal(os.Interrupt)
+	_ = p.cmd.Wait()
 	p.cmd = nil
 }
 
@@ -498,7 +502,7 @@ func (tk *TestKeeper) SwitchWals(times int) error {
 		switchLogFunc = "select pg_switch_wal()"
 	}
 
-	tk.Exec("DROP TABLE switchwal")
+	_, _ = tk.Exec("DROP TABLE switchwal")
 	if _, err := tk.Exec("CREATE TABLE switchwal(ID INT PRIMARY KEY NOT NULL)"); err != nil {
 		return err
 	}
@@ -511,7 +515,7 @@ func (tk *TestKeeper) SwitchWals(times int) error {
 			return err
 		}
 	}
-	tk.Exec("DROP TABLE switchwal")
+	_, _ = tk.Exec("DROP TABLE switchwal")
 	return nil
 }
 
@@ -579,7 +583,7 @@ func (tk *TestKeeper) isInRecovery() (bool, error) {
 		return false, err
 	}
 	defer rows.Close()
-	for rows.Next() {
+	if rows.Next() {
 		var isInRecovery bool
 		if err := rows.Scan(&isInRecovery); err != nil {
 			return false, err
@@ -644,6 +648,9 @@ func (tk *TestKeeper) GetPGParameters() (common.Parameters, error) {
 	return GetPGParameters(tk)
 }
 
+/*
+// currently unused, keep for future needs
+
 type CheckFunc func(time.Duration) error
 
 func waitChecks(timeout time.Duration, fns ...CheckFunc) error {
@@ -665,6 +672,7 @@ func waitChecks(timeout time.Duration, fns ...CheckFunc) error {
 	}
 	return nil
 }
+*/
 
 type TestSentinel struct {
 	t *testing.T
@@ -785,7 +793,7 @@ func NewTestProxy(t *testing.T, dir string, clusterName, pgSUUsername, pgSUPassw
 func (tp *TestProxy) WaitListening(timeout time.Duration) error {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
-		_, err := net.DialTimeout("tcp", net.JoinHostPort(tp.listenAddress, tp.port), timeout-time.Now().Sub(start))
+		_, err := net.DialTimeout("tcp", net.JoinHostPort(tp.listenAddress, tp.port), timeout-time.Since(start))
 		if err == nil {
 			return nil
 		}
@@ -797,15 +805,13 @@ func (tp *TestProxy) WaitListening(timeout time.Duration) error {
 
 func (tp *TestProxy) CheckListening() bool {
 	_, err := net.Dial("tcp", net.JoinHostPort(tp.listenAddress, tp.port))
-	if err != nil {
-		return false
-	}
-	return true
+	return err == nil
 }
+
 func (tp *TestProxy) WaitNotListening(timeout time.Duration) error {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
-		_, err := net.DialTimeout("tcp", net.JoinHostPort(tp.listenAddress, tp.port), timeout-time.Now().Sub(start))
+		_, err := net.DialTimeout("tcp", net.JoinHostPort(tp.listenAddress, tp.port), timeout-time.Since(start))
 		if err != nil {
 			return nil
 		}
@@ -1001,7 +1007,7 @@ func NewTestConsul(t *testing.T, dir string, a ...string) (*TestStore, error) {
 	}
 	defer f.Close()
 
-	f.WriteString(fmt.Sprintf(`{
+	if _, err := f.WriteString(fmt.Sprintf(`{
 		"ports": {
 			"dns": -1,
 			"http": %s,
@@ -1009,7 +1015,9 @@ func NewTestConsul(t *testing.T, dir string, a ...string) (*TestStore, error) {
 			"serf_wan": %s,
 			"server": %s
 		}
-	}`, portHTTP, portSerfLan, portSerfWan, portServer))
+	}`, portHTTP, portSerfLan, portSerfWan, portServer)); err != nil {
+		return nil, err
+	}
 
 	args := []string{}
 	args = append(args, "agent")
@@ -1162,7 +1170,7 @@ func WaitClusterDataKeeperInitialized(keeperUID string, e *store.KVBackedStore, 
 // * synchronous standby defined in masterdb spec
 // * synchronous standby reported from masterdb status
 func WaitClusterDataSynchronousStandbys(synchronousStandbys []string, e *store.KVBackedStore, timeout time.Duration) error {
-	sort.Sort(sort.StringSlice(synchronousStandbys))
+	sort.Strings(synchronousStandbys)
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
 		cd, _, err := e.GetClusterData(context.TODO())
@@ -1179,7 +1187,7 @@ func WaitClusterDataSynchronousStandbys(synchronousStandbys []string, e *store.K
 					keepersUIDs = append(keepersUIDs, db.Spec.KeeperUID)
 				}
 			}
-			sort.Sort(sort.StringSlice(keepersUIDs))
+			sort.Strings(keepersUIDs)
 			if !reflect.DeepEqual(synchronousStandbys, keepersUIDs) {
 				goto end
 			}
@@ -1192,7 +1200,7 @@ func WaitClusterDataSynchronousStandbys(synchronousStandbys []string, e *store.K
 					keepersUIDs = append(keepersUIDs, db.Spec.KeeperUID)
 				}
 			}
-			sort.Sort(sort.StringSlice(keepersUIDs))
+			sort.Strings(keepersUIDs)
 			if !reflect.DeepEqual(synchronousStandbys, keepersUIDs) {
 				goto end
 			}
