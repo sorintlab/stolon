@@ -1106,7 +1106,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				return
 			}
 
-			// create postgres parameteres with empty InitPGParameters
+			// create postgres parameters with empty InitPGParameters
 			pgParameters = p.createPGParameters(db)
 			// update pgm postgres parameters
 			pgm.SetParameters(pgParameters)
@@ -1176,7 +1176,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				return
 			}
 
-			// create postgres parameteres with empty InitPGParameters
+			// create postgres parameters with empty InitPGParameters
 			pgParameters = p.createPGParameters(db)
 			// update pgm postgres parameters
 			pgm.SetParameters(pgParameters)
@@ -1258,7 +1258,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				return
 			}
 
-			// create postgres parameteres with empty InitPGParameters
+			// create postgres parameters with empty InitPGParameters
 			pgParameters = p.createPGParameters(db)
 			// update pgm postgres parameters
 			pgm.SetParameters(pgParameters)
@@ -1362,7 +1362,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				return
 			}
 
-			// create postgres parameteres with empty InitPGParameters
+			// create postgres parameters with empty InitPGParameters
 			pgParameters = p.createPGParameters(db)
 			// update pgm postgres parameters
 			pgm.SetParameters(pgParameters)
@@ -1422,7 +1422,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 		log.Debugw("db status", "initialized", false, "started", false)
 	}
 
-	// create postgres parameteres
+	// create postgres parameters
 	pgParameters = p.createPGParameters(db)
 	// update pgm postgres parameters
 	pgm.SetParameters(pgParameters)
@@ -1735,7 +1735,7 @@ func (p *PostgresKeeper) loadDBLocalState() error {
 	return nil
 }
 
-// saveDBLocalState saves on disk the dbLocalState and only if successfull
+// saveDBLocalState saves on disk the dbLocalState and only if successful
 // updates the current in memory state
 func (p *PostgresKeeper) saveDBLocalState(dbls *DBLocalState) error {
 	sj, err := json.Marshal(dbls)
