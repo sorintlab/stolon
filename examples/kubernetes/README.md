@@ -14,11 +14,14 @@ Additional images are available:
 
 * `master-pg10`: automatically built after every commit to the master branch.
 
-In the [image](image/docker) directory you'll find a Makefile to build the image used in this example (starting from the official postgreSQL images). The Makefile generates the Dockefile from a template Dockerfile where you have to define the wanted postgres version and image tag (`PGVERSION` and `TAG` mandatory variables).
+In the [image](image/docker) directory you'll find a Dockerfile to build the image used in this example (starting from the official postgreSQL images).
+
+To build the image used in this example just execute (from the project root) `make` with the `docker` target providing the mandatory `PGVERSION` and `TAG` variables.
+
 For example, if you want to build an image named `stolon:master-pg10` that uses postgresql 10 you should execute:
 
 ```
-make PGVERSION=10 TAG=stolon:master-pg10
+make PGVERSION=10 TAG=stolon:master-pg10 docker
 ```
 
 Once the image is built you should push it to the docker registry used by your kubernetes infrastructure.
@@ -112,7 +115,7 @@ stolon-proxy-service   <none>                                    stolon-cluster=
 
 #### Connect to the proxy service
 
-The password for the stolon user will be the value specified in your `secret.yaml` above (or `password1` if you did not change it). 
+The password for the stolon user will be the value specified in your `secret.yaml` above (or `password1` if you did not change it).
 
 ```
 psql --host 10.247.50.217 --port 5432 postgres -U stolon -W
@@ -209,4 +212,3 @@ For PostgreSQL major version upgrade, see [PostgreSQL upgrade](postgresql_upgrad
 For any PostgreSQL upgrade, check PostgreSQL release note for any additional upgrade note.
 
 For stolon upgrade: TODO
-

@@ -2,7 +2,7 @@
 
 # Test script code thanks to coreos/etcd
 #
-# Run all etcd tests
+# Run all tests
 # ./test
 # ./test -v
 #
@@ -22,8 +22,6 @@ fi
 ORG_PATH="github.com/sorintlab"
 REPO_PATH="${ORG_PATH}/stolon"
 
-./build
-
 # test all packages excluding integration tests
 IGNORE_PKGS="(vendor/|tests/integration)"
 PACKAGES=$(find . -name \*_test.go | while read -r a; do dirname "$a"; done | sort | uniq | grep -vE "$IGNORE_PKGS" | sed "s|\./||g")
@@ -38,12 +36,12 @@ echo "Running tests..."
 COVER=${COVER:-"-cover"}
 
 # Use only of specific go version to run gofmt since it'll break when we'll use go 1.10 and go 1.11
-GOFMT_VERSION="go1.11"
+GOFMT_VERSION="go1.13"
 
 MAJOR_GOVERSION=$( echo -n $(go version) | grep -o 'go1\.[0-9]*' || true )
 if [ "${MAJOR_GOVERSION}" == "${GOFMT_VERSION}" ]; then
 	echo "Checking gofmt..."
-	fmtRes=$(gofmt -l $(find . -type f -name '*.go' ! -path './vendor/*'))
+	fmtRes=$(gofmt -l $(find . -type f -name '*.go' ! -path './vendor/*' ! -path '*/\.*'))
 	if [ -n "${fmtRes}" ]; then
 		echo -e "gofmt checking failed:\n${fmtRes}"
 		exit 255

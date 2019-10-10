@@ -33,8 +33,8 @@ local task_build_go(version, arch) = {
   steps: [
     { type: 'clone' },
     { type: 'restore_cache', keys: ['cache-sum-{{ md5sum "go.sum" }}', 'cache-date-'], dest_dir: '/go/pkg/mod/cache' },
-    { type: 'run', command: './build' },
-    { type: 'run', command: './test' },
+    { type: 'run', command: 'make' },
+    { type: 'run', command: 'make test' },
     { type: 'run', name: 'build integration tests binary', command: 'go test -c ./tests/integration/ -o bin/integration-tests' },
     { type: 'save_cache', key: 'cache-sum-{{ md5sum "go.sum" }}', contents: [{ source_dir: '/go/pkg/mod/cache' }] },
     { type: 'save_cache', key: 'cache-date-{{ year }}-{{ month }}-{{ day }}', contents: [{ source_dir: '/go/pkg/mod/cache' }] },
