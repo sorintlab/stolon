@@ -73,7 +73,7 @@ Anyway it's quite easy to reset a cluster from scratch keeping the current maste
 To build stolon we usually test and support the latest two major versions of Go like in the [Go release policy](https://golang.org/doc/devel/release.html#policy).
 
 ```
-./build
+make
 ```
 
 ## High availability

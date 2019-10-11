@@ -14,11 +14,14 @@ Additional images are available:
 
 * `master-pg10`: automatically built after every commit to the master branch.
 
-In the [image](../kubernetes/image/docker) directory you'll find a Makefile to build the image used in this example (starting from the official postgreSQL images). The Makefile generates the Dockefile from a template Dockerfile where you have to define the wanted postgres version and image tag (`PGVERSION` and `TAG` mandatory variables).
+In the [image](../kubernetes/image/docker) directory you'll find a Dockerfile to build the image used in this example (starting from the official postgreSQL images).
+
+To build the image used in this example just execute (from the project root) `make` with the `docker` target providing the mandatory `PGVERSION` and `TAG` variables.
+
 For example, if you want to build an image named `stolon:master-pg10` that uses postgresql 10 you should execute:
 
 ```
-make PGVERSION=10.3 TAG=stolon:master-pg10
+make PGVERSION=10 TAG=stolon:master-pg10 docker
 ```
 
 Once the image is built you should push it to the docker registry used by your swarm infrastructure.
