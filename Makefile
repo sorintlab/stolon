@@ -37,9 +37,7 @@ stolonctl:
 	CGO_ENABLED=0 GO111MODULE=on go build -ldflags $(LD_FLAGS) -o $(PROJDIR)/bin/stolonctl $(REPO_PATH)/cmd/stolonctl
 
 .PHONY: docker
-docker: build
+docker:
 	if [ -z $${PGVERSION} ]; then echo 'PGVERSION is undefined'; exit 1; fi; \
 	if [ -z $${TAG} ]; then echo 'TAG is undefined'; exit 1; fi; \
-	export TEMPFILE="$$(mktemp)"; \
-	sed -e "s/\$${PGVERSION}/$${PGVERSION}/" examples/kubernetes/image/docker/Dockerfile.template > $${TEMPFILE}; \
-	docker build -t $${TAG} -f $${TEMPFILE} .
+	docker build --build-arg PGVERSION=${PGVERSION} -t ${TAG} -f examples/kubernetes/image/docker/Dockerfile .
