@@ -141,6 +141,26 @@ local task_build_push_images(name, pgversions, istag, push) =
           ],
           depends: [],
         },
+        {
+          name: 'k8s test',
+          runtime: {
+            arch: 'amd64',
+            containers: [
+              {
+                image: 'bsycorp/kind:v1.15.1',
+                privileged: true,
+                entrypoint: '/usr/bin/supervisord --nodaemon -c /etc/supervisord.conf',
+              },
+            ],
+          },
+          working_dir: '/stolon',
+          steps: [
+            { type: 'restore_workspace', dest_dir: '/stolon' },
+            { type: 'run', command: 'apk add bash' },
+            { type: 'run', command: './scripts/agola-k8s.sh' },
+          ],
+          depends: ['checkout code and save to workspace'],
+        },
       ] + std.flattenArrays([
         [
           task_build_go(version, arch),
