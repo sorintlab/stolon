@@ -41,7 +41,7 @@ func PodName() (string, error) {
 }
 
 // NewKubeClientConfig return a kube client config that will by default use an
-// in cluster client config or, if not available or overriden an external client
+// in cluster client config or, if not available or overridden, an external client
 // config using the default client behavior used also by kubectl.
 func NewKubeClientConfig(kubeconfigPath, context, namespace string) clientcmd.ClientConfig {
 	rules := clientcmd.NewDefaultClientConfigLoadingRules()

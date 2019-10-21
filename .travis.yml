@@ -13,4 +13,4 @@ env:
 install: true
 
 script:
-  GO111MODULE=on ./test
+  - GO111MODULE=on make test

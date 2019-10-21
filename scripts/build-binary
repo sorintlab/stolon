@@ -62,7 +62,7 @@ function main {
 		export GOARCH="amd64"
 
 		pushd stolon >/dev/null
-			./build
+			make
 		popd >/dev/null
 
 		TARGET="stolon-${VER}-${GOOS}-${GOARCH}"
