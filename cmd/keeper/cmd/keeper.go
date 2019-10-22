@@ -114,6 +114,9 @@ type config struct {
 	pgSUPasswordFile        string
 	pgInitialSUUsername     string
 	pgInitialSUPasswordFile string
+
+	pgReplAuthMethodSocket string
+	pgSUAuthMethodSocket   string
 }
 
 var cfg config
@@ -135,10 +138,12 @@ func init() {
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgAdvertisePort, "pg-advertise-port", "", "postgresql instance port from outside. Use it to expose port different than local port with a PAT networking config")
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgBinPath, "pg-bin-path", "", "absolute path to postgresql binaries. If empty they will be searched in the current PATH")
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgReplAuthMethod, "pg-repl-auth-method", "md5", "postgres replication user auth method. Default is md5.")
+	CmdKeeper.PersistentFlags().StringVar(&cfg.pgReplAuthMethodSocket, "pg-repl-auth-method-socket", "md5", "postgres replication user auth method for socket connection. Default is md5.")
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgReplUsername, "pg-repl-username", "", "postgres replication user name. Required. It'll be created on db initialization. Must be the same for all keepers.")
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgReplPassword, "pg-repl-password", "", "postgres replication user password. Only one of --pg-repl-password or --pg-repl-passwordfile must be provided. Must be the same for all keepers.")
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgReplPasswordFile, "pg-repl-passwordfile", "", "postgres replication user password file. Only one of --pg-repl-password or --pg-repl-passwordfile must be provided. Must be the same for all keepers.")
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgSUAuthMethod, "pg-su-auth-method", "md5", "postgres superuser auth method. Default is md5.")
+	CmdKeeper.PersistentFlags().StringVar(&cfg.pgSUAuthMethodSocket, "pg-su-auth-method-socket", "md5", "postgres superuser auth method for socket connection. Default is md5.")
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgSUUsername, "pg-su-username", user, "postgres superuser user name. Used for keeper managed instance access and pg_rewind based synchronization. It'll be created on db initialization. Defaults to the name of the effective user running stolon-keeper. Must be the same for all keepers.")
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgSUPassword, "pg-su-password", "", "postgres superuser password. Only one of --pg-su-password or --pg-su-passwordfile must be provided. Must be the same for all keepers.")
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgSUPasswordFile, "pg-su-passwordfile", "", "postgres superuser password file. Only one of --pg-su-password or --pg-su-passwordfile must be provided. Must be the same for all keepers)")
@@ -279,7 +284,7 @@ func (p *PostgresKeeper) getLocalConnParams() pg.ConnParams {
 		"dbname": "postgres",
 		// no sslmode defined since it's not needed and supported over unix sockets
 	}
-	if p.pgSUAuthMethod != "trust" {
+	if p.pgSUAuthMethodSocket != "trust" {
 		cp.Set("password", p.pgSUPassword)
 	}
 	return cp
@@ -293,7 +298,7 @@ func (p *PostgresKeeper) getLocalReplConnParams() pg.ConnParams {
 		"port":     p.pgPort,
 		// no sslmode defined since it's not needed and supported over unix sockets
 	}
-	if p.pgReplAuthMethod != "trust" {
+	if p.pgReplAuthMethodSocket != "trust" {
 		cp.Set("password", p.pgReplPassword)
 	}
 	return cp
@@ -440,6 +445,9 @@ type PostgresKeeper struct {
 	pgSUPassword        string
 	pgInitialSUUsername string
 
+	pgReplAuthMethodSocket string
+	pgSUAuthMethodSocket   string
+
 	sleepInterval  time.Duration
 	requestTimeout time.Duration
 
@@ -489,6 +497,9 @@ func NewPostgresKeeper(cfg *config, end chan error) (*PostgresKeeper, error) {
 		pgSUUsername:        cfg.pgSUUsername,
 		pgSUPassword:        cfg.pgSUPassword,
 		pgInitialSUUsername: cfg.pgInitialSUUsername,
+
+		pgReplAuthMethodSocket: cfg.pgReplAuthMethodSocket,
+		pgSUAuthMethodSocket:   cfg.pgSUAuthMethodSocket,
 
 		sleepInterval:  cluster.DefaultSleepInterval,
 		requestTimeout: cluster.DefaultRequestTimeout,
@@ -1782,8 +1793,8 @@ func (p *PostgresKeeper) generateHBA(cd *cluster.ClusterData, db *cluster.DB, on
 	// Matched local connections are for postgres database and suUsername user with md5 auth
 	// Matched local replication connections are for replUsername user with md5 auth
 	computedHBA := []string{
-		fmt.Sprintf("local postgres %s %s", p.pgSUUsername, p.pgSUAuthMethod),
-		fmt.Sprintf("local replication %s %s", p.pgReplUsername, p.pgReplAuthMethod),
+		fmt.Sprintf("local postgres %s %s", p.pgSUUsername, p.pgSUAuthMethodSocket),
+		fmt.Sprintf("local replication %s %s", p.pgReplUsername, p.pgReplAuthMethodSocket),
 	}
 
 	switch *cd.Cluster.DefSpec().DefaultSUReplAccessMode {
@@ -1920,9 +1931,11 @@ func keeper(c *cobra.Command, args []string) {
 	if _, ok := validAuthMethods[cfg.pgReplAuthMethod]; !ok {
 		log.Fatalf("--pg-repl-auth-method must be one of: md5, trust")
 	}
+
 	if cfg.pgReplUsername == "" {
 		log.Fatalf("--pg-repl-username is required")
 	}
+
 	if cfg.pgReplAuthMethod == "trust" {
 		log.Warn("not utilizing a password for replication between hosts is extremely dangerous")
 		if cfg.pgReplPassword != "" || cfg.pgReplPasswordFile != "" {
@@ -1991,6 +2004,16 @@ func keeper(c *cobra.Command, args []string) {
 		if cfg.pgSUPassword != cfg.pgReplPassword && cfg.pgSUAuthMethod != "trust" && cfg.pgReplAuthMethod != "trust" {
 			log.Fatalf("provided superuser name and replication user name are the same but provided passwords are different")
 		}
+	}
+
+	if _, ok := validAuthMethods[cfg.pgSUAuthMethodSocket]; !ok {
+		log.Warn("--pg-su-auth-method-socket must be one of: md5, trust. Using the value of --pg-su-auth-method for --pg-su-auth-method-socket")
+		cfg.pgSUAuthMethodSocket = cfg.pgSUAuthMethod
+	}
+
+	if _, ok := validAuthMethods[cfg.pgReplAuthMethodSocket]; !ok {
+		log.Warn("--pg-repl-auth-method-socket must be one of: md5, trust. Using the value of --pg-repl-auth-method for --pg-repl-auth-method-socket")
+		cfg.pgReplAuthMethodSocket = cfg.pgReplAuthMethod
 	}
 
 	// Open (and create if needed) the lock file.
