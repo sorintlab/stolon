@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -96,24 +97,22 @@ func (s *DBLocalState) DeepCopy() *DBLocalState {
 type config struct {
 	cmd.CommonConfig
 
-	uid                     string
-	dataDir                 string
-	debug                   bool
-	pgListenAddress         string
-	pgAdvertiseAddress      string
-	pgPort                  string
-	pgAdvertisePort         string
-	pgBinPath               string
-	pgReplAuthMethod        string
-	pgReplUsername          string
-	pgReplPassword          string
-	pgReplPasswordFile      string
-	pgSUAuthMethod          string
-	pgSUUsername            string
-	pgSUPassword            string
-	pgSUPasswordFile        string
-	pgInitialSUUsername     string
-	pgInitialSUPasswordFile string
+	uid                string
+	dataDir            string
+	debug              bool
+	pgListenAddress    string
+	pgAdvertiseAddress string
+	pgPort             string
+	pgAdvertisePort    string
+	pgBinPath          string
+	pgReplAuthMethod   string
+	pgReplUsername     string
+	pgReplPassword     string
+	pgReplPasswordFile string
+	pgSUAuthMethod     string
+	pgSUUsername       string
+	pgSUPassword       string
+	pgSUPasswordFile   string
 }
 
 var cfg config
@@ -144,8 +143,12 @@ func init() {
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgSUPasswordFile, "pg-su-passwordfile", "", "postgres superuser password file. Only one of --pg-su-password or --pg-su-passwordfile must be provided. Must be the same for all keepers)")
 	CmdKeeper.PersistentFlags().BoolVar(&cfg.debug, "debug", false, "enable debug logging")
 
-	CmdKeeper.PersistentFlags().MarkDeprecated("id", "please use --uid")
-	CmdKeeper.PersistentFlags().MarkDeprecated("debug", "use --log-level=debug instead")
+	if err := CmdKeeper.PersistentFlags().MarkDeprecated("id", "please use --uid"); err != nil {
+		log.Fatal(err)
+	}
+	if err := CmdKeeper.PersistentFlags().MarkDeprecated("debug", "use --log-level=debug instead"); err != nil {
+		log.Fatal(err)
+	}
 }
 
 var managedPGParameters = []string{
@@ -344,9 +347,7 @@ func (p *PostgresKeeper) createPGParameters(db *cluster.DB) common.Parameters {
 		for _, synchronousStandby := range db.Spec.SynchronousStandbys {
 			synchronousStandbys = append(synchronousStandbys, common.StolonName(synchronousStandby))
 		}
-		for _, synchronousStandby := range db.Spec.ExternalSynchronousStandbys {
-			synchronousStandbys = append(synchronousStandbys, synchronousStandby)
-		}
+		synchronousStandbys = append(synchronousStandbys, db.Spec.ExternalSynchronousStandbys...)
 
 		// We deliberately don't use postgres FIRST or ANY methods with N
 		// different than len(synchronousStandbys) because we need that all the
@@ -424,21 +425,18 @@ type PostgresKeeper struct {
 
 	bootUUID string
 
-	dataDir             string
-	listenAddress       string
-	port                string
-	pgListenAddress     string
-	pgAdvertiseAddress  string
-	pgPort              string
-	pgAdvertisePort     string
-	pgBinPath           string
-	pgReplAuthMethod    string
-	pgReplUsername      string
-	pgReplPassword      string
-	pgSUAuthMethod      string
-	pgSUUsername        string
-	pgSUPassword        string
-	pgInitialSUUsername string
+	dataDir            string
+	pgListenAddress    string
+	pgAdvertiseAddress string
+	pgPort             string
+	pgAdvertisePort    string
+	pgBinPath          string
+	pgReplAuthMethod   string
+	pgReplUsername     string
+	pgReplPassword     string
+	pgSUAuthMethod     string
+	pgSUUsername       string
+	pgSUPassword       string
 
 	sleepInterval  time.Duration
 	requestTimeout time.Duration
@@ -477,18 +475,17 @@ func NewPostgresKeeper(cfg *config, end chan error) (*PostgresKeeper, error) {
 
 		dataDir: dataDir,
 
-		pgListenAddress:     cfg.pgListenAddress,
-		pgAdvertiseAddress:  cfg.pgAdvertiseAddress,
-		pgPort:              cfg.pgPort,
-		pgAdvertisePort:     cfg.pgAdvertisePort,
-		pgBinPath:           cfg.pgBinPath,
-		pgReplAuthMethod:    cfg.pgReplAuthMethod,
-		pgReplUsername:      cfg.pgReplUsername,
-		pgReplPassword:      cfg.pgReplPassword,
-		pgSUAuthMethod:      cfg.pgSUAuthMethod,
-		pgSUUsername:        cfg.pgSUUsername,
-		pgSUPassword:        cfg.pgSUPassword,
-		pgInitialSUUsername: cfg.pgInitialSUUsername,
+		pgListenAddress:    cfg.pgListenAddress,
+		pgAdvertiseAddress: cfg.pgAdvertiseAddress,
+		pgPort:             cfg.pgPort,
+		pgAdvertisePort:    cfg.pgAdvertisePort,
+		pgBinPath:          cfg.pgBinPath,
+		pgReplAuthMethod:   cfg.pgReplAuthMethod,
+		pgReplUsername:     cfg.pgReplUsername,
+		pgReplPassword:     cfg.pgReplPassword,
+		pgSUAuthMethod:     cfg.pgSUAuthMethod,
+		pgSUUsername:       cfg.pgSUUsername,
+		pgSUPassword:       cfg.pgSUPassword,
 
 		sleepInterval:  cluster.DefaultSleepInterval,
 		requestTimeout: cluster.DefaultRequestTimeout,
@@ -775,12 +772,12 @@ func (p *PostgresKeeper) Start(ctx context.Context) {
 	pgm := postgresql.NewManager(p.pgBinPath, p.dataDir, p.getLocalConnParams(), p.getLocalReplConnParams(), p.pgSUAuthMethod, p.pgSUUsername, p.pgSUPassword, p.pgReplAuthMethod, p.pgReplUsername, p.pgReplPassword, p.requestTimeout)
 	p.pgm = pgm
 
-	p.pgm.StopIfStarted(true)
+	_ = p.pgm.StopIfStarted(true)
 
 	smTimerCh := time.NewTimer(0).C
 	updatePGStateTimerCh := time.NewTimer(0).C
 	updateKeeperInfoTimerCh := time.NewTimer(0).C
-	for true {
+	for {
 		// The sleepInterval can be updated during normal execution. Ensure we regularly
 		// refresh the metric to account for those changes.
 		sleepInterval.Set(float64(p.sleepInterval / time.Second))
@@ -1805,7 +1802,7 @@ func (p *PostgresKeeper) generateHBA(cd *cluster.ClusterData, db *cluster.DB, on
 					addresses = append(addresses, dbElt.Status.ListenAddress)
 				}
 			}
-			sort.Sort(sort.StringSlice(addresses))
+			sort.Strings(addresses)
 			for _, address := range addresses {
 				computedHBA = append(
 					computedHBA,
@@ -1842,9 +1839,13 @@ func sigHandler(sigs chan os.Signal, cancel context.CancelFunc) {
 }
 
 func Execute() {
-	flagutil.SetFlagsFromEnv(CmdKeeper.PersistentFlags(), "STKEEPER")
+	if err := flagutil.SetFlagsFromEnv(CmdKeeper.PersistentFlags(), "STKEEPER"); err != nil {
+		log.Fatal(err)
+	}
 
-	CmdKeeper.Execute()
+	if err := CmdKeeper.Execute(); err != nil {
+		log.Fatal(err)
+	}
 }
 
 func keeper(c *cobra.Command, args []string) {
@@ -2005,7 +2006,7 @@ func keeper(c *cobra.Command, args []string) {
 	// Get a lock on our lock file.
 	ft := &syscall.Flock_t{
 		Type:   syscall.F_WRLCK,
-		Whence: int16(os.SEEK_SET),
+		Whence: int16(io.SeekStart),
 		Start:  0,
 		Len:    0, // Entire file.
 	}
@@ -2024,7 +2025,7 @@ func keeper(c *cobra.Command, args []string) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	end := make(chan error, 0)
+	end := make(chan error)
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	go sigHandler(sigs, cancel)

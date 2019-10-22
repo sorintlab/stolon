@@ -72,7 +72,9 @@ func init() {
 	CmdSentinel.PersistentFlags().StringVar(&cfg.initialClusterSpecFile, "initial-cluster-spec", "", "a file providing the initial cluster specification, used only at cluster initialization, ignored if cluster is already initialized")
 	CmdSentinel.PersistentFlags().BoolVar(&cfg.debug, "debug", false, "enable debug logging (deprecated, use log-level instead)")
 
-	CmdSentinel.PersistentFlags().MarkDeprecated("debug", "use --log-level=debug instead")
+	if err := CmdSentinel.PersistentFlags().MarkDeprecated("debug", "use --log-level=debug instead"); err != nil {
+		log.Fatal(err)
+	}
 }
 
 func (s *Sentinel) electionLoop(ctx context.Context) {
@@ -144,9 +146,7 @@ func (s *Sentinel) SetKeeperError(uid string) {
 }
 
 func (s *Sentinel) CleanKeeperError(uid string) {
-	if _, ok := s.keeperErrorTimers[uid]; ok {
-		delete(s.keeperErrorTimers, uid)
-	}
+	delete(s.keeperErrorTimers, uid)
 }
 
 func (s *Sentinel) SetDBError(uid string) {
@@ -156,9 +156,7 @@ func (s *Sentinel) SetDBError(uid string) {
 }
 
 func (s *Sentinel) CleanDBError(uid string) {
-	if _, ok := s.dbErrorTimers[uid]; ok {
-		delete(s.dbErrorTimers, uid)
-	}
+	delete(s.dbErrorTimers, uid)
 }
 
 func (s *Sentinel) SetDBNotIncreasingXLogPos(uid string) {
@@ -170,9 +168,7 @@ func (s *Sentinel) SetDBNotIncreasingXLogPos(uid string) {
 }
 
 func (s *Sentinel) CleanDBNotIncreasingXLogPos(uid string) {
-	if _, ok := s.dbNotIncreasingXLogPos[uid]; ok {
-		delete(s.dbNotIncreasingXLogPos, uid)
-	}
+	delete(s.dbNotIncreasingXLogPos, uid)
 }
 
 func (s *Sentinel) updateKeepersStatus(cd *cluster.ClusterData, keepersInfo cluster.KeepersInfo, firstRun bool) (*cluster.ClusterData, KeeperInfoHistories) {
@@ -334,7 +330,7 @@ func (s *Sentinel) activeProxiesInfos(proxiesInfo cluster.ProxiesInfo) cluster.P
 	pihs := s.proxyInfoHistories.DeepCopy()
 
 	// remove missing proxyInfos from the history
-	for proxyUID, _ := range pihs {
+	for proxyUID := range pihs {
 		if _, ok := proxiesInfo[proxyUID]; !ok {
 			delete(pihs, proxyUID)
 		}
@@ -369,7 +365,7 @@ func (s *Sentinel) findInitialKeeper(cd *cluster.ClusterData) (*cluster.Keeper, 
 	}
 	r := s.RandFn(len(cd.Keepers))
 	keys := []string{}
-	for k, _ := range cd.Keepers {
+	for k := range cd.Keepers {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
@@ -941,7 +937,6 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 	case cluster.ClusterPhaseNormal:
 		// Remove old keepers
 		keepersToRemove := []*cluster.Keeper{}
-		dbsToRemove := []*cluster.DB{}
 		for _, k := range newcd.Keepers {
 			// get db associated to the keeper
 			db := cd.FindDB(k)
@@ -952,17 +947,10 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 			if time.Now().After(k.Status.LastHealthyTime.Add(cd.Cluster.DefSpec().DeadKeeperRemovalInterval.Duration)) {
 				log.Infow("removing old dead keeper", "keeper", k.UID)
 				keepersToRemove = append(keepersToRemove, k)
-				//remove db associated to keeper
-				if db != nil {
-					dbsToRemove = append(dbsToRemove, db)
-				}
 			}
 		}
 		for _, k := range keepersToRemove {
 			delete(newcd.Keepers, k.UID)
-		}
-		for _, db := range dbsToRemove {
-			delete(newcd.DBs, db.UID)
 		}
 
 		// Calculate current master status
@@ -995,7 +983,7 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 			} else {
 				// if synchronous replication is enabled, only choose new master in the synchronous replication standbys.
 				var bestNewMasterDB *cluster.DB
-				if curMasterDB.Spec.SynchronousReplication == true {
+				if curMasterDB.Spec.SynchronousReplication {
 					commonSyncStandbys := util.CommonElements(curMasterDB.Status.SynchronousStandbys, curMasterDB.Spec.SynchronousStandbys)
 					if len(commonSyncStandbys) == 0 {
 						log.Warnw("cannot choose synchronous standby since there are no common elements between the latest master reported synchronous standbys and the db spec ones", "reported", curMasterDB.Status.SynchronousStandbys, "spec", curMasterDB.Spec.SynchronousStandbys)
@@ -1069,8 +1057,8 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 
 				// Just sort to always have them in the same order and avoid
 				// unneeded updates to synchronous_standby_names by the keeper.
-				sort.Sort(sort.StringSlice(newMasterDB.Spec.SynchronousStandbys))
-				sort.Sort(sort.StringSlice(newMasterDB.Spec.ExternalSynchronousStandbys))
+				sort.Strings(newMasterDB.Spec.SynchronousStandbys)
+				sort.Strings(newMasterDB.Spec.ExternalSynchronousStandbys)
 			} else {
 				newMasterDB.Spec.SynchronousReplication = false
 				newMasterDB.Spec.SynchronousStandbys = nil
@@ -1236,7 +1224,7 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 
 							// Just sort to always have them in the same order and avoid
 							// unneeded updates to synchronous_standby_names by the keeper.
-							sort.Sort(sort.StringSlice(masterDB.Spec.SynchronousStandbys))
+							sort.Strings(masterDB.Spec.SynchronousStandbys)
 						}
 					}
 
@@ -1262,25 +1250,25 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 
 						// Remove not existing dbs (removed above)
 						toRemove := map[string]struct{}{}
-						for dbUID, _ := range synchronousStandbys {
+						for dbUID := range synchronousStandbys {
 							if _, ok := newcd.DBs[dbUID]; !ok {
 								log.Infow("removing non existent db from synchronousStandbys", "masterDB", masterDB.UID, "db", dbUID)
 								toRemove[dbUID] = struct{}{}
 							}
 						}
-						for dbUID, _ := range toRemove {
+						for dbUID := range toRemove {
 							delete(synchronousStandbys, dbUID)
 						}
 
 						// Check if the current synchronous standbys are healthy or remove them
 						toRemove = map[string]struct{}{}
-						for dbUID, _ := range synchronousStandbys {
+						for dbUID := range synchronousStandbys {
 							if _, ok := goodStandbys[dbUID]; !ok {
 								log.Infow("removing failed synchronous standby", "masterDB", masterDB.UID, "db", dbUID)
 								toRemove[dbUID] = struct{}{}
 							}
 						}
-						for dbUID, _ := range toRemove {
+						for dbUID := range toRemove {
 							delete(synchronousStandbys, dbUID)
 						}
 
@@ -1289,7 +1277,7 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 							rc := len(synchronousStandbys) - maxSynchronousStandbys
 							removedCount := 0
 							toRemove = map[string]struct{}{}
-							for dbUID, _ := range synchronousStandbys {
+							for dbUID := range synchronousStandbys {
 								if removedCount >= rc {
 									break
 								}
@@ -1297,7 +1285,7 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 								toRemove[dbUID] = struct{}{}
 								removedCount++
 							}
-							for dbUID, _ := range toRemove {
+							for dbUID := range toRemove {
 								delete(synchronousStandbys, dbUID)
 							}
 						}
@@ -1352,7 +1340,7 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 							// know was defined in the primary and in sync if the
 							// primary fails.
 							allInPrev := true
-							for k, _ := range synchronousStandbys {
+							for k := range synchronousStandbys {
 								if _, ok := prevSynchronousStandbys[k]; !ok {
 									allInPrev = false
 								}
@@ -1384,11 +1372,11 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 						masterDB.Spec.SynchronousReplication = true
 						masterDB.Spec.SynchronousStandbys = []string{}
 						masterDB.Spec.ExternalSynchronousStandbys = []string{}
-						for dbUID, _ := range synchronousStandbys {
+						for dbUID := range synchronousStandbys {
 							masterDB.Spec.SynchronousStandbys = append(masterDB.Spec.SynchronousStandbys, dbUID)
 						}
 
-						for dbUID, _ := range externalSynchronousStandbys {
+						for dbUID := range externalSynchronousStandbys {
 							masterDB.Spec.ExternalSynchronousStandbys = append(masterDB.Spec.ExternalSynchronousStandbys, dbUID)
 						}
 
@@ -1401,8 +1389,8 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 
 						// Just sort to always have them in the same order and avoid
 						// unneeded updates to synchronous_standby_names by the keeper.
-						sort.Sort(sort.StringSlice(masterDB.Spec.SynchronousStandbys))
-						sort.Sort(sort.StringSlice(masterDB.Spec.ExternalSynchronousStandbys))
+						sort.Strings(masterDB.Spec.SynchronousStandbys)
+						sort.Strings(masterDB.Spec.ExternalSynchronousStandbys)
 					}
 				} else {
 					masterDB.Spec.SynchronousReplication = false
@@ -1786,7 +1774,7 @@ func (s *Sentinel) Start(ctx context.Context) {
 
 	go s.electionLoop(ctx)
 
-	for true {
+	for {
 		select {
 		case <-ctx.Done():
 			log.Infow("stopping stolon sentinel")
@@ -1937,9 +1925,13 @@ func sigHandler(sigs chan os.Signal, cancel context.CancelFunc) {
 }
 
 func Execute() {
-	flagutil.SetFlagsFromEnv(CmdSentinel.PersistentFlags(), "STSENTINEL")
+	if err := flagutil.SetFlagsFromEnv(CmdSentinel.PersistentFlags(), "STSENTINEL"); err != nil {
+		log.Fatal(err)
+	}
 
-	CmdSentinel.Execute()
+	if err := CmdSentinel.Execute(); err != nil {
+		log.Fatal(err)
+	}
 }
 
 func sentinel(c *cobra.Command, args []string) {
@@ -1973,7 +1965,7 @@ func sentinel(c *cobra.Command, args []string) {
 	log.Infow("sentinel uid", "uid", uid)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	end := make(chan bool, 0)
+	end := make(chan bool)
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	go sigHandler(sigs, cancel)

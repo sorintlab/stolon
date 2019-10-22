@@ -74,6 +74,12 @@ if [ -n "${licRes}" ]; then
 	exit 255
 fi
 
+
+echo "Checking with golangci-lint"
+curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh| sh -s -- -b ${BINDIR} v1.21.0
+${BINDIR}/golangci-lint run --deadline 5m
+
+echo "Running tests"
 go test -timeout 3m ${COVER} $@ ${PACKAGES} ${RACE}
 
 if [ -n "$INTEGRATION" ]; then

@@ -589,10 +589,10 @@ func NewKeeperFromKeeperInfo(ki *KeeperInfo) *Keeper {
 
 func (kss Keepers) SortedKeys() []string {
 	keys := []string{}
-	for k, _ := range kss {
+	for k := range kss {
 		keys = append(keys, k)
 	}
-	sort.Sort(sort.StringSlice(keys))
+	sort.Strings(keys)
 	return keys
 }
 

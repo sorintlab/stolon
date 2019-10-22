@@ -105,7 +105,9 @@ func TestSentinelEnabledProxies(t *testing.T) {
 	enabledProxies := cd.Proxy.Spec.EnabledProxies
 
 	t.Logf("starting sentinel")
-	ts.Start()
+	if err := ts.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
 
 	// check that the sentinel has become leader (cluster data is changed since
 	// it's updating keepers status) TODO(sgotti) find a better way to determine

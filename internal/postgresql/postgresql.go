@@ -178,7 +178,9 @@ func (p *Manager) Init(initConfig *InitConfig) error {
 	defer os.Remove(pwfile.Name())
 	defer pwfile.Close()
 
-	pwfile.WriteString(p.suPassword)
+	if _, err = pwfile.WriteString(p.suPassword); err != nil {
+		return err
+	}
 
 	name := filepath.Join(p.pgBinPath, "initdb")
 	cmd := exec.Command(name, "-D", p.dataDir, "-U", p.suUsername)
@@ -327,7 +329,7 @@ func (p *Manager) start(args ...string) error {
 	// leaving zombie childs
 	exited := make(chan struct{})
 	go func() {
-		cmd.Wait()
+		_ = cmd.Wait()
 		close(exited)
 	}()
 
@@ -778,7 +780,9 @@ func (p *Manager) SyncFromFollowedPGRewind(followedConnParams ConnParams, passwo
 	host := followedConnParams.Get("host")
 	port := followedConnParams.Get("port")
 	user := followedConnParams.Get("user")
-	pgpass.WriteString(fmt.Sprintf("%s:%s:*:%s:%s\n", host, port, user, password))
+	if _, err := pgpass.WriteString(fmt.Sprintf("%s:%s:*:%s:%s\n", host, port, user, password)); err != nil {
+		return err
+	}
 
 	// Disable synchronous commits. pg_rewind needs to create a
 	// temporary table on the master but if synchronous replication is
@@ -816,7 +820,9 @@ func (p *Manager) SyncFromFollowed(followedConnParams ConnParams, replSlot strin
 	port := fcp.Get("port")
 	user := fcp.Get("user")
 	password := fcp.Get("password")
-	pgpass.WriteString(fmt.Sprintf("%s:%s:*:%s:%s\n", host, port, user, password))
+	if _, err = pgpass.WriteString(fmt.Sprintf("%s:%s:*:%s:%s\n", host, port, user, password)); err != nil {
+		return err
+	}
 
 	// Remove password from the params passed to pg_basebackup
 	fcp.Del("password")

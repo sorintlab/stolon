@@ -18,17 +18,16 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/golang/mock/gomock"
-	"github.com/sorintlab/stolon/internal/mock/postgresql"
-	"github.com/sorintlab/stolon/internal/postgresql"
 	"reflect"
 	"testing"
+
+	"github.com/golang/mock/gomock"
+	mocks "github.com/sorintlab/stolon/internal/mock/postgresql"
+	"github.com/sorintlab/stolon/internal/postgresql"
 
 	"github.com/sorintlab/stolon/internal/cluster"
 	"github.com/sorintlab/stolon/internal/common"
 )
-
-var curUID int
 
 func TestParseSynchronousStandbyNames(t *testing.T) {
 	tests := []struct {
