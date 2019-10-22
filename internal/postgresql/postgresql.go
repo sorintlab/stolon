@@ -77,6 +77,7 @@ type Manager struct {
 	replUsername          string
 	replPassword          string
 	requestTimeout        time.Duration
+	enableAlterSystem     bool
 }
 
 type SystemData struct {
@@ -101,10 +102,11 @@ func SetLogger(l *zap.SugaredLogger) {
 	log = l
 }
 
-func NewManager(pgBinPath string, dataDir string, localConnParams, replConnParams ConnParams, suAuthMethod, suUsername, suPassword, replAuthMethod, replUsername, replPassword string, requestTimeout time.Duration) *Manager {
+func NewManager(pgBinPath string, dataDir string, localConnParams, replConnParams ConnParams, suAuthMethod, suUsername, suPassword, replAuthMethod, replUsername, replPassword string, requestTimeout time.Duration, enableAlterSystem bool) *Manager {
 	return &Manager{
 		pgBinPath:             pgBinPath,
 		dataDir:               filepath.Join(dataDir, "postgres"),
+		enableAlterSystem:     enableAlterSystem,
 		parameters:            make(common.Parameters),
 		recoveryParameters:    make(common.Parameters),
 		curParameters:         make(common.Parameters),
@@ -747,9 +749,9 @@ func (p *Manager) writePgHba() error {
 		})
 }
 
-// createPostgresqlAutoConf creates postgresql.auto.conf as a symlink to
+// disablePostgresqlAutoConf creates postgresql.auto.conf as a symlink to
 // /dev/null to block alter systems commands (they'll return an error)
-func (p *Manager) createPostgresqlAutoConf() error {
+func (p *Manager) disablePostgresqlAutoConf() error {
 	pgAutoConfPath := filepath.Join(p.dataDir, postgresAutoConf)
 	if err := os.Remove(pgAutoConfPath); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("error removing postgresql.auto.conf file: %v", err)
@@ -758,6 +760,41 @@ func (p *Manager) createPostgresqlAutoConf() error {
 		return fmt.Errorf("error symlinking postgresql.auto.conf file to /dev/null: %v", err)
 	}
 	return nil
+}
+
+func (p *Manager) enablePostgresqlAutoConf() error {
+	pgAutoConfPath := filepath.Join(p.dataDir, postgresAutoConf)
+	fileInfo, err := os.Lstat(pgAutoConfPath)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("error reading stats from postgresql.auto.conf file: %v", err)
+	}
+	if fileInfo != nil && fileInfo.Mode()&os.ModeSymlink != 0 {
+		originFile, err := os.Readlink(fileInfo.Name())
+		if err != nil {
+			return fmt.Errorf("error reading link from postgresql.auto.conf file: %v", err)
+		}
+		if originFile == "/dev/null" {
+			if err := os.Remove(pgAutoConfPath); err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("error removing postgresql.auto.conf symlink: %v", err)
+			}
+		}
+	}
+	if _, err := os.Stat(pgAutoConfPath); err != nil && os.IsNotExist(err) {
+		emptyFile, err := os.Create(pgAutoConfPath)
+		emptyFile.Close()
+		if err != nil {
+			return fmt.Errorf("error creating postgresql.auto.conf: %v", err)
+		}
+	}
+	return nil
+}
+
+func (p *Manager) createPostgresqlAutoConf() error {
+	if p.enableAlterSystem {
+		return p.enablePostgresqlAutoConf()
+	} else {
+		return p.disablePostgresqlAutoConf()
+	}
 }
 
 func (p *Manager) SyncFromFollowedPGRewind(followedConnParams ConnParams, password string) error {
