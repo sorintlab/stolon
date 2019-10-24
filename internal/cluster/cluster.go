@@ -290,6 +290,37 @@ type ClusterSpec struct {
 	AutomaticPgRestart *bool `json:"automaticPgRestart"`
 }
 
+type ClusterSpecNew struct {
+	SleepInterval                    *Duration         `json:"sleepInterval,omitempty"`
+	RequestTimeout                   *Duration         `json:"requestTimeout,omitempty"`
+	ConvergenceTimeout               *Duration         `json:"convergenceTimeout,omitempty"`
+	InitTimeout                      *Duration         `json:"initTimeout,omitempty"`
+	SyncTimeout                      *Duration         `json:"syncTimeout,omitempty"`
+	DBWaitReadyTimeout               *Duration         `json:"dbWaitReadyTimeout,omitempty"`
+	FailInterval                     *Duration         `json:"failInterval,omitempty"`
+	DeadKeeperRemovalInterval        *Duration         `json:"deadKeeperRemovalInterval,omitempty"`
+	MaxStandbys                      *uint16           `json:"maxStandbys,omitempty"`
+	MaxStandbysPerSender             *uint16           `json:"maxStandbysPerSender,omitempty"`
+	MaxStandbyLag                    *uint32           `json:"maxStandbyLag,omitempty"`
+	SynchronousReplication           *bool             `json:"synchronousReplication,omitempty"`
+	MinSynchronousStandbys           *uint16           `json:"minSynchronousStandbys,omitempty"`
+	MaxSynchronousStandbys           *uint16           `json:"maxSynchronousStandbys,omitempty"`
+	AdditionalWalSenders             *uint16           `json:"additionalWalSenders,omitempty"`
+	AdditionalMasterReplicationSlots []string          `json:"additionalMasterReplicationSlots,omitempty"`
+	UsePgrewind                      *bool             `json:"usePgrewind,omitempty"`
+	InitMode                         *ClusterInitMode  `json:"initMode,omitempty"`
+	MergePgParameters                *bool             `json:"mergePgParameters,omitempty"`
+	Role                             *ClusterRole      `json:"role,omitempty"`
+	NewConfig                        *NewConfig        `json:"newConfig,omitempty"`
+	PITRConfig                       *PITRConfig       `json:"pitrConfig,omitempty"`
+	ExistingConfig                   *ExistingConfig   `json:"existingConfig,omitempty"`
+	StandbyConfig                    *StandbyConfig    `json:"standbyConfig,omitempty"`
+	DefaultSUReplAccessMode          *SUReplAccessMode `json:"defaultSUReplAccessMode,omitempty"`
+	PGParameters                     PGParameters      `json:"pgParameters,omitempty"`
+	PGHBA                            []string          `json:"pgHBA"`
+	AutomaticPgRestart               *bool             `json:"automaticPgRestart,omitempty"`
+}
+
 type ClusterStatus struct {
 	CurrentGeneration int64        `json:"currentGeneration,omitempty"`
 	Phase             ClusterPhase `json:"phase,omitempty"`

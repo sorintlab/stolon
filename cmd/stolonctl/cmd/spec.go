@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 
 	cmdcommon "github.com/sorintlab/stolon/cmd"
+	"github.com/sorintlab/stolon/internal/cluster"
 	"github.com/spf13/cobra"
 )
 
@@ -59,7 +60,7 @@ func spec(cmd *cobra.Command, args []string) {
 	if specOpts.defaults {
 		cs = cd.Cluster.DefSpec()
 	}
-	specj, err := json.MarshalIndent(cs, "", "\t")
+	specj, err := json.MarshalIndent(cluster.ClusterSpecNew(*cs), "", "\t")
 	if err != nil {
 		die("failed to marshall spec: %v", err)
 	}
