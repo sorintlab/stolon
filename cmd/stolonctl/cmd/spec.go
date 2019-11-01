@@ -19,6 +19,7 @@ import (
 
 	cmdcommon "github.com/sorintlab/stolon/cmd"
 	"github.com/sorintlab/stolon/internal/cluster"
+	"github.com/sorintlab/stolon/internal/postgresql"
 
 	"github.com/spf13/cobra"
 )
@@ -69,6 +70,7 @@ type ClusterSpecNoDefaults struct {
 	DefaultSUReplAccessMode          *cluster.SUReplAccessMode `json:"defaultSUReplAccessMode,omitempty"`
 	PGParameters                     cluster.PGParameters      `json:"pgParameters,omitempty"`
 	PGHBA                            []string                  `json:"pgHBA,omitempty"`
+	PgIdent                          postgresql.PgIdent        `json:"pgIdent"`
 	AutomaticPgRestart               *bool                     `json:"automaticPgRestart,omitempty"`
 }
 
@@ -100,6 +102,7 @@ type ClusterSpecDefaults struct {
 	DefaultSUReplAccessMode          *cluster.SUReplAccessMode `json:"defaultSUReplAccessMode"`
 	PGParameters                     cluster.PGParameters      `json:"pgParameters"`
 	PGHBA                            []string                  `json:"pgHBA"`
+	PgIdent                          postgresql.PgIdent        `json:"pgIdent"`
 	AutomaticPgRestart               *bool                     `json:"automaticPgRestart"`
 }
 

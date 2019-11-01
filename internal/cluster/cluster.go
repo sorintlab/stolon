@@ -286,6 +286,8 @@ type ClusterSpec struct {
 	// Additional pg_hba.conf entries
 	// we don't set omitempty since we want to distinguish between null or empty slice
 	PGHBA []string `json:"pgHBA"`
+	// pg_ident.conf entries
+	PgIdent util.PgIdent `json:"pgIdent"`
 	// Enable automatic pg restart when pg parameters that requires restart changes
 	AutomaticPgRestart *bool `json:"automaticPgRestart"`
 }
@@ -625,6 +627,8 @@ type DBSpec struct {
 	// Additional pg_hba.conf entries
 	// We don't set omitempty since we want to distinguish between null or empty slice
 	PGHBA []string `json:"pgHBA"`
+	// pg_ident.conf entries
+	PgIdent util.PgIdent `json:"pgIdent"`
 	// DB Role (master or standby)
 	Role common.Role `json:"role,omitempty"`
 	// FollowConfig when Role is "standby"
