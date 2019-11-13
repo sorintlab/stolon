@@ -1,7 +1,9 @@
 ## Point in time recovery
 
 Stolon can do a point a time recovery starting from an existing backup.
-This example shows how to do point in time recovery with stolon using [wal-e](https://github.com/wal-e/wal-e)
+
+* [This](pitr_wal-g.md) example shows how to do point in time recovery with stolon using [wal-g](https://github.com/wal-g/wal-g)
+* [This](pitr_wal-e.md) example shows how to do point in time recovery with stolon using [wal-e](https://github.com/wal-e/wal-e)
 
 
 ### Backups
