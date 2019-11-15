@@ -12,6 +12,7 @@ We suggest that you first read the [Stolon Architecture and Requirements](archit
 * Backup/Restore
   * [Point In Time Recovery](pitr.md)
   * [Point In Time Recovery with wal-e](pitr_wal-e.md)
+  * [Point In Time Recovery with wal-g](pitr_wal-g.md)
 * [Standby Cluster](standbycluster.md)
 
 ### Misc topics
