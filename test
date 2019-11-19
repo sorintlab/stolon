@@ -57,7 +57,7 @@ fi
 
 echo "Checking govet -shadow ..."
 go install golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow
-export PATH=${GOPATH}/bin:${PATH}
+export PATH="$(go env GOPATH)/bin":${PATH}
 shadow_tool=$(which shadow)
 vetRes=$(${shadow_tool} ${PACKAGES})
 if [ -n "${vetRes}" ]; then

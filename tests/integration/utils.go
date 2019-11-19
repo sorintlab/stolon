@@ -443,9 +443,18 @@ func (tk *TestKeeper) PGDataVersion() (int, int, error) {
 }
 
 func (tk *TestKeeper) GetPrimaryConninfo() (pg.ConnParams, error) {
+	maj, _, err := tk.PGDataVersion()
+	if err != nil {
+		return nil, err
+	}
+
+	confFile := "recovery.conf"
+	if maj >= 12 {
+		confFile = "postgresql.conf"
+	}
 	regex := regexp.MustCompile(`\s*primary_conninfo\s*=\s*'(.*)'$`)
 
-	fh, err := os.Open(filepath.Join(tk.dataDir, "postgres", "recovery.conf"))
+	fh, err := os.Open(filepath.Join(tk.dataDir, "postgres", confFile))
 	if os.IsNotExist(err) {
 		return nil, nil
 	}
