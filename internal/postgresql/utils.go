@@ -453,7 +453,7 @@ func isRestartRequiredUsingPgSettingsContext(ctx context.Context, connParams Con
 }
 
 func ParseBinaryVersion(v string) (int, int, error) {
-	// extact version (removing beta*, rc* etc...)
+	// extract version (removing beta*, rc* etc...)
 	regex, err := regexp.Compile(`.* \(PostgreSQL\) ([0-9\.]+).*`)
 	if err != nil {
 		return 0, 0, err

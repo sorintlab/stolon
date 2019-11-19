@@ -13,7 +13,7 @@ local ci_runtime(pgversion, arch) = {
   arch: arch,
   containers: [
     {
-      image: 'sorintlab/stolon-ci-image:v0.1.0-pg' + pgversion,
+      image: 'sorintlab/stolon-ci-image:v0.2.0-pg' + pgversion,
       volumes: [
         {
           path: '/stolontemp',
@@ -172,15 +172,15 @@ local task_build_push_images(name, pgversions, istag, push) =
           task_integration_tests(store, pgversion, 'amd64'),
         ]
         for store in ['etcdv2', 'consul']
-        for pgversion in ['11' /*, '12' */]
+        for pgversion in ['12']
       ]) + std.flattenArrays([
         [
           task_integration_tests(store, pgversion, 'amd64'),
         ]
         for store in ['etcdv3']
-        for pgversion in ['9.5', '9.6', '10', '11' /*, '12' */]
+        for pgversion in ['9.5', '9.6', '10', '11', '12']
       ]) + [
-        task_build_push_images('test build docker "stolon" images', '9.4 9.5 9.6 10 11', false, false)
+        task_build_push_images('test build docker "stolon" images', '9.4 9.5 9.6 10 11 12', false, false)
         + {
           when: {
             branch: {
@@ -190,13 +190,13 @@ local task_build_push_images(name, pgversions, istag, push) =
             ref: '#refs/pull/\\d+/head#',
           },
         },
-        task_build_push_images('build and push docker "stolon" master branch images', '9.4 9.5 9.6 10 11', false, true)
+        task_build_push_images('build and push docker "stolon" master branch images', '9.4 9.5 9.6 10 11 12', false, true)
         + {
           when: {
             branch: 'master',
           },
         },
-        task_build_push_images('build and push docker "stolon" tag images', '9.4 9.5 9.6 10 11', true, true)
+        task_build_push_images('build and push docker "stolon" tag images', '9.4 9.5 9.6 10 11 12', true, true)
         + {
           when: {
             tag: '#v.*#',

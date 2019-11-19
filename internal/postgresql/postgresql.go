@@ -24,6 +24,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -41,10 +42,13 @@ import (
 //go:generate mockgen -destination=../mock/postgresql/postgresql.go -package=mocks -source=$GOFILE
 
 const (
-	postgresConf         = "postgresql.conf"
-	postgresRecoveryConf = "recovery.conf"
-	postgresAutoConf     = "postgresql.auto.conf"
-	tmpPostgresConf      = "stolon-temp-postgresql.conf"
+	postgresConf           = "postgresql.conf"
+	postgresRecoveryConf   = "recovery.conf"
+	postgresStandbySignal  = "standby.signal"
+	postgresRecoverySignal = "recovery.signal"
+	postgresRecoveryDone   = "recovery.done"
+	postgresAutoConf       = "postgresql.auto.conf"
+	tmpPostgresConf        = "stolon-temp-postgresql.conf"
 
 	startTimeout = 60 * time.Second
 )
@@ -60,23 +64,51 @@ type PGManager interface {
 }
 
 type Manager struct {
-	pgBinPath             string
-	dataDir               string
-	parameters            common.Parameters
-	recoveryParameters    common.Parameters
-	hba                   []string
-	curParameters         common.Parameters
-	curRecoveryParameters common.Parameters
-	curHba                []string
-	localConnParams       ConnParams
-	replConnParams        ConnParams
-	suAuthMethod          string
-	suUsername            string
-	suPassword            string
-	replAuthMethod        string
-	replUsername          string
-	replPassword          string
-	requestTimeout        time.Duration
+	pgBinPath          string
+	dataDir            string
+	parameters         common.Parameters
+	recoveryOptions    *RecoveryOptions
+	hba                []string
+	curParameters      common.Parameters
+	curRecoveryOptions *RecoveryOptions
+	curHba             []string
+	localConnParams    ConnParams
+	replConnParams     ConnParams
+	suAuthMethod       string
+	suUsername         string
+	suPassword         string
+	replAuthMethod     string
+	replUsername       string
+	replPassword       string
+	requestTimeout     time.Duration
+}
+
+type RecoveryMode int
+
+const (
+	RecoveryModeNone RecoveryMode = iota
+	RecoveryModeStandby
+	RecoveryModeRecovery
+)
+
+type RecoveryOptions struct {
+	RecoveryMode       RecoveryMode
+	RecoveryParameters common.Parameters
+}
+
+func NewRecoveryOptions() *RecoveryOptions {
+	return &RecoveryOptions{RecoveryParameters: make(common.Parameters)}
+}
+
+func (r *RecoveryOptions) DeepCopy() *RecoveryOptions {
+	nr, err := copystructure.Copy(r)
+	if err != nil {
+		panic(err)
+	}
+	if !reflect.DeepEqual(r, nr) {
+		panic("not equal")
+	}
+	return nr.(*RecoveryOptions)
 }
 
 type SystemData struct {
@@ -103,21 +135,21 @@ func SetLogger(l *zap.SugaredLogger) {
 
 func NewManager(pgBinPath string, dataDir string, localConnParams, replConnParams ConnParams, suAuthMethod, suUsername, suPassword, replAuthMethod, replUsername, replPassword string, requestTimeout time.Duration) *Manager {
 	return &Manager{
-		pgBinPath:             pgBinPath,
-		dataDir:               filepath.Join(dataDir, "postgres"),
-		parameters:            make(common.Parameters),
-		recoveryParameters:    make(common.Parameters),
-		curParameters:         make(common.Parameters),
-		curRecoveryParameters: make(common.Parameters),
-		replConnParams:        replConnParams,
-		localConnParams:       localConnParams,
-		suAuthMethod:          suAuthMethod,
-		suUsername:            suUsername,
-		suPassword:            suPassword,
-		replAuthMethod:        replAuthMethod,
-		replUsername:          replUsername,
-		replPassword:          replPassword,
-		requestTimeout:        requestTimeout,
+		pgBinPath:          pgBinPath,
+		dataDir:            filepath.Join(dataDir, "postgres"),
+		parameters:         make(common.Parameters),
+		recoveryOptions:    NewRecoveryOptions(),
+		curParameters:      make(common.Parameters),
+		curRecoveryOptions: NewRecoveryOptions(),
+		replConnParams:     replConnParams,
+		localConnParams:    localConnParams,
+		suAuthMethod:       suAuthMethod,
+		suUsername:         suUsername,
+		suPassword:         suPassword,
+		replAuthMethod:     replAuthMethod,
+		replUsername:       replUsername,
+		replPassword:       replPassword,
+		requestTimeout:     requestTimeout,
 	}
 }
 
@@ -129,12 +161,17 @@ func (p *Manager) CurParameters() common.Parameters {
 	return p.curParameters
 }
 
-func (p *Manager) SetRecoveryParameters(recoveryParameters common.Parameters) {
-	p.recoveryParameters = recoveryParameters
+func (p *Manager) SetRecoveryOptions(recoveryOptions *RecoveryOptions) {
+	if recoveryOptions == nil {
+		p.recoveryOptions = NewRecoveryOptions()
+		return
+	}
+
+	p.recoveryOptions = recoveryOptions
 }
 
-func (p *Manager) CurRecoveryParameters() common.Parameters {
-	return p.curRecoveryParameters
+func (p *Manager) CurRecoveryOptions() *RecoveryOptions {
+	return p.curRecoveryOptions
 }
 
 func (p *Manager) SetHba(hba []string) {
@@ -153,12 +190,8 @@ func (p *Manager) UpdateCurParameters() {
 	p.curParameters = n.(common.Parameters)
 }
 
-func (p *Manager) UpdateCurRecoveryParameters() {
-	n, err := copystructure.Copy(p.recoveryParameters)
-	if err != nil {
-		panic(err)
-	}
-	p.curRecoveryParameters = n.(common.Parameters)
+func (p *Manager) UpdateCurRecoveryOptions() {
+	p.curRecoveryOptions = p.recoveryOptions.DeepCopy()
 }
 
 func (p *Manager) UpdateCurHba() {
@@ -245,45 +278,16 @@ out:
 // StartTmpMerged starts postgres with a conf file different than
 // postgresql.conf, including it at the start of the conf if it exists
 func (p *Manager) StartTmpMerged() error {
+	if err := p.writeConfs(true); err != nil {
+		return err
+	}
 	tmpPostgresConfPath := filepath.Join(p.dataDir, tmpPostgresConf)
-
-	err := common.WriteFileAtomicFunc(tmpPostgresConfPath, 0600,
-		func(f io.Writer) error {
-			// include postgresql.conf if it exists
-			_, err := os.Stat(filepath.Join(p.dataDir, postgresConf))
-			if err != nil && !os.IsNotExist(err) {
-				return err
-			}
-			if !os.IsNotExist(err) {
-				if _, err := f.Write([]byte(fmt.Sprintf("include '%s'\n", postgresConf))); err != nil {
-					return err
-				}
-			}
-			for k, v := range p.parameters {
-				// Single quotes needs to be doubled
-				ev := strings.Replace(v, `'`, `''`, -1)
-				if _, err := f.Write([]byte(fmt.Sprintf("%s = '%s'\n", k, ev))); err != nil {
-					return err
-				}
-			}
-			return nil
-		})
-	if err != nil {
-		return fmt.Errorf("error writing %s file: %v", tmpPostgresConf, err)
-	}
-
-	if err := p.writePgHba(); err != nil {
-		return fmt.Errorf("error writing pg_hba.conf file: %v", err)
-	}
-	if err := p.writeRecoveryConf(); err != nil {
-		return fmt.Errorf("error writing %s file: %v", postgresRecoveryConf, err)
-	}
 
 	return p.start("-c", fmt.Sprintf("config_file=%s", tmpPostgresConfPath))
 }
 
 func (p *Manager) Start() error {
-	if err := p.writeConfs(); err != nil {
+	if err := p.writeConfs(false); err != nil {
 		return err
 	}
 	return p.start()
@@ -368,7 +372,7 @@ func (p *Manager) start(args ...string) error {
 	}
 
 	p.UpdateCurParameters()
-	p.UpdateCurRecoveryParameters()
+	p.UpdateCurRecoveryOptions()
 	p.UpdateCurHba()
 
 	return nil
@@ -416,7 +420,7 @@ func (p *Manager) IsStarted() (bool, error) {
 func (p *Manager) Reload() error {
 	log.Infow("reloading database configuration")
 
-	if err := p.writeConfs(); err != nil {
+	if err := p.writeConfs(false); err != nil {
 		return err
 	}
 
@@ -432,7 +436,7 @@ func (p *Manager) Reload() error {
 	}
 
 	p.UpdateCurParameters()
-	p.UpdateCurRecoveryParameters()
+	p.UpdateCurRecoveryOptions()
 	p.UpdateCurHba()
 
 	return nil
@@ -491,22 +495,42 @@ func (p *Manager) WaitReady(timeout time.Duration) error {
 }
 
 func (p *Manager) WaitRecoveryDone(timeout time.Duration) error {
-	start := time.Now()
-	for time.Now().Add(-timeout).Before(start) {
-		_, err := os.Stat(filepath.Join(p.dataDir, "recovery.done"))
-		if err != nil && !os.IsNotExist(err) {
-			return err
-		}
-		if !os.IsNotExist(err) {
-			return nil
-		}
-		time.Sleep(1 * time.Second)
+	maj, _, err := p.BinaryVersion()
+	if err != nil {
+		return fmt.Errorf("error fetching pg version: %v", err)
 	}
+
+	start := time.Now()
+	if maj >= 12 {
+		for time.Now().Add(-timeout).Before(start) {
+			_, err := os.Stat(filepath.Join(p.dataDir, postgresRecoverySignal))
+			if err != nil && !os.IsNotExist(err) {
+				return err
+			}
+			if os.IsNotExist(err) {
+				return nil
+			}
+			time.Sleep(1 * time.Second)
+		}
+	} else {
+		for time.Now().Add(-timeout).Before(start) {
+			_, err := os.Stat(filepath.Join(p.dataDir, postgresRecoveryDone))
+			if err != nil && !os.IsNotExist(err) {
+				return err
+			}
+			if !os.IsNotExist(err) {
+				return nil
+			}
+			time.Sleep(1 * time.Second)
+		}
+	}
+
 	return fmt.Errorf("timeout waiting for db recovery")
 }
 
 func (p *Manager) Promote() error {
 	log.Infow("promoting database")
+
 	name := filepath.Join(p.pgBinPath, "pg_ctl")
 	cmd := exec.Command(name, "promote", "-w", "-D", p.dataDir)
 	log.Debugw("execing cmd", "cmd", cmd)
@@ -517,6 +541,11 @@ func (p *Manager) Promote() error {
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("error: %v", err)
 	}
+
+	if err := p.writeConfs(false); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -679,34 +708,88 @@ func (p *Manager) IsInitialized() (bool, error) {
 	return true, nil
 }
 
+// GetRole return the current instance role
 func (p *Manager) GetRole() (common.Role, error) {
-	// if recovery.conf exists then consider it as a standby
-	_, err := os.Stat(filepath.Join(p.dataDir, postgresRecoveryConf))
-	if err != nil && !os.IsNotExist(err) {
-		return "", fmt.Errorf("error determining if recovery.conf exists: %v", err)
+	maj, _, err := p.BinaryVersion()
+	if err != nil {
+		return "", fmt.Errorf("error fetching pg version: %v", err)
 	}
-	if os.IsNotExist(err) {
-		return common.RoleMaster, nil
+
+	if maj >= 12 {
+		// if standby.signal file exists then consider it as a standby
+		_, err := os.Stat(filepath.Join(p.dataDir, postgresStandbySignal))
+		if err != nil && !os.IsNotExist(err) {
+			return "", fmt.Errorf("error determining if %q file exists: %v", postgresStandbySignal, err)
+		}
+		if os.IsNotExist(err) {
+			return common.RoleMaster, nil
+		}
+		return common.RoleStandby, nil
+	} else {
+		// if recovery.conf file exists then consider it as a standby
+		_, err := os.Stat(filepath.Join(p.dataDir, postgresRecoveryConf))
+		if err != nil && !os.IsNotExist(err) {
+			return "", fmt.Errorf("error determining if %q file exists: %v", postgresRecoveryConf, err)
+		}
+		if os.IsNotExist(err) {
+			return common.RoleMaster, nil
+		}
+		return common.RoleStandby, nil
 	}
-	return common.RoleStandby, nil
 }
 
-func (p *Manager) writeConfs() error {
-	if err := p.writeConf(); err != nil {
+func (p *Manager) writeConfs(useTmpPostgresConf bool) error {
+	maj, _, err := p.BinaryVersion()
+	if err != nil {
+		return fmt.Errorf("error fetching pg version: %v", err)
+	}
+
+	writeRecoveryParamsInPostgresConf := false
+	if maj >= 12 {
+		writeRecoveryParamsInPostgresConf = true
+	}
+
+	if err := p.writeConf(useTmpPostgresConf, writeRecoveryParamsInPostgresConf); err != nil {
 		return fmt.Errorf("error writing %s file: %v", postgresConf, err)
 	}
 	if err := p.writePgHba(); err != nil {
 		return fmt.Errorf("error writing pg_hba.conf file: %v", err)
 	}
-	if err := p.writeRecoveryConf(); err != nil {
-		return fmt.Errorf("error writing %s file: %v", postgresRecoveryConf, err)
+	if !writeRecoveryParamsInPostgresConf {
+		if err := p.writeRecoveryConf(); err != nil {
+			return fmt.Errorf("error writing %s file: %v", postgresRecoveryConf, err)
+		}
+	} else {
+		if err := p.writeStandbySignal(); err != nil {
+			return fmt.Errorf("error writing %s file: %v", postgresStandbySignal, err)
+		}
+		if err := p.writeRecoverySignal(); err != nil {
+			return fmt.Errorf("error writing %s file: %v", postgresRecoverySignal, err)
+		}
 	}
 	return nil
 }
 
-func (p *Manager) writeConf() error {
-	return common.WriteFileAtomicFunc(filepath.Join(p.dataDir, postgresConf), 0600,
+func (p *Manager) writeConf(useTmpPostgresConf, writeRecoveryParams bool) error {
+	confFile := postgresConf
+	if useTmpPostgresConf {
+		confFile = tmpPostgresConf
+	}
+
+	return common.WriteFileAtomicFunc(filepath.Join(p.dataDir, confFile), 0600,
 		func(f io.Writer) error {
+			if useTmpPostgresConf {
+				// include postgresql.conf if it exists
+				_, err := os.Stat(filepath.Join(p.dataDir, postgresConf))
+				if err != nil && !os.IsNotExist(err) {
+					return err
+				}
+				if !os.IsNotExist(err) {
+					if _, err := f.Write([]byte(fmt.Sprintf("include '%s'\n", postgresConf))); err != nil {
+						return err
+					}
+				}
+			}
 			for k, v := range p.parameters {
 				// Single quotes needs to be doubled
 				ev := strings.Replace(v, `'`, `''`, -1)
@@ -714,23 +797,68 @@ func (p *Manager) writeConf() error {
 					return err
 				}
 			}
+
+			if writeRecoveryParams {
+				// write recovery parameters only if recoveryMode is not none
+				if p.recoveryOptions.RecoveryMode != RecoveryModeNone {
+					for n, v := range p.recoveryOptions.RecoveryParameters {
+						if _, err := f.Write([]byte(fmt.Sprintf("%s = '%s'\n", n, v))); err != nil {
+							return err
+						}
+					}
+				}
+			}
+
 			return nil
 		})
 }
 
 func (p *Manager) writeRecoveryConf() error {
-	// write recovery.conf only if recoveryParameters isn't nil or empty
-	if len(p.recoveryParameters) == 0 {
+	// write recovery.conf only if recoveryMode is not none
+	if p.recoveryOptions.RecoveryMode == RecoveryModeNone {
 		return nil
 	}
 
 	return common.WriteFileAtomicFunc(filepath.Join(p.dataDir, postgresRecoveryConf), 0600,
 		func(f io.Writer) error {
-			for n, v := range p.recoveryParameters {
+			if p.recoveryOptions.RecoveryMode == RecoveryModeStandby {
+				if _, err := f.Write([]byte("standby_mode = 'on'\n")); err != nil {
+					return err
+				}
+			}
+			for n, v := range p.recoveryOptions.RecoveryParameters {
 				if _, err := f.Write([]byte(fmt.Sprintf("%s = '%s'\n", n, v))); err != nil {
 					return err
 				}
 			}
+			return nil
+		})
+}
+
+func (p *Manager) writeStandbySignal() error {
+	// write standby.signal only if recoveryMode is standby
+	if p.recoveryOptions.RecoveryMode != RecoveryModeStandby {
+		return nil
+	}
+
+	log.Infof("writing standby signal file")
+
+	return common.WriteFileAtomicFunc(filepath.Join(p.dataDir, postgresStandbySignal), 0600,
+		func(f io.Writer) error {
+			return nil
+		})
+}
+
+func (p *Manager) writeRecoverySignal() error {
+	// write standby.signal only if recoveryMode is recovery
+	if p.recoveryOptions.RecoveryMode != RecoveryModeRecovery {
+		return nil
+	}
+
+	log.Infof("writing recovery signal file")
+
+	return common.WriteFileAtomicFunc(filepath.Join(p.dataDir, postgresRecoverySignal), 0600,
+		func(f io.Writer) error {
 			return nil
 		})
 }

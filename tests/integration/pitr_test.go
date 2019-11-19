@@ -24,10 +24,11 @@ import (
 	"testing"
 	"time"
 
-	uuid "github.com/satori/go.uuid"
 	"github.com/sorintlab/stolon/internal/cluster"
 	"github.com/sorintlab/stolon/internal/common"
 	"github.com/sorintlab/stolon/internal/store"
+
+	uuid "github.com/satori/go.uuid"
 )
 
 func TestPITR(t *testing.T) {
@@ -173,7 +174,9 @@ func testPITR(t *testing.T, recoveryTarget bool) {
 
 	if recoveryTarget {
 		initialClusterSpec.PITRConfig.RecoveryTargetSettings = &cluster.RecoveryTargetSettings{
-			RecoveryTargetTime: now.Format(time.RFC3339),
+			// Looks like Postgres12 cannot parse locations in UTC TZ like "2019-11-19T12:10:54Z" that previous versions were able to parse
+			// workaround this by not writing the timezone
+			RecoveryTargetTime: now.Format("2006-01-02T15:04:05"),
 		}
 	}
 
