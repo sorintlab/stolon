@@ -39,7 +39,6 @@ import (
 	"github.com/sorintlab/stolon/internal/common"
 	"github.com/sorintlab/stolon/internal/flagutil"
 	slog "github.com/sorintlab/stolon/internal/log"
-	"github.com/sorintlab/stolon/internal/postgresql"
 	pg "github.com/sorintlab/stolon/internal/postgresql"
 	"github.com/sorintlab/stolon/internal/store"
 	"github.com/sorintlab/stolon/internal/util"
@@ -384,7 +383,7 @@ func (p *PostgresKeeper) createPGParameters(db *cluster.DB) common.Parameters {
 	return parameters
 }
 
-func (p *PostgresKeeper) createRecoveryOptions(recoveryMode postgresql.RecoveryMode, standbySettings *cluster.StandbySettings, archiveRecoverySettings *cluster.ArchiveRecoverySettings, recoveryTargetSettings *cluster.RecoveryTargetSettings) *postgresql.RecoveryOptions {
+func (p *PostgresKeeper) createRecoveryOptions(recoveryMode pg.RecoveryMode, standbySettings *cluster.StandbySettings, archiveRecoverySettings *cluster.ArchiveRecoverySettings, recoveryTargetSettings *cluster.RecoveryTargetSettings) *pg.RecoveryOptions {
 	parameters := common.Parameters{}
 
 	if standbySettings != nil {
@@ -427,7 +426,7 @@ func (p *PostgresKeeper) createRecoveryOptions(recoveryMode postgresql.RecoveryM
 		parameters["recovery_target_action"] = "promote"
 	}
 
-	return &postgresql.RecoveryOptions{
+	return &pg.RecoveryOptions{
 		RecoveryMode:       recoveryMode,
 		RecoveryParameters: parameters,
 	}
@@ -455,7 +454,7 @@ type PostgresKeeper struct {
 	requestTimeout time.Duration
 
 	e   store.Store
-	pgm *postgresql.Manager
+	pgm *pg.Manager
 	end chan error
 
 	localStateMutex  sync.Mutex
@@ -726,11 +725,11 @@ func (p *PostgresKeeper) GetPGState(pctx context.Context) (*cluster.PostgresStat
 	return pgState, nil
 }
 
-func getTimeLinesHistory(pgState *cluster.PostgresState, pgm postgresql.PGManager, maxPostgresTimelinesHistory int) (cluster.PostgresTimelinesHistory, error) {
+func getTimeLinesHistory(pgState *cluster.PostgresState, pgm pg.PGManager, maxPostgresTimelinesHistory int) (cluster.PostgresTimelinesHistory, error) {
 	ctlsh := cluster.PostgresTimelinesHistory{}
 	// if timeline <= 1 then no timeline history file exists.
 	if pgState.TimelineID > 1 {
-		var tlsh []*postgresql.TimelineHistory
+		var tlsh []*pg.TimelineHistory
 		tlsh, err := pgm.GetTimelinesHistory(pgState.TimelineID)
 		if err != nil {
 			log.Errorw("error getting timeline history", zap.Error(err))
@@ -782,7 +781,7 @@ func (p *PostgresKeeper) Start(ctx context.Context) {
 
 	// TODO(sgotti) reconfigure the various configurations options
 	// (RequestTimeout) after a changed cluster config
-	pgm := postgresql.NewManager(p.pgBinPath, p.dataDir, p.getLocalConnParams(), p.getLocalReplConnParams(), p.pgSUAuthMethod, p.pgSUUsername, p.pgSUPassword, p.pgReplAuthMethod, p.pgReplUsername, p.pgReplPassword, p.requestTimeout)
+	pgm := pg.NewManager(p.pgBinPath, p.dataDir, p.getLocalConnParams(), p.getLocalReplConnParams(), p.pgSUAuthMethod, p.pgSUUsername, p.pgSUPassword, p.pgReplAuthMethod, p.pgReplUsername, p.pgReplPassword, p.requestTimeout)
 	p.pgm = pgm
 
 	_ = p.pgm.StopIfStarted(true)
@@ -860,7 +859,7 @@ func (p *PostgresKeeper) resync(db, masterDB, followedDB *cluster.DB, tryPgrewin
 			// log pg_rewind error and fallback to pg_basebackup
 			log.Errorw("error syncing with pg_rewind", zap.Error(err))
 		} else {
-			pgm.SetRecoveryOptions(p.createRecoveryOptions(postgresql.RecoveryModeStandby, standbySettings, nil, nil))
+			pgm.SetRecoveryOptions(p.createRecoveryOptions(pg.RecoveryModeStandby, standbySettings, nil, nil))
 			return nil
 		}
 	}
@@ -889,7 +888,7 @@ func (p *PostgresKeeper) resync(db, masterDB, followedDB *cluster.DB, tryPgrewin
 	}
 	log.Infow("sync succeeded")
 
-	pgm.SetRecoveryOptions(p.createRecoveryOptions(postgresql.RecoveryModeStandby, standbySettings, nil, nil))
+	pgm.SetRecoveryOptions(p.createRecoveryOptions(pg.RecoveryModeStandby, standbySettings, nil, nil))
 
 	return nil
 }
@@ -1121,7 +1120,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 			// update pgm postgres parameters
 			pgm.SetParameters(pgParameters)
 
-			initConfig := &postgresql.InitConfig{}
+			initConfig := &pg.InitConfig{}
 
 			if db.Spec.NewConfig != nil {
 				initConfig.Locale = db.Spec.NewConfig.Locale
@@ -1205,10 +1204,10 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				return
 			}
 
-			recoveryMode := postgresql.RecoveryModeRecovery
+			recoveryMode := pg.RecoveryModeRecovery
 			var standbySettings *cluster.StandbySettings
 			if db.Spec.FollowConfig != nil && db.Spec.FollowConfig.Type == cluster.FollowTypeExternal {
-				recoveryMode = postgresql.RecoveryModeStandby
+				recoveryMode = pg.RecoveryModeStandby
 				standbySettings = db.Spec.FollowConfig.StandbySettings
 			}
 
@@ -1219,7 +1218,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				return
 			}
 
-			if recoveryMode == postgresql.RecoveryModeRecovery {
+			if recoveryMode == pg.RecoveryModeRecovery {
 				// wait for the db having replyed all the wals
 				log.Infof("waiting for recovery to be completed")
 				if err = pgm.WaitRecoveryDone(cd.Cluster.DefSpec().SyncTimeout.Duration); err != nil {
@@ -1536,7 +1535,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				return
 			}
 			if !started {
-				pgm.SetRecoveryOptions(p.createRecoveryOptions(postgresql.RecoveryModeStandby, standbySettings, nil, nil))
+				pgm.SetRecoveryOptions(p.createRecoveryOptions(pg.RecoveryModeStandby, standbySettings, nil, nil))
 				if err = pgm.Start(); err != nil {
 					log.Errorw("failed to start postgres", zap.Error(err))
 					return
@@ -1558,7 +1557,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				standbySettings := &cluster.StandbySettings{PrimaryConninfo: newReplConnParams.ConnString(), PrimarySlotName: common.StolonName(db.UID)}
 
 				curRecoveryOptions := pgm.CurRecoveryOptions()
-				newRecoveryOptions := p.createRecoveryOptions(postgresql.RecoveryModeStandby, standbySettings, nil, nil)
+				newRecoveryOptions := p.createRecoveryOptions(pg.RecoveryModeStandby, standbySettings, nil, nil)
 
 				// Update recovery conf if parameters has changed
 				if !curRecoveryOptions.RecoveryParameters.Equals(newRecoveryOptions.RecoveryParameters) {
@@ -1577,7 +1576,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 
 			case cluster.FollowTypeExternal:
 				curRecoveryOptions := pgm.CurRecoveryOptions()
-				newRecoveryOptions := p.createRecoveryOptions(postgresql.RecoveryModeStandby, db.Spec.FollowConfig.StandbySettings, db.Spec.FollowConfig.ArchiveRecoverySettings, nil)
+				newRecoveryOptions := p.createRecoveryOptions(pg.RecoveryModeStandby, db.Spec.FollowConfig.StandbySettings, db.Spec.FollowConfig.ArchiveRecoverySettings, nil)
 
 				// Update recovery conf if parameters has changed
 				if !curRecoveryOptions.RecoveryParameters.Equals(newRecoveryOptions.RecoveryParameters) {
@@ -1888,7 +1887,7 @@ func keeper(c *cobra.Command, args []string) {
 	}
 	if cmd.IsColorLoggerEnable(c, &cfg.CommonConfig) {
 		log = slog.SColor()
-		postgresql.SetLogger(log)
+		pg.SetLogger(log)
 	}
 
 	if cfg.dataDir == "" {

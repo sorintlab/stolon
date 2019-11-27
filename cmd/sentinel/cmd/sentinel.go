@@ -35,7 +35,7 @@ import (
 	"github.com/sorintlab/stolon/internal/common"
 	"github.com/sorintlab/stolon/internal/flagutil"
 	slog "github.com/sorintlab/stolon/internal/log"
-	"github.com/sorintlab/stolon/internal/postgresql"
+	pg "github.com/sorintlab/stolon/internal/postgresql"
 	"github.com/sorintlab/stolon/internal/store"
 	"github.com/sorintlab/stolon/internal/timer"
 	"github.com/sorintlab/stolon/internal/util"
@@ -581,8 +581,8 @@ func (s *Sentinel) dbCanSync(cd *cluster.ClusterData, dbUID string) bool {
 		return true
 	}
 
-	required := postgresql.XlogPosToWalFileNameNoTimeline(db.Status.XLogPos)
-	older, err := postgresql.WalFileNameNoTimeLine(masterDB.Status.OlderWalFile)
+	required := pg.XlogPosToWalFileNameNoTimeline(db.Status.XLogPos)
+	older, err := pg.WalFileNameNoTimeLine(masterDB.Status.OlderWalFile)
 	if err != nil {
 		// warn on wrong file name (shouldn't happen...)
 		log.Warnw("wrong wal file name", "filename", masterDB.Status.OlderWalFile)
@@ -1952,7 +1952,7 @@ func sentinel(c *cobra.Command, args []string) {
 	}
 	if cmd.IsColorLoggerEnable(c, &cfg.CommonConfig) {
 		log = slog.SColor()
-		postgresql.SetLogger(log)
+		pg.SetLogger(log)
 	}
 
 	if err := cmd.CheckCommonConfig(&cfg.CommonConfig); err != nil {

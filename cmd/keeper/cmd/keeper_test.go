@@ -22,8 +22,8 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
-	mocks "github.com/sorintlab/stolon/internal/mock/postgresql"
-	"github.com/sorintlab/stolon/internal/postgresql"
+	pgmocks "github.com/sorintlab/stolon/internal/mock/postgresql"
+	pg "github.com/sorintlab/stolon/internal/postgresql"
 
 	"github.com/sorintlab/stolon/internal/cluster"
 	"github.com/sorintlab/stolon/internal/common"
@@ -276,8 +276,8 @@ func TestGetTimeLinesHistory(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		pgm := mocks.NewMockPGManager(ctrl)
-		pgm.EXPECT().GetTimelinesHistory(timelineID).Return([]*postgresql.TimelineHistory{}, fmt.Errorf("failed to get timeline history"))
+		pgm := pgmocks.NewMockPGManager(ctrl)
+		pgm.EXPECT().GetTimelinesHistory(timelineID).Return([]*pg.TimelineHistory{}, fmt.Errorf("failed to get timeline history"))
 		ctlsh, err := getTimeLinesHistory(pgState, pgm, 3)
 
 		if err == nil {
@@ -300,8 +300,8 @@ func TestGetTimeLinesHistory(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		pgm := mocks.NewMockPGManager(ctrl)
-		timelineHistories := []*postgresql.TimelineHistory{
+		pgm := pgmocks.NewMockPGManager(ctrl)
+		timelineHistories := []*pg.TimelineHistory{
 			{
 				TimelineID:  1,
 				SwitchPoint: 1,
@@ -352,8 +352,8 @@ func TestGetTimeLinesHistory(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		pgm := mocks.NewMockPGManager(ctrl)
-		timelineHistories := []*postgresql.TimelineHistory{
+		pgm := pgmocks.NewMockPGManager(ctrl)
+		timelineHistories := []*pg.TimelineHistory{
 			{
 				TimelineID:  1,
 				SwitchPoint: 1,
