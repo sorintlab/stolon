@@ -1,9 +1,13 @@
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: stolon-sentinel
 spec:
   replicas: 2
+  selector:
+    matchLabels:
+      component: stolon-sentinel
+      stolon-cluster: kube-stolon
   template:
     metadata:
       labels:

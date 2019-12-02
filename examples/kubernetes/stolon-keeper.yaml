@@ -1,13 +1,17 @@
 # PetSet was renamed to StatefulSet in k8s 1.5
 # apiVersion: apps/v1alpha1
 # kind: PetSet
-apiVersion: apps/v1beta1
+apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: stolon-keeper
 spec:
   serviceName: "stolon-keeper"
   replicas: 2
+  selector:
+    matchLabels:
+      component: stolon-keeper
+      stolon-cluster: kube-stolon
   template:
     metadata:
       labels:
