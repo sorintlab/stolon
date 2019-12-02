@@ -18,6 +18,8 @@ import (
 	"encoding/json"
 
 	cmdcommon "github.com/sorintlab/stolon/cmd"
+	"github.com/sorintlab/stolon/internal/cluster"
+
 	"github.com/spf13/cobra"
 )
 
@@ -39,6 +41,68 @@ func init() {
 	CmdStolonCtl.AddCommand(cmdSpec)
 }
 
+type ClusterSpecNoDefaults struct {
+	SleepInterval                    *cluster.Duration         `json:"sleepInterval,omitempty"`
+	RequestTimeout                   *cluster.Duration         `json:"requestTimeout,omitempty"`
+	ConvergenceTimeout               *cluster.Duration         `json:"convergenceTimeout,omitempty"`
+	InitTimeout                      *cluster.Duration         `json:"initTimeout,omitempty"`
+	SyncTimeout                      *cluster.Duration         `json:"syncTimeout,omitempty"`
+	DBWaitReadyTimeout               *cluster.Duration         `json:"dbWaitReadyTimeout,omitempty"`
+	FailInterval                     *cluster.Duration         `json:"failInterval,omitempty"`
+	DeadKeeperRemovalInterval        *cluster.Duration         `json:"deadKeeperRemovalInterval,omitempty"`
+	MaxStandbys                      *uint16                   `json:"maxStandbys,omitempty"`
+	MaxStandbysPerSender             *uint16                   `json:"maxStandbysPerSender,omitempty"`
+	MaxStandbyLag                    *uint32                   `json:"maxStandbyLag,omitempty"`
+	SynchronousReplication           *bool                     `json:"synchronousReplication,omitempty"`
+	MinSynchronousStandbys           *uint16                   `json:"minSynchronousStandbys,omitempty"`
+	MaxSynchronousStandbys           *uint16                   `json:"maxSynchronousStandbys,omitempty"`
+	AdditionalWalSenders             *uint16                   `json:"additionalWalSenders,omitempty"`
+	AdditionalMasterReplicationSlots []string                  `json:"additionalMasterReplicationSlots,omitempty"`
+	UsePgrewind                      *bool                     `json:"usePgrewind,omitempty"`
+	InitMode                         *cluster.ClusterInitMode  `json:"initMode,omitempty"`
+	MergePgParameters                *bool                     `json:"mergePgParameters,omitempty"`
+	Role                             *cluster.ClusterRole      `json:"role,omitempty"`
+	NewConfig                        *cluster.NewConfig        `json:"newConfig,omitempty"`
+	PITRConfig                       *cluster.PITRConfig       `json:"pitrConfig,omitempty"`
+	ExistingConfig                   *cluster.ExistingConfig   `json:"existingConfig,omitempty"`
+	StandbyConfig                    *cluster.StandbyConfig    `json:"standbyConfig,omitempty"`
+	DefaultSUReplAccessMode          *cluster.SUReplAccessMode `json:"defaultSUReplAccessMode,omitempty"`
+	PGParameters                     cluster.PGParameters      `json:"pgParameters,omitempty"`
+	PGHBA                            []string                  `json:"pgHBA,omitempty"`
+	AutomaticPgRestart               *bool                     `json:"automaticPgRestart,omitempty"`
+}
+
+type ClusterSpecDefaults struct {
+	SleepInterval                    *cluster.Duration         `json:"sleepInterval"`
+	RequestTimeout                   *cluster.Duration         `json:"requestTimeout"`
+	ConvergenceTimeout               *cluster.Duration         `json:"convergenceTimeout"`
+	InitTimeout                      *cluster.Duration         `json:"initTimeout"`
+	SyncTimeout                      *cluster.Duration         `json:"syncTimeout"`
+	DBWaitReadyTimeout               *cluster.Duration         `json:"dbWaitReadyTimeout"`
+	FailInterval                     *cluster.Duration         `json:"failInterval"`
+	DeadKeeperRemovalInterval        *cluster.Duration         `json:"deadKeeperRemovalInterval"`
+	MaxStandbys                      *uint16                   `json:"maxStandbys"`
+	MaxStandbysPerSender             *uint16                   `json:"maxStandbysPerSender"`
+	MaxStandbyLag                    *uint32                   `json:"maxStandbyLag"`
+	SynchronousReplication           *bool                     `json:"synchronousReplication"`
+	MinSynchronousStandbys           *uint16                   `json:"minSynchronousStandbys"`
+	MaxSynchronousStandbys           *uint16                   `json:"maxSynchronousStandbys"`
+	AdditionalWalSenders             *uint16                   `json:"additionalWalSenders"`
+	AdditionalMasterReplicationSlots []string                  `json:"additionalMasterReplicationSlots"`
+	UsePgrewind                      *bool                     `json:"usePgrewind"`
+	InitMode                         *cluster.ClusterInitMode  `json:"initMode"`
+	MergePgParameters                *bool                     `json:"mergePgParameters"`
+	Role                             *cluster.ClusterRole      `json:"role"`
+	NewConfig                        *cluster.NewConfig        `json:"newConfig"`
+	PITRConfig                       *cluster.PITRConfig       `json:"pitrConfig"`
+	ExistingConfig                   *cluster.ExistingConfig   `json:"existingConfig"`
+	StandbyConfig                    *cluster.StandbyConfig    `json:"standbyConfig"`
+	DefaultSUReplAccessMode          *cluster.SUReplAccessMode `json:"defaultSUReplAccessMode"`
+	PGParameters                     cluster.PGParameters      `json:"pgParameters"`
+	PGHBA                            []string                  `json:"pgHBA"`
+	AutomaticPgRestart               *bool                     `json:"automaticPgRestart"`
+}
+
 func spec(cmd *cobra.Command, args []string) {
 	e, err := cmdcommon.NewStore(&cfg.CommonConfig)
 	if err != nil {
@@ -55,11 +119,15 @@ func spec(cmd *cobra.Command, args []string) {
 	if cd.Cluster.Spec == nil {
 		die("no cluster spec available")
 	}
-	cs := cd.Cluster.Spec
+
+	var specj []byte
 	if specOpts.defaults {
-		cs = cd.Cluster.DefSpec()
+		cs := (*ClusterSpecDefaults)(cd.Cluster.DefSpec())
+		specj, err = json.MarshalIndent(cs, "", "\t")
+	} else {
+		cs := (*ClusterSpecNoDefaults)(cd.Cluster.Spec)
+		specj, err = json.MarshalIndent(cs, "", "\t")
 	}
-	specj, err := json.MarshalIndent(cs, "", "\t")
 	if err != nil {
 		die("failed to marshall spec: %v", err)
 	}
