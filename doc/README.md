@@ -22,6 +22,7 @@ We suggest that you first read the [Stolon Architecture and Requirements](archit
 * [PostgreSQL SSL/TLS setup](ssl.md)
 * [Forcing a failover](forcefailover.md)
 * [Service Discovery](service_discovery.md)
+* [Resync a Broken Replica](resync_broken_replica.md)
 
 ### Recipes
 
