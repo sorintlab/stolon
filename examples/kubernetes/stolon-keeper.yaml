@@ -25,7 +25,7 @@ spec:
       terminationGracePeriodSeconds: 10
       containers:
         - name: stolon-keeper
-          image: sorintlab/stolon:v0.15.0-pg10
+          image: sorintlab/stolon:master-pg10
           command:
             - "/bin/bash"
             - "-ec"
