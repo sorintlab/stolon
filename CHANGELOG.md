@@ -1,3 +1,20 @@
+### v0.15.0
+
+#### New features
+
+* Support PostgreSQL 12 [#727](https://github.com/sorintlab/stolon/pull/727))
+* Added wal-g examples [#726](https://github.com/sorintlab/stolon/pull/726))
+* Stolonctl spec: don't show null clusterspec options [#736](https://github.com/sorintlab/stolon/pull/736))
+* Prevent stolonctl init with empty clusterspec file [#702](https://github.com/sorintlab/stolon/pull/702))
+
+#### Bug Fixes
+* Do pg_rewind only against primary instance [#698](https://github.com/sorintlab/stolon/pull/698))
+
+and [many other](https://github.com/sorintlab/stolon/milestone/14) changes.
+
+A big Thank You to everybody who contributed to this release!
+
+
 ### v0.14.0
 
 #### New features
