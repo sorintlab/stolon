@@ -23,10 +23,12 @@ import (
 	"github.com/sorintlab/stolon/internal/cluster"
 	"github.com/sorintlab/stolon/internal/util"
 
+	jsonpatch "github.com/evanphx/json-patch"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
@@ -216,11 +218,28 @@ func (s *KubeStore) SetKeeperInfo(ctx context.Context, id string, ms *cluster.Ke
 		if err != nil {
 			return fmt.Errorf("failed to get latest version of pod: %v", err)
 		}
-		if result.Annotations == nil {
-			result.Annotations = map[string]string{}
+
+		oldData, err := json.Marshal(result)
+		if err != nil {
+			return err
 		}
-		result.Annotations[util.KubeStatusAnnnotation] = string(msj)
-		_, err = podsClient.Update(result)
+
+		if result.ObjectMeta.Annotations == nil {
+			result.ObjectMeta.Annotations = map[string]string{}
+		}
+		result.ObjectMeta.Annotations[util.KubeStatusAnnnotation] = string(msj)
+
+		newData, err := json.Marshal(result)
+		if err != nil {
+			return err
+		}
+
+		patchBytes, err := jsonpatch.CreateMergePatch(oldData, newData)
+		if err != nil {
+			return err
+		}
+
+		_, err = podsClient.Patch(s.podName, types.MergePatchType, patchBytes)
 		return err
 	})
 	if retryErr != nil {
@@ -265,13 +284,30 @@ func (s *KubeStore) SetSentinelInfo(ctx context.Context, si *cluster.SentinelInf
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		result, err := podsClient.Get(s.podName, metav1.GetOptions{})
 		if err != nil {
-			return fmt.Errorf("failed to get latest version of pod: %v", err)
+			return err
 		}
-		if result.Annotations == nil {
-			result.Annotations = map[string]string{}
+
+		oldData, err := json.Marshal(result)
+		if err != nil {
+			return err
 		}
-		result.Annotations[util.KubeStatusAnnnotation] = string(sij)
-		_, err = podsClient.Update(result)
+
+		if result.ObjectMeta.Annotations == nil {
+			result.ObjectMeta.Annotations = map[string]string{}
+		}
+		result.ObjectMeta.Annotations[util.KubeStatusAnnnotation] = string(sij)
+
+		newData, err := json.Marshal(result)
+		if err != nil {
+			return err
+		}
+
+		patchBytes, err := jsonpatch.CreateMergePatch(oldData, newData)
+		if err != nil {
+			return err
+		}
+
+		_, err = podsClient.Patch(s.podName, types.MergePatchType, patchBytes)
 		return err
 	})
 	if retryErr != nil {
@@ -316,13 +352,30 @@ func (s *KubeStore) SetProxyInfo(ctx context.Context, pi *cluster.ProxyInfo, ttl
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		result, err := podsClient.Get(s.podName, metav1.GetOptions{})
 		if err != nil {
-			return fmt.Errorf("failed to get latest version of pod: %v", err)
+			return err
 		}
-		if result.Annotations == nil {
-			result.Annotations = map[string]string{}
+
+		oldData, err := json.Marshal(result)
+		if err != nil {
+			return err
 		}
-		result.Annotations[util.KubeStatusAnnnotation] = string(pij)
-		_, err = podsClient.Update(result)
+
+		if result.ObjectMeta.Annotations == nil {
+			result.ObjectMeta.Annotations = map[string]string{}
+		}
+		result.ObjectMeta.Annotations[util.KubeStatusAnnnotation] = string(pij)
+
+		newData, err := json.Marshal(result)
+		if err != nil {
+			return err
+		}
+
+		patchBytes, err := jsonpatch.CreateMergePatch(oldData, newData)
+		if err != nil {
+			return err
+		}
+
+		_, err = podsClient.Patch(s.podName, types.MergePatchType, patchBytes)
 		return err
 	})
 	if retryErr != nil {
