@@ -16,6 +16,7 @@ require (
 	github.com/docker/libkv v0.2.1
 	github.com/emicklei/go-restful v2.5.0+incompatible // indirect
 	github.com/emicklei/go-restful-swagger12 v0.0.0-20170208215640-dcef7f557305 // indirect
+	github.com/evanphx/json-patch v4.5.0+incompatible
 	github.com/go-openapi/jsonpointer v0.0.0-20170102174223-779f45308c19 // indirect
 	github.com/go-openapi/jsonreference v0.0.0-20161105162150-36d33bfe519e // indirect
 	github.com/go-openapi/spec v0.0.0-20180131233152-f3499b5df538 // indirect
