@@ -105,20 +105,12 @@ kubectl create -f stolon-proxy-service.yaml
 
 ### Connect to the db
 
-#### Get the proxy service ip
-
-```
-kubectl get svc
-NAME                   LABELS                                    SELECTOR                                       IP(S)           PORT(S)
-stolon-proxy-service   <none>                                    stolon-cluster=kube-stolon,stolon-proxy=true   10.247.50.217   5432/TCP
-```
-
 #### Connect to the proxy service
 
 The password for the stolon user will be the value specified in your `secret.yaml` above (or `password1` if you did not change it).
 
 ```
-psql --host 10.247.50.217 --port 5432 postgres -U stolon -W
+psql --host stolon-proxy-service  --port 5432 postgres -U stolon -W
 Password for user stolon:
 psql (9.4.5, server 9.4.4)
 Type "help" for help.
