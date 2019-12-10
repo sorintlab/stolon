@@ -14,11 +14,10 @@ Stolon is composed of 3 main components
 
 #### Keepers
 
-Every keeper MUST have a different UID that can be manually provided (`--uid` option) or will be generated. After the first start the keeper id (provided or generated) is saved inside the keeper data directory.
-
-Every keeper MUST have a persistent data directory (no ephemeral volumes like k8s `emptyDir`) or you'll lose your data if all the keepers are stopped at the same time (since at restart no valid standby to failover will be available).
-
-If you're providing the keeper's uid in the command line don't start a new keeper with the same id if you're providing a different data directory (empty or populated) since you're changing data out of the stolon control causing possible data loss or strange behaviors.
+* Every keeper MUST have a different UID that can be manually provided (`--uid` option) or will be generated. After the first start the keeper id (provided or generated) is saved inside the keeper data directory. If you start two distinct keeper instances with the same UID, expect strange behaviour and/or data loss.
+* Every keeper MUST have a persistent data directory (no ephemeral volumes like k8s `emptyDir`) or you'll lose your data if all the keepers are stopped at the same time (since at restart no valid standby to failover will be available).
+* If an existing functioning keeper, finds that it's data directory is empty, it will refuse to start until the data directory is available again.
+* If an existing functioning keeper, finds that it's current Postgres Cluster ID is different from the one it previously had in the clusterdata, it will still refuse to start.
 
 #### Sentinel and proxies
 
