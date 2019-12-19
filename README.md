@@ -63,7 +63,7 @@ Anyway it's quite easy to reset a cluster from scratch keeping the current maste
 
 ## Requirements
 
-* PostgreSQL 11, 10 or 9 (9.4, 9.5, 9.6)
+* PostgreSQL 12, 11, 10 or 9 (9.4, 9.5, 9.6)
 * etcd2 >= v2.0, etcd3 >= v3.0, consul >= v0.6 or kubernetes >= 1.8 (based on the store you're going to use)
 
 * OS: currently stolon is tested on GNU/Linux (with reports of people using it also on Solaris, *BSD and Darwin)
