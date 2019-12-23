@@ -1,5 +1,7 @@
 module github.com/sorintlab/stolon
 
+go 1.13
+
 require (
 	github.com/Azure/go-autorest v9.10.0+incompatible // indirect
 	github.com/PuerkitoBio/purell v1.1.0 // indirect
@@ -74,5 +76,3 @@ require (
 	k8s.io/client-go v0.0.0-20171026121518-35ccd4336052
 	k8s.io/kube-openapi v0.0.0-20180201014056-275e2ce91dec // indirect
 )
-
-go 1.12
