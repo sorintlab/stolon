@@ -23,10 +23,12 @@ import (
 	"github.com/sorintlab/stolon/internal/cluster"
 	"github.com/sorintlab/stolon/internal/util"
 
+	jsonpatch "github.com/evanphx/json-patch"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
@@ -70,6 +72,43 @@ func (s *KubeStore) labelSelector(componentLabel ComponentLabelValue) labels.Sel
 		util.KubeClusterLabel: s.clusterName,
 	}
 	return labels.SelectorFromSet(selector)
+}
+
+func (s *KubeStore) patchKubeStatusAnnotation(annotationData []byte) error {
+	podsClient := s.client.CoreV1().Pods(s.namespace)
+	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		pod, err := podsClient.Get(s.podName, metav1.GetOptions{})
+		if err != nil {
+			return fmt.Errorf("failed to get latest version of pod: %v", err)
+		}
+
+		oldPodJSON, err := json.Marshal(pod)
+		if err != nil {
+			return fmt.Errorf("failed to marshal pod: %v", err)
+		}
+
+		if pod.Annotations == nil {
+			pod.Annotations = map[string]string{}
+		}
+		pod.Annotations[util.KubeStatusAnnnotation] = string(annotationData)
+
+		newPodJSON, err := json.Marshal(pod)
+		if err != nil {
+			return fmt.Errorf("failed to marshal pod: %v", err)
+		}
+
+		patchBytes, err := jsonpatch.CreateMergePatch(oldPodJSON, newPodJSON)
+		if err != nil {
+			return fmt.Errorf("failed to create pod merge patch: %v", err)
+		}
+
+		_, err = podsClient.Patch(s.podName, types.MergePatchType, patchBytes)
+		return err
+	})
+	if retryErr != nil {
+		return fmt.Errorf("update failed: %v", retryErr)
+	}
+	return nil
 }
 
 func (s *KubeStore) AtomicPutClusterData(ctx context.Context, cd *cluster.ClusterData, previous *KVPair) (*KVPair, error) {
@@ -210,23 +249,7 @@ func (s *KubeStore) SetKeeperInfo(ctx context.Context, id string, ms *cluster.Ke
 	if err != nil {
 		return err
 	}
-	podsClient := s.client.CoreV1().Pods(s.namespace)
-	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		result, err := podsClient.Get(s.podName, metav1.GetOptions{})
-		if err != nil {
-			return fmt.Errorf("failed to get latest version of pod: %v", err)
-		}
-		if result.Annotations == nil {
-			result.Annotations = map[string]string{}
-		}
-		result.Annotations[util.KubeStatusAnnnotation] = string(msj)
-		_, err = podsClient.Update(result)
-		return err
-	})
-	if retryErr != nil {
-		return fmt.Errorf("update failed: %v", retryErr)
-	}
-	return nil
+	return s.patchKubeStatusAnnotation(msj)
 }
 
 func (s *KubeStore) GetKeepersInfo(ctx context.Context) (cluster.KeepersInfo, error) {
@@ -261,23 +284,7 @@ func (s *KubeStore) SetSentinelInfo(ctx context.Context, si *cluster.SentinelInf
 	if err != nil {
 		return err
 	}
-	podsClient := s.client.CoreV1().Pods(s.namespace)
-	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		result, err := podsClient.Get(s.podName, metav1.GetOptions{})
-		if err != nil {
-			return fmt.Errorf("failed to get latest version of pod: %v", err)
-		}
-		if result.Annotations == nil {
-			result.Annotations = map[string]string{}
-		}
-		result.Annotations[util.KubeStatusAnnnotation] = string(sij)
-		_, err = podsClient.Update(result)
-		return err
-	})
-	if retryErr != nil {
-		return fmt.Errorf("update failed: %v", retryErr)
-	}
-	return nil
+	return s.patchKubeStatusAnnotation(sij)
 }
 
 func (s *KubeStore) GetSentinelsInfo(ctx context.Context) (cluster.SentinelsInfo, error) {
@@ -312,23 +319,7 @@ func (s *KubeStore) SetProxyInfo(ctx context.Context, pi *cluster.ProxyInfo, ttl
 	if err != nil {
 		return err
 	}
-	podsClient := s.client.CoreV1().Pods(s.namespace)
-	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		result, err := podsClient.Get(s.podName, metav1.GetOptions{})
-		if err != nil {
-			return fmt.Errorf("failed to get latest version of pod: %v", err)
-		}
-		if result.Annotations == nil {
-			result.Annotations = map[string]string{}
-		}
-		result.Annotations[util.KubeStatusAnnnotation] = string(pij)
-		_, err = podsClient.Update(result)
-		return err
-	})
-	if retryErr != nil {
-		return fmt.Errorf("update failed: %v", retryErr)
-	}
-	return nil
+	return s.patchKubeStatusAnnotation(pij)
 }
 
 func (s *KubeStore) GetProxiesInfo(ctx context.Context) (cluster.ProxiesInfo, error) {
