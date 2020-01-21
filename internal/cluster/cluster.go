@@ -55,7 +55,7 @@ const (
 	DefaultRequestTimeout                             = 10 * time.Second
 	DefaultConvergenceTimeout                         = 30 * time.Second
 	DefaultInitTimeout                                = 5 * time.Minute
-	DefaultSyncTimeout                                = 30 * time.Minute
+	DefaultSyncTimeout                                = 0
 	DefaultFailInterval                               = 20 * time.Second
 	DefaultDeadKeeperRemovalInterval                  = 48 * time.Hour
 	DefaultMaxStandbys               uint16           = 20
