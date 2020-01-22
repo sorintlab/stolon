@@ -342,7 +342,7 @@ func (p *Manager) start(args ...string) error {
 	// Wait for the correct pid file to appear or for the process to exit
 	ok := false
 	start := time.Now()
-	for time.Now().Add(-startTimeout).Before(start) {
+	for time.Since(start) < startTimeout {
 		fh, err := os.Open(filepath.Join(p.dataDir, "postmaster.pid"))
 		if err == nil {
 			scanner := bufio.NewScanner(fh)
@@ -485,7 +485,7 @@ func (p *Manager) Restart(fast bool) error {
 
 func (p *Manager) WaitReady(timeout time.Duration) error {
 	start := time.Now()
-	for time.Now().Add(-timeout).Before(start) {
+	for timeout == 0 || time.Since(start) < timeout {
 		if err := p.Ping(); err == nil {
 			return nil
 		}
@@ -502,7 +502,7 @@ func (p *Manager) WaitRecoveryDone(timeout time.Duration) error {
 
 	start := time.Now()
 	if maj >= 12 {
-		for time.Now().Add(-timeout).Before(start) {
+		for timeout == 0 || time.Since(start) < timeout {
 			_, err := os.Stat(filepath.Join(p.dataDir, postgresRecoverySignal))
 			if err != nil && !os.IsNotExist(err) {
 				return err
@@ -513,7 +513,7 @@ func (p *Manager) WaitRecoveryDone(timeout time.Duration) error {
 			time.Sleep(1 * time.Second)
 		}
 	} else {
-		for time.Now().Add(-timeout).Before(start) {
+		for timeout == 0 || time.Since(start) < timeout {
 			_, err := os.Stat(filepath.Join(p.dataDir, postgresRecoveryDone))
 			if err != nil && !os.IsNotExist(err) {
 				return err
