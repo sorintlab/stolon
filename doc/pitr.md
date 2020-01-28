@@ -39,7 +39,7 @@ Note: the `\"` is needed by json to put double quotes inside strings. We aren't 
 When initializing a cluster in pitr init mode a random registered keeper will be choosed and it'll start restoring the database with these steps:
 
 * Remove the current data directory
-* Call the `dataRestoreCommand` expanding every %d to the data directory full path. If it exits with a non zero exit code then stop here since something went wrong.
+* Call the `dataRestoreCommand` expanding every %d to the data directory full path and every %w to the wal directory full path (if wal directory is provided to the keeper). If it exits with a non zero exit code then stop here since something went wrong.
 * Create a `recovery.conf` with the right parameters and with `restore_command` set to `restoreCommand`.
 * Start the postgres instance and wait for the archive recovery.
 
