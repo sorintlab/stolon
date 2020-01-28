@@ -117,11 +117,6 @@ type config struct {
 var cfg config
 
 func init() {
-	user, err := util.GetUser()
-	if err != nil {
-		log.Fatalf("cannot get current user: %v", err)
-	}
-
 	cmd.AddCommonFlags(CmdKeeper, &cfg.CommonConfig)
 
 	CmdKeeper.PersistentFlags().StringVar(&cfg.uid, "id", "", "keeper uid (must be unique in the cluster and can contain only lower-case letters, numbers and the underscore character). If not provided a random uid will be generated.")
@@ -137,7 +132,7 @@ func init() {
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgReplPassword, "pg-repl-password", "", "postgres replication user password. Only one of --pg-repl-password or --pg-repl-passwordfile must be provided. Must be the same for all keepers.")
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgReplPasswordFile, "pg-repl-passwordfile", "", "postgres replication user password file. Only one of --pg-repl-password or --pg-repl-passwordfile must be provided. Must be the same for all keepers.")
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgSUAuthMethod, "pg-su-auth-method", "md5", "postgres superuser auth method. Default is md5.")
-	CmdKeeper.PersistentFlags().StringVar(&cfg.pgSUUsername, "pg-su-username", user, "postgres superuser user name. Used for keeper managed instance access and pg_rewind based synchronization. It'll be created on db initialization. Defaults to the name of the effective user running stolon-keeper. Must be the same for all keepers.")
+	CmdKeeper.PersistentFlags().StringVar(&cfg.pgSUUsername, "pg-su-username", "", "postgres superuser user name. Used for keeper managed instance access and pg_rewind based synchronization. It'll be created on db initialization. Defaults to the name of the effective user running stolon-keeper. Must be the same for all keepers.")
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgSUPassword, "pg-su-password", "", "postgres superuser password. Only one of --pg-su-password or --pg-su-passwordfile must be provided. Must be the same for all keepers.")
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgSUPasswordFile, "pg-su-passwordfile", "", "postgres superuser password file. Only one of --pg-su-password or --pg-su-passwordfile must be provided. Must be the same for all keepers)")
 	CmdKeeper.PersistentFlags().BoolVar(&cfg.debug, "debug", false, "enable debug logging")
@@ -1866,6 +1861,18 @@ func keeper(c *cobra.Command, args []string) {
 		err           error
 		listenAddFlag = "pg-advertise-address"
 	)
+
+	flags := c.Flags()
+
+	if !flags.Changed("pg-su-username") {
+		// set the pgSuUsername to the current user
+		var user string
+		user, err = util.GetUser()
+		if err != nil {
+			log.Fatalf("cannot get current user: %v", err)
+		}
+		cfg.pgSUUsername = user
+	}
 
 	validAuthMethods := make(map[string]struct{})
 	validAuthMethods["trust"] = struct{}{}
