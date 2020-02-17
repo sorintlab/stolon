@@ -16,6 +16,7 @@ package cluster
 
 import (
 	"reflect"
+	"time"
 
 	"github.com/sorintlab/stolon/internal/common"
 
@@ -133,6 +134,12 @@ type ProxyInfo struct {
 
 	UID        string
 	Generation int64
+
+	// ProxyTimeout is the current proxyTimeout used by the proxy
+	// at the time of publishing its state.
+	// It's used by the sentinel to know for how much time the
+	// proxy should be considered active.
+	ProxyTimeout time.Duration
 }
 
 type ProxiesInfo map[string]*ProxyInfo

@@ -151,7 +151,7 @@ func TestProxyListening(t *testing.T) {
 	}
 
 	// tp should not listen because it cannot talk with the store
-	if err := tp.WaitNotListening(cluster.DefaultProxyTimeoutInterval * 2); err != nil {
+	if err := tp.WaitNotListening(cluster.DefaultProxyTimeout * 2); err != nil {
 		t.Fatalf("expecting tp not listening due to failed store communication, but it's listening.")
 	}
 
@@ -174,8 +174,8 @@ func TestProxyListening(t *testing.T) {
 	if err := tstore.WaitDown(10 * time.Second); err != nil {
 		t.Fatalf("error waiting on store down: %v", err)
 	}
-	// wait less than DefaultProxyTimeoutInterval
-	time.Sleep(cluster.DefaultProxyTimeoutInterval / 3)
+	// wait less than DefaultProxyTimeout
+	time.Sleep(cluster.DefaultProxyTimeout / 3)
 	// Start store
 	if err := tstore.Start(); err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -239,7 +239,7 @@ func TestProxyListening(t *testing.T) {
 	}
 
 	// tp should not listen because it cannot talk with the store
-	if err := tp.WaitNotListening(cluster.DefaultProxyTimeoutInterval * 2); err != nil {
+	if err := tp.WaitNotListening(cluster.DefaultProxyTimeout * 2); err != nil {
 		t.Fatalf("expecting tp not listening due to failed store communication, but it's listening.")
 	}
 

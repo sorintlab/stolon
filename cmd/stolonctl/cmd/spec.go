@@ -50,6 +50,8 @@ type ClusterSpecNoDefaults struct {
 	DBWaitReadyTimeout               *cluster.Duration         `json:"dbWaitReadyTimeout,omitempty"`
 	FailInterval                     *cluster.Duration         `json:"failInterval,omitempty"`
 	DeadKeeperRemovalInterval        *cluster.Duration         `json:"deadKeeperRemovalInterval,omitempty"`
+	ProxyCheckInterval               *cluster.Duration         `json:"proxyCheckInterval,omitempty"`
+	ProxyTimeout                     *cluster.Duration         `json:"proxyTimeout,omitempty"`
 	MaxStandbys                      *uint16                   `json:"maxStandbys,omitempty"`
 	MaxStandbysPerSender             *uint16                   `json:"maxStandbysPerSender,omitempty"`
 	MaxStandbyLag                    *uint32                   `json:"maxStandbyLag,omitempty"`
@@ -81,6 +83,8 @@ type ClusterSpecDefaults struct {
 	DBWaitReadyTimeout               *cluster.Duration         `json:"dbWaitReadyTimeout"`
 	FailInterval                     *cluster.Duration         `json:"failInterval"`
 	DeadKeeperRemovalInterval        *cluster.Duration         `json:"deadKeeperRemovalInterval"`
+	ProxyCheckInterval               *cluster.Duration         `json:"proxyCheckInterval"`
+	ProxyTimeout                     *cluster.Duration         `json:"proxyTimeout"`
 	MaxStandbys                      *uint16                   `json:"maxStandbys"`
 	MaxStandbysPerSender             *uint16                   `json:"maxStandbysPerSender"`
 	MaxStandbyLag                    *uint32                   `json:"maxStandbyLag"`
