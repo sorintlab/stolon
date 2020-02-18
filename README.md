@@ -17,7 +17,7 @@ For an introduction to stolon you can also take a look at [this post](https://sg
 * Leverages PostgreSQL streaming replication.
 * Resilient to any kind of partitioning. While trying to keep the maximum availability, it prefers consistency over availability.
 * [kubernetes integration](examples/kubernetes/README.md) letting you achieve postgreSQL high availability.
-* Uses a cluster store like [etcd](https://github.com/coreos/etcd), [consul](https://www.consul.io) or kubernetes API server as an high available data store and for leader election
+* Uses a cluster store like [etcd](https://etcd.io), [consul](https://www.consul.io) or kubernetes API server as an high available data store and for leader election
 * Asynchronous (default) and [synchronous](doc/syncrepl.md) replication.
 * Full cluster setup in minutes.
 * Easy [cluster admininistration](doc/stolonctl.md)

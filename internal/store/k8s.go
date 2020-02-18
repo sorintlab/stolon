@@ -373,6 +373,7 @@ func NewKubeElection(kubecli *kubernetes.Clientset, podName, namespace, clusterN
 		namespace,
 		resourceName,
 		kubecli.CoreV1(),
+		nil,
 		resourcelock.ResourceLockConfig{
 			Identity:      candidateUID,
 			EventRecorder: createRecorder(kubecli, "stolon-sentinel", namespace),
@@ -414,7 +415,7 @@ func (e *KubeElection) Stop() {
 }
 
 func (e *KubeElection) Leader() (string, error) {
-	ler, err := e.rl.Get()
+	ler, _, err := e.rl.Get()
 	if err != nil {
 		return "", fmt.Errorf("failed to get leader election record: %v", err)
 	}
@@ -432,13 +433,13 @@ func (e *KubeElection) campaign() {
 	for {
 		e.electedCh <- false
 
-		leaderelection.RunOrDie(leaderelection.LeaderElectionConfig{
+		leaderelection.RunOrDie(e.ctx, leaderelection.LeaderElectionConfig{
 			Lock:          e.rl,
 			LeaseDuration: 15 * time.Second,
 			RenewDeadline: 10 * time.Second,
 			RetryPeriod:   2 * time.Second,
 			Callbacks: leaderelection.LeaderCallbacks{
-				OnStartedLeading: func(stop <-chan struct{}) {
+				OnStartedLeading: func(context.Context) {
 					e.electedCh <- true
 				},
 				OnStoppedLeading: func() {
