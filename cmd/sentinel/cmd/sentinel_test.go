@@ -5000,8 +5000,8 @@ func TestUpdateCluster(t *testing.T) {
 }
 
 func TestActiveProxiesInfos(t *testing.T) {
-	proxyInfo1 := cluster.ProxyInfo{UID: "proxy1", InfoUID: "infoUID1"}
-	proxyInfo2 := cluster.ProxyInfo{UID: "proxy2", InfoUID: "infoUID2"}
+	proxyInfo1 := cluster.ProxyInfo{UID: "proxy1", InfoUID: "infoUID1", ProxyTimeout: cluster.DefaultProxyTimeout}
+	proxyInfo2 := cluster.ProxyInfo{UID: "proxy2", InfoUID: "infoUID2", ProxyTimeout: cluster.DefaultProxyTimeout}
 	proxyInfoWithDifferentInfoUID := cluster.ProxyInfo{UID: "proxy2", InfoUID: "differentInfoUID"}
 	var secToNanoSecondMultiplier int64 = 1000000000
 	tests := []struct {
@@ -5033,7 +5033,7 @@ func TestActiveProxiesInfos(t *testing.T) {
 			expectedProxyInfoHistories: ProxyInfoHistories{"proxy1": &ProxyInfoHistory{ProxyInfo: &proxyInfo1}, "proxy2": &ProxyInfoHistory{ProxyInfo: &proxyInfoWithDifferentInfoUID}},
 		},
 		{
-			name:                       "should remove from active proxies if is not updated for twice the DefaultProxyTimeoutInterval",
+			name:                       "should remove from active proxies if is not updated for twice the DefaultProxyTimeout",
 			proxyInfoHistories:         ProxyInfoHistories{"proxy1": &ProxyInfoHistory{ProxyInfo: &proxyInfo1, Timer: timer.Now() - (3 * 15 * secToNanoSecondMultiplier)}, "proxy2": &ProxyInfoHistory{ProxyInfo: &proxyInfo2, Timer: timer.Now() - (1 * 15 * secToNanoSecondMultiplier)}},
 			proxiesInfos:               cluster.ProxiesInfo{"proxy1": &proxyInfo1, "proxy2": &proxyInfo2},
 			expectedActiveProxies:      cluster.ProxiesInfo{"proxy2": &proxyInfo2},

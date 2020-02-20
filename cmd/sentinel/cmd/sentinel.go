@@ -342,7 +342,7 @@ func (s *Sentinel) activeProxiesInfos(proxiesInfo cluster.ProxiesInfo) cluster.P
 	for _, pi := range proxiesInfo {
 		if pih, ok := pihs[pi.UID]; ok {
 			if pih.ProxyInfo.InfoUID == pi.InfoUID {
-				if timer.Since(pih.Timer) > 2*cluster.DefaultProxyTimeoutInterval {
+				if timer.Since(pih.Timer) > 2*pi.ProxyTimeout {
 					delete(activeProxiesInfo, pi.UID)
 				}
 			} else {
@@ -1820,7 +1820,6 @@ func (s *Sentinel) clusterSentinelCheck(pctx context.Context) {
 			s.sleepInterval = cd.Cluster.DefSpec().SleepInterval.Duration
 			s.requestTimeout = cd.Cluster.DefSpec().RequestTimeout.Duration
 		}
-
 	}
 
 	log.Debugf("cd dump: %s", spew.Sdump(cd))

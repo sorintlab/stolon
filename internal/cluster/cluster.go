@@ -43,11 +43,7 @@ const (
 )
 
 const (
-	DefaultStoreTimeout         = 5 * time.Second
-	DefaultProxyCheckInterval   = 5 * time.Second
-	DefaultProxyTimeoutInterval = 15 * time.Second
-
-	DefaultDBWaitReadyTimeout = 60 * time.Second
+	DefaultStoreTimeout = 5 * time.Second
 
 	DefaultDBNotIncreasingXLogPosTimes = 10
 
@@ -56,8 +52,11 @@ const (
 	DefaultConvergenceTimeout                         = 30 * time.Second
 	DefaultInitTimeout                                = 5 * time.Minute
 	DefaultSyncTimeout                                = 0
+	DefaultDBWaitReadyTimeout                         = 60 * time.Second
 	DefaultFailInterval                               = 20 * time.Second
 	DefaultDeadKeeperRemovalInterval                  = 48 * time.Hour
+	DefaultProxyCheckInterval                         = 5 * time.Second
+	DefaultProxyTimeout                               = 15 * time.Second
 	DefaultMaxStandbys               uint16           = 20
 	DefaultMaxStandbysPerSender      uint16           = 3
 	DefaultMaxStandbyLag                              = 1024 * 1204
@@ -228,6 +227,10 @@ type ClusterSpec struct {
 	FailInterval *Duration `json:"failInterval,omitempty"`
 	// Interval after which a dead keeper will be removed from the cluster data
 	DeadKeeperRemovalInterval *Duration `json:"deadKeeperRemovalInterval,omitempty"`
+	// Interval to wait before next proxy check
+	ProxyCheckInterval *Duration `json:"proxyCheckInterval,omitempty"`
+	// Interval where the proxy must successfully complete a check
+	ProxyTimeout *Duration `json:"proxyTimeout,omitempty"`
 	// Max number of standbys. This needs to be greater enough to cover both
 	// standby managed by stolon and additional standbys configured by the
 	// user. Its value affect different postgres parameters like
@@ -364,6 +367,12 @@ func (os *ClusterSpec) WithDefaults() *ClusterSpec {
 	if s.DeadKeeperRemovalInterval == nil {
 		s.DeadKeeperRemovalInterval = &Duration{Duration: DefaultDeadKeeperRemovalInterval}
 	}
+	if s.ProxyCheckInterval == nil {
+		s.ProxyCheckInterval = &Duration{Duration: DefaultProxyCheckInterval}
+	}
+	if s.ProxyTimeout == nil {
+		s.ProxyTimeout = &Duration{Duration: DefaultProxyTimeout}
+	}
 	if s.MaxStandbys == nil {
 		s.MaxStandbys = Uint16P(DefaultMaxStandbys)
 	}
@@ -426,11 +435,20 @@ func (os *ClusterSpec) Validate() error {
 	if s.DBWaitReadyTimeout.Duration < 0 {
 		return fmt.Errorf("dbWaitReadyTimeout must be positive")
 	}
+	if s.FailInterval.Duration < 0 {
+		return fmt.Errorf("failInterval must be positive")
+	}
 	if s.DeadKeeperRemovalInterval.Duration < 0 {
 		return fmt.Errorf("deadKeeperRemovalInterval must be positive")
 	}
-	if s.FailInterval.Duration < 0 {
-		return fmt.Errorf("failInterval must be positive")
+	if s.ProxyCheckInterval.Duration < 0 {
+		return fmt.Errorf("proxyCheckInterval must be positive")
+	}
+	if s.ProxyTimeout.Duration < 0 {
+		return fmt.Errorf("proxyTimeout must be positive")
+	}
+	if s.ProxyCheckInterval.Duration >= s.ProxyTimeout.Duration {
+		return fmt.Errorf("proxyCheckInterval should be less than proxyTimeout")
 	}
 	if *s.MaxStandbys < 1 {
 		return fmt.Errorf("maxStandbys must be at least 1")
