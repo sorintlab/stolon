@@ -1,7 +1,7 @@
 # stolon - PostgreSQL cloud native High Availability
 
 [![Build Status](https://run.agola.io/api/v1alpha/badges/org%2Fstolon%2Fstolon?branch=master)](https://run.agola.io/org/stolon/projects/stolon.proj)
-[![Join the chat at https://gitter.im/sorintlab/stolon](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/sorintlab/stolon?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+[![Discourse](https://img.shields.io/discourse/https/talk.stolon.io/status.svg)](https://talk.stolon.io)
 [![Go Report Card](https://goreportcard.com/badge/github.com/sorintlab/stolon)](https://goreportcard.com/report/github.com/sorintlab/stolon)
 [![Downloads](https://img.shields.io/github/downloads/sorintlab/stolon/latest/total.svg)](https://github.com/sorintlab/stolon/releases)
 [![Latest release](https://img.shields.io/github/release/sorintlab/stolon.svg)](https://github.com/sorintlab/stolon/releases)
@@ -93,6 +93,5 @@ To submit your changes please open a pull request.
 
 ## Contacts
 
+* For general discussion about using and developing stolon, join the [stolon forum](https://talk.stolon.io)
 * For bugs and feature requests file an [issue](https://github.com/sorintlab/stolon/issues/new)
-* For general discussion about using and developing stolon, join the [stolon](https://groups.google.com/forum/#!forum/stolon) mailing list
-* For real-time discussion, join us on [Gitter](https://gitter.im/sorintlab/stolon)
