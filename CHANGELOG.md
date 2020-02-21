@@ -1,14 +1,28 @@
+### v0.16.0
+
+#### New features
+
+* k8s store: patch pod annotations instead of doing a full update ([#751](https://github.com/sorintlab/stolon/pull/751))
+* Make proxyCheckInterval and proxyTimeout configurable ([#756](https://github.com/sorintlab/stolon/pull/756))
+* Make DefaultSyncTimeout infinite ([#752](https://github.com/sorintlab/stolon/pull/752))
+* Document SyncTimeout cluster spec option ([#749](https://github.com/sorintlab/stolon/pull/749))
+
+and [many other](https://github.com/sorintlab/stolon/milestone/15) changes.
+
+A big Thank You to everybody who contributed to this release!
+
+
 ### v0.15.0
 
 #### New features
 
-* Support PostgreSQL 12 [#727](https://github.com/sorintlab/stolon/pull/727))
-* Added wal-g examples [#726](https://github.com/sorintlab/stolon/pull/726))
-* Stolonctl spec: don't show null clusterspec options [#736](https://github.com/sorintlab/stolon/pull/736))
-* Prevent stolonctl init with empty clusterspec file [#702](https://github.com/sorintlab/stolon/pull/702))
+* Support PostgreSQL 12 ([#727](https://github.com/sorintlab/stolon/pull/727))
+* Added wal-g examples ([#726](https://github.com/sorintlab/stolon/pull/726))
+* Stolonctl spec: don't show null clusterspec options ([#736](https://github.com/sorintlab/stolon/pull/736))
+* Prevent stolonctl init with empty clusterspec file ([#702](https://github.com/sorintlab/stolon/pull/702))
 
 #### Bug Fixes
-* Do pg_rewind only against primary instance [#698](https://github.com/sorintlab/stolon/pull/698))
+* Do pg_rewind only against primary instance ([#698](https://github.com/sorintlab/stolon/pull/698))
 
 and [many other](https://github.com/sorintlab/stolon/milestone/14) changes.
 
@@ -19,25 +33,25 @@ A big Thank You to everybody who contributed to this release!
 
 #### New features
 
-* Add sentinel prometheus metrics [#656](https://github.com/sorintlab/stolon/pull/656))
-* Store only the last 2 postgres timeline histories to not exceed the max value size of the underlying store [#651](https://github.com/sorintlab/stolon/pull/651))
-* Add keeper prometheus metrics [#639](https://github.com/sorintlab/stolon/pull/639))
+* Add sentinel prometheus metrics ([#656](https://github.com/sorintlab/stolon/pull/656))
+* Store only the last 2 postgres timeline histories to not exceed the max value size of the underlying store ([#651](https://github.com/sorintlab/stolon/pull/651))
+* Add keeper prometheus metrics ([#639](https://github.com/sorintlab/stolon/pull/639))
 * stolonctl status can output status in json format ([#628](https://github.com/sorintlab/stolon/pull/628))
 * Enable all k8s client auth plugins ([#625](https://github.com/sorintlab/stolon/pull/625) [#632](https://github.com/sorintlab/stolon/pull/632))
 * It's now possible to define the advertise address and port in stolon keeper ([#581](https://github.com/sorintlab/stolon/pull/581))
 * A new `stolonctl register` command was added to set service discovery information about keepers to an external service (currently only consul) ([#557](https://github.com/sorintlab/stolon/pull/557))
-* Ability to auto restart an instance when updating a postgres parameter that requries a restart [#568](https://github.com/sorintlab/stolon/pull/568))
-* Add stolon clusterdata read/write subcommands [#578](https://github.com/sorintlab/stolon/pull/578))
-* Enable verbose e progress logging for pg_basebackup [#665](https://github.com/sorintlab/stolon/pull/665))
-* Implement timeouts for kubernetes api calls [#666](https://github.com/sorintlab/stolon/pull/666))
+* Ability to auto restart an instance when updating a postgres parameter that requries a restart ([#568](https://github.com/sorintlab/stolon/pull/568))
+* Add stolon clusterdata read/write subcommands ([#578](https://github.com/sorintlab/stolon/pull/578))
+* Enable verbose e progress logging for pg_basebackup ([#665](https://github.com/sorintlab/stolon/pull/665))
+* Implement timeouts for kubernetes api calls ([#666](https://github.com/sorintlab/stolon/pull/666))
 
 #### Bug Fixes
-* Avoid unneeded postgres instance reloads [#558](https://github.com/sorintlab/stolon/pull/558))
-* Allow special characters in pg-su-username [#658](https://github.com/sorintlab/stolon/pull/658))
-* Fix failover process if a keeper has filesystem errors [#637](https://github.com/sorintlab/stolon/pull/637))
-* postgres: use go database/sql context functions [#635](https://github.com/sorintlab/stolon/pull/635))
-* Use go database/sql context functions [#635](https://github.com/sorintlab/stolon/pull/635))
-* Fix hanging sentinels [#659](https://github.com/sorintlab/stolon/pull/659))
+* Avoid unneeded postgres instance reloads ([#558](https://github.com/sorintlab/stolon/pull/558))
+* Allow special characters in pg-su-username ([#658](https://github.com/sorintlab/stolon/pull/658))
+* Fix failover process if a keeper has filesystem errors ([#637](https://github.com/sorintlab/stolon/pull/637))
+* postgres: use go database/sql context functions ([#635](https://github.com/sorintlab/stolon/pull/635))
+* Use go database/sql context functions ([#635](https://github.com/sorintlab/stolon/pull/635))
+* Fix hanging sentinels ([#659](https://github.com/sorintlab/stolon/pull/659))
 
 and [many other](https://github.com/sorintlab/stolon/milestone/13) changes.
 
@@ -77,7 +91,7 @@ A big Thank You to everybody who contributed to this release:
 #### Bug Fixes
 
 * Sort keepers addresses in `pg_hba.conf` to avoid unneeded postgres instance reloads ([#558](https://github.com/sorintlab/stolon/pull/558))
-* Set `recovery_target_action` to promote when using recovery target settings [#545](https://github.com/sorintlab/stolon/pull/545))
+* Set `recovery_target_action` to promote when using recovery target settings ([#545](https://github.com/sorintlab/stolon/pull/545))
 * Fixed wrong listen address used in `pg_hba.conf` when `SUReplAccessStrict` mode was enabled ([#520](https://github.com/sorintlab/stolon/pull/520))
 
 and [many other](https://github.com/sorintlab/stolon/milestone/12) bug fixes and documentation improvements.
