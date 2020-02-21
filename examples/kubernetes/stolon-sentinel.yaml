@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
         - name: stolon-sentinel
-          image: sorintlab/stolon:v0.16.0-pg10
+          image: sorintlab/stolon:master-pg10
           command:
             - "/bin/bash"
             - "-ec"
