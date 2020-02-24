@@ -53,6 +53,8 @@ const (
 
 var (
 	defaultPGParameters = cluster.PGParameters{"log_destination": "stderr", "logging_collector": "false"}
+
+	defaultStoreTimeout = 1 * time.Second
 )
 
 var curPort = MinPort
@@ -806,7 +808,6 @@ func (tp *TestProxy) WaitListening(timeout time.Duration) error {
 		if err == nil {
 			return nil
 		}
-		tp.t.Logf("tp: %v, error: %v", tp.uid, err)
 		time.Sleep(sleepInterval)
 	}
 	return fmt.Errorf("timeout")
@@ -824,7 +825,6 @@ func (tp *TestProxy) WaitNotListening(timeout time.Duration) error {
 		if err != nil {
 			return nil
 		}
-		tp.t.Logf("tp: %v, error: %v", tp.uid, err)
 		time.Sleep(sleepInterval)
 	}
 	return fmt.Errorf("timeout")
@@ -1073,7 +1073,9 @@ func NewTestConsul(t *testing.T, dir string, a ...string) (*TestStore, error) {
 func (ts *TestStore) WaitUp(timeout time.Duration) error {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
-		_, err := ts.store.Get(context.TODO(), "anykey")
+		ctx, cancel := context.WithTimeout(context.Background(), defaultStoreTimeout)
+		_, err := ts.store.Get(ctx, "anykey")
+		cancel()
 		ts.t.Logf("err: %v", err)
 		if err != nil && err == store.ErrKeyNotFound {
 			return nil
@@ -1090,7 +1092,9 @@ func (ts *TestStore) WaitUp(timeout time.Duration) error {
 func (ts *TestStore) WaitDown(timeout time.Duration) error {
 	start := time.Now()
 	for time.Now().Add(-timeout).Before(start) {
-		_, err := ts.store.Get(context.TODO(), "anykey")
+		ctx, cancel := context.WithTimeout(context.Background(), defaultStoreTimeout)
+		_, err := ts.store.Get(ctx, "anykey")
+		cancel()
 		if err != nil && err != store.ErrKeyNotFound {
 			return nil
 		}
