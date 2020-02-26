@@ -81,7 +81,7 @@ local task_integration_tests(store, pgversion, arch) = {
     },
   ],
   depends: [
-    'build go 1.13 ' + arch,
+    'build go 1.14 ' + arch,
   ],
 };
 
@@ -165,7 +165,7 @@ local task_build_push_images(name, pgversions, istag, push) =
         [
           task_build_go(version, arch),
         ]
-        for version in ['1.12', '1.13']
+        for version in ['1.13', '1.14']
         for arch in ['amd64' /*, 'arm64' */]
       ]) + std.flattenArrays([
         [

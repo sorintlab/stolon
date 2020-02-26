@@ -35,8 +35,8 @@ echo "Running tests..."
 
 COVER=${COVER:-"-cover"}
 
-# Use only of specific go version to run gofmt since it'll break when we'll use go 1.10 and go 1.11
-GOFMT_VERSION="go1.13"
+# Use only of specific go version to run gofmt since it'll break when some formatting rules change between versions
+GOFMT_VERSION="go1.14"
 
 MAJOR_GOVERSION=$( echo -n $(go version) | grep -o 'go1\.[0-9]*' || true )
 if [ "${MAJOR_GOVERSION}" == "${GOFMT_VERSION}" ]; then
@@ -76,7 +76,7 @@ fi
 
 
 echo "Checking with golangci-lint"
-curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh| sh -s -- -b ${BINDIR} v1.21.0
+curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh| sh -s -- -b ${BINDIR} v1.23.6
 ${BINDIR}/golangci-lint run --deadline 5m
 
 echo "Running tests"
