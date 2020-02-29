@@ -65,6 +65,7 @@ var URLSchemeRegexp = regexp.MustCompile(`^([a-zA-Z][a-zA-Z0-9+-.]*)://`)
 type Config struct {
 	Backend       Backend
 	Endpoints     string
+	Timeout       time.Duration
 	BasePath      string
 	CertFile      string
 	KeyFile       string
@@ -172,7 +173,7 @@ func NewKVStore(cfg Config) (KVStore, error) {
 	case CONSUL, ETCDV2:
 		config := &libkvstore.Config{
 			TLS:               tlsConfig,
-			ConnectionTimeout: cluster.DefaultStoreTimeout,
+			ConnectionTimeout: cfg.Timeout,
 		}
 
 		store, err := libkv.NewStore(kvBackend, addrs, config)
@@ -190,7 +191,7 @@ func NewKVStore(cfg Config) (KVStore, error) {
 		if err != nil {
 			return nil, err
 		}
-		return &etcdV3Store{c: c, requestTimeout: cluster.DefaultStoreTimeout}, nil
+		return &etcdV3Store{c: c, requestTimeout: cfg.Timeout}, nil
 	default:
 		return nil, fmt.Errorf("Unknown store backend: %q", cfg.Backend)
 	}
@@ -344,7 +345,7 @@ func (s *KVBackedStore) GetProxiesInfo(ctx context.Context) (cluster.ProxiesInfo
 	return psi, nil
 }
 
-func NewKVBackedElection(kvStore KVStore, path, candidateUID string) Election {
+func NewKVBackedElection(kvStore KVStore, path, candidateUID string, timeout time.Duration) Election {
 	switch kvStore := kvStore.(type) {
 	case *libKVStore:
 		s := kvStore
@@ -357,7 +358,7 @@ func NewKVBackedElection(kvStore KVStore, path, candidateUID string) Election {
 			path:           path,
 			candidateUID:   candidateUID,
 			ttl:            MinTTL,
-			requestTimeout: cluster.DefaultStoreTimeout,
+			requestTimeout: timeout,
 		}
 	default:
 		panic("unknown kvstore")

@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sorintlab/stolon/internal/cluster"
@@ -50,12 +51,14 @@ type CommonConfig struct {
 	KubeConfig           string
 	KubeContext          string
 	KubeNamespace        string
+	StoreTimeout         time.Duration
 }
 
 func AddCommonFlags(cmd *cobra.Command, cfg *CommonConfig) {
 	cmd.PersistentFlags().StringVar(&cfg.ClusterName, "cluster-name", "", "cluster name")
 	cmd.PersistentFlags().StringVar(&cfg.StoreBackend, "store-backend", "", "store backend type (etcdv2/etcd, etcdv3, consul or kubernetes)")
 	cmd.PersistentFlags().StringVar(&cfg.StoreEndpoints, "store-endpoints", "", "a comma-delimited list of store endpoints (use https scheme for tls communication) (defaults: http://127.0.0.1:2379 for etcd, http://127.0.0.1:8500 for consul)")
+	cmd.PersistentFlags().DurationVar(&cfg.StoreTimeout, "store-timeout", cluster.DefaultStoreTimeout, "store request timeout")
 	cmd.PersistentFlags().StringVar(&cfg.StorePrefix, "store-prefix", common.StorePrefix, "the store base prefix")
 	cmd.PersistentFlags().StringVar(&cfg.StoreCertFile, "store-cert-file", "", "certificate file for client identification to the store")
 	cmd.PersistentFlags().StringVar(&cfg.StoreKeyFile, "store-key", "", "private key file for client identification to the store")
@@ -143,6 +146,7 @@ func NewKVStore(cfg *CommonConfig) (store.KVStore, error) {
 	return store.NewKVStore(store.Config{
 		Backend:       store.Backend(cfg.StoreBackend),
 		Endpoints:     cfg.StoreEndpoints,
+		Timeout:       cfg.StoreTimeout,
 		CertFile:      cfg.StoreCertFile,
 		KeyFile:       cfg.StoreKeyFile,
 		CAFile:        cfg.StoreCAFile,
@@ -195,7 +199,7 @@ func NewElection(cfg *CommonConfig, uid string) (store.Election, error) {
 		if err != nil {
 			return nil, fmt.Errorf("cannot create kv store: %v", err)
 		}
-		election = store.NewKVBackedElection(kvstore, filepath.Join(storePath, common.SentinelLeaderKey), uid)
+		election = store.NewKVBackedElection(kvstore, filepath.Join(storePath, common.SentinelLeaderKey), uid, cfg.StoreTimeout)
 	case "kubernetes":
 		kubecli, podName, namespace, err := getKubeValues(cfg)
 		if err != nil {
@@ -216,7 +220,7 @@ func getKubeValues(cfg *CommonConfig) (*kubernetes.Clientset, string, string, er
 	if err != nil {
 		return nil, "", "", err
 	}
-	kubecfg.Timeout = cluster.DefaultStoreTimeout
+	kubecfg.Timeout = cfg.StoreTimeout
 	kubecli, err := kubernetes.NewForConfig(kubecfg)
 	if err != nil {
 		return nil, "", "", fmt.Errorf("cannot create kubernetes client: %v", err)

@@ -960,6 +960,7 @@ func NewTestEtcd(t *testing.T, dir string, backend store.Backend, a ...string) (
 	storeConfig := store.Config{
 		Backend:   store.Backend(backend),
 		Endpoints: storeEndpoints,
+		Timeout:   defaultStoreTimeout,
 	}
 	kvstore, err := store.NewKVStore(storeConfig)
 	if err != nil {
@@ -1043,6 +1044,7 @@ func NewTestConsul(t *testing.T, dir string, a ...string) (*TestStore, error) {
 	storeConfig := store.Config{
 		Backend:   store.CONSUL,
 		Endpoints: storeEndpoints,
+		Timeout:   defaultStoreTimeout,
 	}
 	kvstore, err := store.NewKVStore(storeConfig)
 	if err != nil {
