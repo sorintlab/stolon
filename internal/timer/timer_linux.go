@@ -31,7 +31,7 @@ const (
 // needs. Let's wait for a stdlib native monotonic clock.
 func Now() int64 {
 	var ts syscall.Timespec
-	syscall.Syscall(syscall.SYS_CLOCK_GETTIME, CLOCK_MONOTONIC, uintptr(unsafe.Pointer(&ts)), 0)
+	_, _, _ = syscall.Syscall(syscall.SYS_CLOCK_GETTIME, CLOCK_MONOTONIC, uintptr(unsafe.Pointer(&ts)), 0)
 	nsec := ts.Nano()
 	return nsec
 }

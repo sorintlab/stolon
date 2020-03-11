@@ -71,7 +71,9 @@ func init() {
 	CmdProxy.PersistentFlags().IntVar(&cfg.keepAliveCount, "tcp-keepalive-count", 0, "set tcp keepalive probe count number")
 	CmdProxy.PersistentFlags().IntVar(&cfg.keepAliveInterval, "tcp-keepalive-interval", 0, "set tcp keepalive interval (seconds)")
 
-	CmdProxy.PersistentFlags().MarkDeprecated("debug", "use --log-level=debug instead")
+	if err := CmdProxy.PersistentFlags().MarkDeprecated("debug", "use --log-level=debug instead"); err != nil {
+		log.Fatal(err)
+	}
 }
 
 type ClusterChecker struct {
@@ -87,6 +89,10 @@ type ClusterChecker struct {
 	endPollonProxyCh chan error
 
 	pollonMutex sync.Mutex
+
+	proxyCheckInterval time.Duration
+	proxyTimeout       time.Duration
+	configMutex        sync.Mutex
 }
 
 func NewClusterChecker(uid string, cfg config) (*ClusterChecker, error) {
@@ -102,6 +108,9 @@ func NewClusterChecker(uid string, cfg config) (*ClusterChecker, error) {
 		stopListening:    cfg.stopListening,
 		e:                e,
 		endPollonProxyCh: make(chan error),
+
+		proxyCheckInterval: cluster.DefaultProxyCheckInterval,
+		proxyTimeout:       cluster.DefaultProxyTimeout,
 	}, nil
 }
 
@@ -162,15 +171,16 @@ func (c *ClusterChecker) sendPollonConfData(confData pollon.ConfData) {
 	}
 }
 
-func (c *ClusterChecker) SetProxyInfo(e store.Store, generation int64, ttl time.Duration) error {
+func (c *ClusterChecker) SetProxyInfo(e store.Store, generation int64, proxyTimeout time.Duration) error {
 	proxyInfo := &cluster.ProxyInfo{
-		InfoUID:    common.UID(),
-		UID:        c.uid,
-		Generation: generation,
+		InfoUID:      common.UID(),
+		UID:          c.uid,
+		Generation:   generation,
+		ProxyTimeout: proxyTimeout,
 	}
 	log.Debugf("proxyInfo dump: %s", spew.Sdump(proxyInfo))
 
-	if err := c.e.SetProxyInfo(context.TODO(), proxyInfo, ttl); err != nil {
+	if err := c.e.SetProxyInfo(context.TODO(), proxyInfo, 2*proxyTimeout); err != nil {
 		return err
 	}
 	return nil
@@ -203,13 +213,31 @@ func (c *ClusterChecker) Check() error {
 		return fmt.Errorf("clusterdata validation failed: %v", err)
 	}
 
+	cdProxyCheckInterval := cd.Cluster.DefSpec().ProxyCheckInterval.Duration
+	cdProxyTimeout := cd.Cluster.DefSpec().ProxyTimeout.Duration
+
+	// use the greater between the current proxy timeout and the one defined in the cluster spec if they're different.
+	// in this way we're updating our proxyInfo using a timeout that is greater or equal the current active timeout timer.
+	c.configMutex.Lock()
+	proxyTimeout := c.proxyTimeout
+	if cdProxyTimeout > proxyTimeout {
+		proxyTimeout = cdProxyTimeout
+	}
+	c.configMutex.Unlock()
+
 	proxy := cd.Proxy
 	if proxy == nil {
 		log.Infow("no proxy object available, closing connections to master")
 		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
 		// ignore errors on setting proxy info
-		if err = c.SetProxyInfo(c.e, cluster.NoGeneration, 2*cluster.DefaultProxyTimeoutInterval); err != nil {
+		if err = c.SetProxyInfo(c.e, cluster.NoGeneration, proxyTimeout); err != nil {
 			log.Errorw("failed to update proxyInfo", zap.Error(err))
+		} else {
+			// update proxyCheckinterval and proxyTimeout only if we successfully updated our proxy info
+			c.configMutex.Lock()
+			c.proxyCheckInterval = cdProxyCheckInterval
+			c.proxyTimeout = cdProxyTimeout
+			c.configMutex.Unlock()
 		}
 		return nil
 	}
@@ -219,8 +247,14 @@ func (c *ClusterChecker) Check() error {
 		log.Infow("no db object available, closing connections to master", "db", proxy.Spec.MasterDBUID)
 		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
 		// ignore errors on setting proxy info
-		if err = c.SetProxyInfo(c.e, proxy.Generation, 2*cluster.DefaultProxyTimeoutInterval); err != nil {
+		if err = c.SetProxyInfo(c.e, proxy.Generation, proxyTimeout); err != nil {
 			log.Errorw("failed to update proxyInfo", zap.Error(err))
+		} else {
+			// update proxyCheckinterval and proxyTimeout only if we successfully updated our proxy info
+			c.configMutex.Lock()
+			c.proxyCheckInterval = cdProxyCheckInterval
+			c.proxyTimeout = cdProxyTimeout
+			c.configMutex.Unlock()
 		}
 		return nil
 	}
@@ -232,12 +266,18 @@ func (c *ClusterChecker) Check() error {
 		return nil
 	}
 	log.Infow("master address", "address", addr)
-	if err = c.SetProxyInfo(c.e, proxy.Generation, 2*cluster.DefaultProxyTimeoutInterval); err != nil {
+	if err = c.SetProxyInfo(c.e, proxy.Generation, proxyTimeout); err != nil {
 		// if we failed to update our proxy info when a master is defined we
 		// cannot ignore this error since the sentinel won't know that we exist
 		// and are sending connections to a master so, when electing a new
 		// master, it'll not wait for us to close connections to the old one.
 		return fmt.Errorf("failed to update proxyInfo: %v", err)
+	} else {
+		// update proxyCheckinterval and proxyTimeout only if we successfully updated our proxy info
+		c.configMutex.Lock()
+		c.proxyCheckInterval = cdProxyCheckInterval
+		c.proxyTimeout = cdProxyTimeout
+		c.configMutex.Unlock()
 	}
 
 	// start proxing only if we are inside enabledProxies, this ensures that the
@@ -253,10 +293,12 @@ func (c *ClusterChecker) Check() error {
 	return nil
 }
 
-func (c *ClusterChecker) TimeoutChecker(checkOkCh chan struct{}) error {
-	timeoutTimer := time.NewTimer(cluster.DefaultProxyTimeoutInterval)
+func (c *ClusterChecker) TimeoutChecker(checkOkCh chan struct{}) {
+	c.configMutex.Lock()
+	timeoutTimer := time.NewTimer(c.proxyTimeout)
+	c.configMutex.Unlock()
 
-	for true {
+	for {
 		select {
 		case <-timeoutTimer.C:
 			log.Infow("check timeout timer fired")
@@ -273,10 +315,12 @@ func (c *ClusterChecker) TimeoutChecker(checkOkCh chan struct{}) error {
 
 			// ignore if stop succeeded or not due to timer already expired
 			timeoutTimer.Stop()
-			timeoutTimer = time.NewTimer(cluster.DefaultProxyTimeoutInterval)
+
+			c.configMutex.Lock()
+			timeoutTimer = time.NewTimer(c.proxyTimeout)
+			c.configMutex.Unlock()
 		}
 	}
-	return nil
 }
 
 func (c *ClusterChecker) Start() error {
@@ -304,7 +348,10 @@ func (c *ClusterChecker) Start() error {
 				// report that check was ok
 				checkOkCh <- struct{}{}
 			}
-			timerCh = time.NewTimer(cluster.DefaultProxyCheckInterval).C
+			c.configMutex.Lock()
+			timerCh = time.NewTimer(c.proxyCheckInterval).C
+			c.configMutex.Unlock()
+
 		case err := <-c.endPollonProxyCh:
 			if err != nil {
 				return fmt.Errorf("proxy error: %v", err)
@@ -314,9 +361,13 @@ func (c *ClusterChecker) Start() error {
 }
 
 func Execute() {
-	flagutil.SetFlagsFromEnv(CmdProxy.PersistentFlags(), "STPROXY")
+	if err := flagutil.SetFlagsFromEnv(CmdProxy.PersistentFlags(), "STPROXY"); err != nil {
+		log.Fatal(err)
+	}
 
-	CmdProxy.Execute()
+	if err := CmdProxy.Execute(); err != nil {
+		log.Fatal(err)
+	}
 }
 
 func proxy(c *cobra.Command, args []string) {

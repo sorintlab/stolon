@@ -231,7 +231,7 @@ func GetSystemData(ctx context.Context, replConnParams ConnParams) (*SystemData,
 		return nil, err
 	}
 	defer rows.Close()
-	for rows.Next() {
+	if rows.Next() {
 		var sd SystemData
 		var xLogPosLsn string
 		var unused *string
@@ -288,7 +288,7 @@ func getTimelinesHistory(ctx context.Context, timeline uint64, replConnParams Co
 		return nil, err
 	}
 	defer rows.Close()
-	for rows.Next() {
+	if rows.Next() {
 		var timelineFile string
 		var contents string
 		if err := rows.Scan(&timelineFile, &contents); err != nil {
@@ -453,7 +453,7 @@ func isRestartRequiredUsingPgSettingsContext(ctx context.Context, connParams Con
 }
 
 func ParseBinaryVersion(v string) (int, int, error) {
-	// extact version (removing beta*, rc* etc...)
+	// extract version (removing beta*, rc* etc...)
 	regex, err := regexp.Compile(`.* \(PostgreSQL\) ([0-9\.]+).*`)
 	if err != nil {
 		return 0, 0, err

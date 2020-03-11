@@ -45,7 +45,7 @@ var CmdStolonCtl = &cobra.Command{
 		}
 	},
 	// just defined to make --version work
-	Run: func(c *cobra.Command, args []string) { c.Help() },
+	Run: func(c *cobra.Command, args []string) { _ = c.Help() },
 }
 
 type config struct {
@@ -74,8 +74,12 @@ func versionCommand(c *cobra.Command, args []string) {
 }
 
 func Execute() {
-	flagutil.SetFlagsFromEnv(CmdStolonCtl.PersistentFlags(), "STOLONCTL")
-	CmdStolonCtl.Execute()
+	if err := flagutil.SetFlagsFromEnv(CmdStolonCtl.PersistentFlags(), "STOLONCTL"); err != nil {
+		log.Fatal(err)
+	}
+	if err := CmdStolonCtl.Execute(); err != nil {
+		log.Fatal(err)
+	}
 }
 
 func stderr(format string, a ...interface{}) {

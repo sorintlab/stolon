@@ -144,7 +144,9 @@ func setupServers(t *testing.T, clusterName, dir string, numKeepers, numSentinel
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
-		pgpass.WriteString(fmt.Sprintf("%s:%s:*:%s:%s\n", primaryKeeper.pgListenAddress, primaryKeeper.pgPort, primaryKeeper.pgReplUsername, primaryKeeper.pgReplPassword))
+		if _, err := pgpass.WriteString(fmt.Sprintf("%s:%s:*:%s:%s\n", primaryKeeper.pgListenAddress, primaryKeeper.pgPort, primaryKeeper.pgReplUsername, primaryKeeper.pgReplPassword)); err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
 		pgpass.Close()
 
 		initialClusterSpec = &cluster.ClusterSpec{
@@ -433,9 +435,6 @@ func testFailover(t *testing.T, syncRepl bool, standbyCluster bool) {
 	if err := standby.WaitDBRole(common.RoleMaster, ptk, 30*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	if !standbyCluster {
-		primary = standby
-	}
 
 	c, err := getLines(t, standby)
 	if err != nil {
@@ -547,7 +546,9 @@ func testFailoverFailed(t *testing.T, syncRepl bool, standbyCluster bool) {
 	standby.Stop()
 
 	t.Logf("Starting previous master keeper: %s", master.uid)
-	master.Start()
+	if err := master.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
 	// Wait for cluster data containing previous master as master
 	err = WaitClusterDataMaster(master.uid, sm, 30*time.Second)
 	if !syncRepl && err != nil {
@@ -637,7 +638,9 @@ func testFailoverTooMuchLag(t *testing.T, standbyCluster bool) {
 	master.Stop()
 	// start the standby
 	t.Logf("Starting current standby keeper: %s", standby.uid)
-	standby.Start()
+	if err := standby.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
 
 	// standby shouldn't be elected as master since its lag is greater than MaxStandbyLag
 	if err := standby.WaitDBRole(common.RoleMaster, ptk, 30*time.Second); err == nil {
@@ -1055,8 +1058,13 @@ func testTimelineFork(t *testing.T, syncRepl, usePgrewind bool) {
 	// If synchronous replication is disabled it will be elected as master but it'll be behind (having only one line).
 	// If synchronous replication is enabled it won't be elected as master
 	t.Logf("Starting standby[0]: %s", standbys[0].uid)
-	standbys[0].Start()
+	if err := standbys[0].Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// Wait for cluster data
 	waitKeeperReady(t, sm, standbys[0])
+
 	err = standbys[0].WaitDBRole(common.RoleMaster, nil, 60*time.Second)
 	if !syncRepl && err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -1085,7 +1093,10 @@ func testTimelineFork(t *testing.T, syncRepl, usePgrewind bool) {
 
 	// Start the other standby, it should be ahead of current on previous timeline and should full resync himself
 	t.Logf("Starting standby[1]: %s", standbys[1].uid)
-	standbys[1].Start()
+	if err := standbys[1].Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
 	// Standby[1] will start, then it'll detect it's in another timelinehistory,
 	// will stop, full resync and start. We have to avoid detecting it up
 	// at the first start. Do this waiting for the number of expected lines.
@@ -1194,6 +1205,9 @@ func testMasterChangedAddress(t *testing.T, standbyCluster bool) {
 	master.Stop()
 	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
 	master, err = NewTestKeeperWithID(t, dir, master.uid, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, tstore.storeBackend, storeEndpoints)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
 	tks[master.uid] = master
 
 	if !standbyCluster {
@@ -1432,7 +1446,6 @@ func TestKeeperRemoval(t *testing.T) {
 	if err := standby2.Start(); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	standbys = append(standbys, standby2)
 
 	// wait for keeper to be added to the cluster data
 	if err := WaitClusterDataKeepers([]string{master.uid, standby1.uid, standby2.uid}, sm, 30*time.Second); err != nil {
@@ -1462,9 +1475,14 @@ func TestKeeperRemoval(t *testing.T) {
 
 	// restart the standby2 and master and stop standby1
 	t.Logf("Starting master keeper: %s", master.uid)
-	master.Start()
+	if err := master.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
 	t.Logf("Starting standby keeper: %s", standby2.uid)
-	standby2.Start()
+	if err := standby2.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
 
 	waitKeeperReady(t, sm, master)
 	// add a new line to be sure
@@ -1592,7 +1610,9 @@ func testKeeperRemovalStolonCtl(t *testing.T, syncRepl bool) {
 
 	// restart standbys[0]
 	t.Logf("Starting standbys[0] keeper: %s", standbys[0].uid)
-	standbys[0].Start()
+	if err := standbys[0].Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
 
 	// it should reenter the cluster with the same uid but a new assigned db uid
 	if err := waitLines(t, standbys[0], 1, 60*time.Second); err != nil {
@@ -1702,7 +1722,9 @@ func TestStandbyCantSync(t *testing.T) {
 
 	// start standbys[0]
 	t.Logf("Starting standbys[0] keeper: %s", standbys[0].uid)
-	standbys[0].Start()
+	if err := standbys[0].Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
 
 	// wait for standbys[0] dbuid being changed
 
@@ -1791,7 +1813,10 @@ func TestDisappearedKeeperData(t *testing.T) {
 
 	// restart master
 	t.Logf("Starting current master keeper: %s", master.uid)
-	master.Start()
+	if err := master.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
 	waitKeeperReady(t, sm, master)
 
 	// master shouldn't start its postgres instance and standby should be elected as new master
@@ -1894,9 +1919,6 @@ func testForceFail(t *testing.T, syncRepl bool, standbyCluster bool) {
 	}
 	if err := standby.WaitDBRole(common.RoleMaster, ptk, 30*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
-	}
-	if !standbyCluster {
-		primary = standby
 	}
 
 	c, err := getLines(t, standby)
@@ -2003,13 +2025,16 @@ func TestSyncStandbyNotInSync(t *testing.T) {
 	standby.Stop()
 	// this call will block and then exit with an error when the master is restarted
 	go func() {
-		write(t, master, 2, 2)
+		_ = write(t, master, 2, 2)
 	}()
 	time.Sleep(1 * time.Second)
 	// restart master
 	t.Logf("Restarting current master keeper: %s", master.uid)
 	master.Stop()
-	master.Start()
+	if err := master.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
 	waitKeeperReady(t, sm, master)
 	// The transaction should be fully committed on master
 	c, err := getLines(t, master)
@@ -2030,7 +2055,10 @@ func TestSyncStandbyNotInSync(t *testing.T) {
 	}
 	// Starting the standby keeper
 	t.Logf("Starting current standby keeper: %s", standby.uid)
-	standby.Start()
+	if err := standby.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
 	time.Sleep(10 * time.Second)
 	// The normal user should now be able to connect and see 2 lines
 	c, err = getLines(t, user01db)

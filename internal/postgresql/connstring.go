@@ -217,6 +217,6 @@ func (p ConnParams) ConnString() string {
 			kvs = append(kvs, k+"="+escaper.Replace(v))
 		}
 	}
-	sort.Sort(sort.StringSlice(kvs))
+	sort.Strings(kvs)
 	return strings.Join(kvs, " ")
 }

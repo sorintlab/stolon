@@ -16,17 +16,17 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/sorintlab/stolon/internal/timer"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
-	"reflect"
-
-	"github.com/davecgh/go-spew/spew"
 	"github.com/sorintlab/stolon/internal/cluster"
 	"github.com/sorintlab/stolon/internal/common"
+	"github.com/sorintlab/stolon/internal/timer"
+
+	"github.com/davecgh/go-spew/spew"
 )
 
 var curUID int
@@ -39,7 +39,7 @@ func TestUpdateCluster(t *testing.T) {
 		outcd *cluster.ClusterData
 		err   error
 	}{
-		// Init phase, also test dbSpec paramaters copied from clusterSpec.
+		// Init phase, also test dbSpec parameters copied from clusterSpec.
 		// #0 cluster initialization, no keepers
 		{
 			cd: &cluster.ClusterData{
@@ -195,7 +195,7 @@ func TestUpdateCluster(t *testing.T) {
 				Proxy: &cluster.Proxy{},
 			},
 		},
-		// #2 cluster initialization, more than one keeper, the first will be choosen to be the new master.
+		// #2 cluster initialization, more than one keeper, the first will be chosen to be the new master.
 		{
 			cd: &cluster.ClusterData{
 				Cluster: &cluster.Cluster{
@@ -5000,8 +5000,8 @@ func TestUpdateCluster(t *testing.T) {
 }
 
 func TestActiveProxiesInfos(t *testing.T) {
-	proxyInfo1 := cluster.ProxyInfo{UID: "proxy1", InfoUID: "infoUID1"}
-	proxyInfo2 := cluster.ProxyInfo{UID: "proxy2", InfoUID: "infoUID2"}
+	proxyInfo1 := cluster.ProxyInfo{UID: "proxy1", InfoUID: "infoUID1", ProxyTimeout: cluster.DefaultProxyTimeout}
+	proxyInfo2 := cluster.ProxyInfo{UID: "proxy2", InfoUID: "infoUID2", ProxyTimeout: cluster.DefaultProxyTimeout}
 	proxyInfoWithDifferentInfoUID := cluster.ProxyInfo{UID: "proxy2", InfoUID: "differentInfoUID"}
 	var secToNanoSecondMultiplier int64 = 1000000000
 	tests := []struct {
@@ -5033,7 +5033,7 @@ func TestActiveProxiesInfos(t *testing.T) {
 			expectedProxyInfoHistories: ProxyInfoHistories{"proxy1": &ProxyInfoHistory{ProxyInfo: &proxyInfo1}, "proxy2": &ProxyInfoHistory{ProxyInfo: &proxyInfoWithDifferentInfoUID}},
 		},
 		{
-			name:                       "should remove from active proxies if is not updated for twice the DefaultProxyTimeoutInterval",
+			name:                       "should remove from active proxies if is not updated for twice the DefaultProxyTimeout",
 			proxyInfoHistories:         ProxyInfoHistories{"proxy1": &ProxyInfoHistory{ProxyInfo: &proxyInfo1, Timer: timer.Now() - (3 * 15 * secToNanoSecondMultiplier)}, "proxy2": &ProxyInfoHistory{ProxyInfo: &proxyInfo2, Timer: timer.Now() - (1 * 15 * secToNanoSecondMultiplier)}},
 			proxiesInfos:               cluster.ProxiesInfo{"proxy1": &proxyInfo1, "proxy2": &proxyInfo2},
 			expectedActiveProxies:      cluster.ProxiesInfo{"proxy2": &proxyInfo2},

@@ -100,7 +100,9 @@ func TestInitStandbyCluster(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	pgpass.WriteString(fmt.Sprintf("%s:%s:*:%s:%s\n", ptk.pgListenAddress, ptk.pgPort, ptk.pgReplUsername, ptk.pgReplPassword))
+	if _, err := pgpass.WriteString(fmt.Sprintf("%s:%s:*:%s:%s\n", ptk.pgListenAddress, ptk.pgPort, ptk.pgReplUsername, ptk.pgReplPassword)); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
 	pgpass.Close()
 
 	initialClusterSpec = &cluster.ClusterSpec{
@@ -231,7 +233,9 @@ func TestPromoteStandbyCluster(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	pgpass.WriteString(fmt.Sprintf("%s:%s:*:%s:%s\n", ptk.pgListenAddress, ptk.pgPort, ptk.pgReplUsername, ptk.pgReplPassword))
+	if _, err := pgpass.WriteString(fmt.Sprintf("%s:%s:*:%s:%s\n", ptk.pgListenAddress, ptk.pgPort, ptk.pgReplUsername, ptk.pgReplPassword)); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
 	pgpass.Close()
 
 	initialClusterSpec = &cluster.ClusterSpec{
@@ -382,7 +386,9 @@ func TestPromoteStandbyClusterArchiveRecovery(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	pgpass.WriteString(fmt.Sprintf("%s:%s:*:%s:%s\n", ptk.pgListenAddress, ptk.pgPort, ptk.pgReplUsername, ptk.pgReplPassword))
+	if _, err := pgpass.WriteString(fmt.Sprintf("%s:%s:*:%s:%s\n", ptk.pgListenAddress, ptk.pgPort, ptk.pgReplUsername, ptk.pgReplPassword)); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
 	pgpass.Close()
 
 	initialClusterSpec = &cluster.ClusterSpec{

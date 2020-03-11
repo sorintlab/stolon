@@ -53,12 +53,15 @@ func initCluster(cmd *cobra.Command, args []string) {
 		die("too many arguments")
 	}
 
+	dataSupplied := false
 	data := []byte{}
 	switch len(args) {
 	case 1:
+		dataSupplied = true
 		data = []byte(args[0])
 	case 0:
 		if initOpts.file != "" {
+			dataSupplied = true
 			var err error
 			if initOpts.file == "-" {
 				data, err = ioutil.ReadAll(os.Stdin)
@@ -104,20 +107,20 @@ func initCluster(cmd *cobra.Command, args []string) {
 		os.Exit(0)
 	}
 
-	cd, _, err = e.GetClusterData(context.TODO())
+	_, _, err = e.GetClusterData(context.TODO())
 	if err != nil {
 		die("cannot get cluster data: %v", err)
 	}
 
 	var cs *cluster.ClusterSpec
-	if len(data) == 0 {
-		// Define a new cluster spec with initMode "new"
-		cs = &cluster.ClusterSpec{}
-		cs.InitMode = cluster.ClusterInitModeP(cluster.ClusterInitModeNew)
-	} else {
+	if dataSupplied {
 		if err := json.Unmarshal(data, &cs); err != nil {
 			die("failed to unmarshal cluster spec: %v", err)
 		}
+	} else {
+		// Define a new cluster spec with initMode "new"
+		cs = &cluster.ClusterSpec{}
+		cs.InitMode = cluster.ClusterInitModeP(cluster.ClusterInitModeNew)
 	}
 
 	if err := cs.Validate(); err != nil {

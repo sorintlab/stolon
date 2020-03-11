@@ -25,12 +25,12 @@ import (
 	"strings"
 	"time"
 
-	etcdclientv3 "github.com/coreos/etcd/clientv3"
 	"github.com/docker/leadership"
 	"github.com/docker/libkv"
 	libkvstore "github.com/docker/libkv/store"
 	"github.com/sorintlab/stolon/internal/cluster"
 	"github.com/sorintlab/stolon/internal/common"
+	etcdclientv3 "go.etcd.io/etcd/clientv3"
 )
 
 // Backend represents a KV Store Backend
@@ -43,13 +43,10 @@ const (
 )
 
 const (
-	sentinelLeaderKey = "sentinel-leader"
-
-	keepersInfoDir         = "/keepers/info/"
-	clusterDataFile        = "clusterdata"
-	leaderSentinelInfoFile = "/sentinels/leaderinfo"
-	sentinelsInfoDir       = "/sentinels/info/"
-	proxiesInfoDir         = "/proxies/info/"
+	keepersInfoDir   = "/keepers/info/"
+	clusterDataFile  = "clusterdata"
+	sentinelsInfoDir = "/sentinels/info/"
+	proxiesInfoDir   = "/proxies/info/"
 )
 
 const (
@@ -68,6 +65,7 @@ var URLSchemeRegexp = regexp.MustCompile(`^([a-zA-Z][a-zA-Z0-9+-.]*)://`)
 type Config struct {
 	Backend       Backend
 	Endpoints     string
+	Timeout       time.Duration
 	BasePath      string
 	CertFile      string
 	KeyFile       string
@@ -175,7 +173,7 @@ func NewKVStore(cfg Config) (KVStore, error) {
 	case CONSUL, ETCDV2:
 		config := &libkvstore.Config{
 			TLS:               tlsConfig,
-			ConnectionTimeout: cluster.DefaultStoreTimeout,
+			ConnectionTimeout: cfg.Timeout,
 		}
 
 		store, err := libkv.NewStore(kvBackend, addrs, config)
@@ -193,7 +191,7 @@ func NewKVStore(cfg Config) (KVStore, error) {
 		if err != nil {
 			return nil, err
 		}
-		return &etcdV3Store{c: c, requestTimeout: cluster.DefaultStoreTimeout}, nil
+		return &etcdV3Store{c: c, requestTimeout: cfg.Timeout}, nil
 	default:
 		return nil, fmt.Errorf("Unknown store backend: %q", cfg.Backend)
 	}
@@ -347,20 +345,20 @@ func (s *KVBackedStore) GetProxiesInfo(ctx context.Context) (cluster.ProxiesInfo
 	return psi, nil
 }
 
-func NewKVBackedElection(kvStore KVStore, path, candidateUID string) Election {
-	switch kvStore.(type) {
+func NewKVBackedElection(kvStore KVStore, path, candidateUID string, timeout time.Duration) Election {
+	switch kvStore := kvStore.(type) {
 	case *libKVStore:
-		s := kvStore.(*libKVStore)
+		s := kvStore
 		candidate := leadership.NewCandidate(s.store, path, candidateUID, MinTTL)
 		return &libkvElection{store: s, path: path, candidate: candidate}
 	case *etcdV3Store:
-		etcdV3Store := kvStore.(*etcdV3Store)
+		etcdV3Store := kvStore
 		return &etcdv3Election{
 			c:              etcdV3Store.c,
 			path:           path,
 			candidateUID:   candidateUID,
 			ttl:            MinTTL,
-			requestTimeout: cluster.DefaultStoreTimeout,
+			requestTimeout: timeout,
 		}
 	default:
 		panic("unknown kvstore")

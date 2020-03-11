@@ -105,7 +105,9 @@ func TestSentinelEnabledProxies(t *testing.T) {
 	enabledProxies := cd.Proxy.Spec.EnabledProxies
 
 	t.Logf("starting sentinel")
-	ts.Start()
+	if err := ts.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
 
 	// check that the sentinel has become leader (cluster data is changed since
 	// it's updating keepers status) TODO(sgotti) find a better way to determine
@@ -150,7 +152,7 @@ func TestSentinelEnabledProxies(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	if err := WaitClusterDataEnabledProxiesNum(sm, 1, 3*cluster.DefaultProxyTimeoutInterval); err != nil {
+	if err := WaitClusterDataEnabledProxiesNum(sm, 1, 3*cluster.DefaultProxyTimeout); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
