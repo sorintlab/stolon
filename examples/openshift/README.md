@@ -26,5 +26,5 @@ oc patch --local=true -f stolon-sentinel.yaml -p '{"spec":{"template":{"spec":{"
   ```
  oc patch --local=true -f stolon-proxy.yaml -p '{"spec":{"template":{"spec":{"serviceAccount": "<service_account_name>"}}}}' -o yaml > stolon-proxy_new.yaml
  ```
-##Deployment
+## Deployment
 Deploy the Stolon components using the files created at the previous step.
