@@ -115,6 +115,7 @@ type config struct {
 
 	canBeMaster             bool
 	canBeSynchronousReplica bool
+	skipRenderHBA 	bool
 }
 
 var cfg config
@@ -142,6 +143,7 @@ func init() {
 
 	CmdKeeper.PersistentFlags().BoolVar(&cfg.canBeMaster, "can-be-master", true, "prevent keeper from being elected as master")
 	CmdKeeper.PersistentFlags().BoolVar(&cfg.canBeSynchronousReplica, "can-be-synchronous-replica", true, "prevent keeper from being chosen as synchronous replica")
+	CmdKeeper.PersistentFlags().BoolVar(&cfg.debug, "skip-render-hba", true, "boolean to render the hba configuration file even on restarts")
 
 	if err := CmdKeeper.PersistentFlags().MarkDeprecated("id", "please use --uid"); err != nil {
 		log.Fatal(err)
@@ -470,6 +472,7 @@ type PostgresKeeper struct {
 
 	canBeMaster             *bool
 	canBeSynchronousReplica *bool
+	skipRenderHBA 	bool // bool used to determine whether we want to render the hba configuration on restarts
 }
 
 func NewPostgresKeeper(cfg *config, end chan error) (*PostgresKeeper, error) {
@@ -511,6 +514,7 @@ func NewPostgresKeeper(cfg *config, end chan error) (*PostgresKeeper, error) {
 
 		canBeMaster:             &cfg.canBeMaster,
 		canBeSynchronousReplica: &cfg.canBeSynchronousReplica,
+		skipRenderHBA: &cfg.skipRenderHBA,
 
 		e:   e,
 		end: end,
@@ -1484,7 +1488,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 			if db.Spec.SynchronousReplication {
 				p.waitSyncStandbysSynced = true
 				log.Infow("not allowing connection as normal users since synchronous replication is enabled and instance was down")
-				pgm.SetHba(p.generateHBA(cd, db, true))
+				pgm.SetHba(p.generateHBA(cd, db, p.skipRenderHBA))
 			}
 
 			if err = pgm.Start(); err != nil {
