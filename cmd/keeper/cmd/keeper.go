@@ -115,7 +115,7 @@ type config struct {
 
 	canBeMaster             bool
 	canBeSynchronousReplica bool
-	skipRenderHBA           bool
+	skipHBARender           bool
 }
 
 var cfg config
@@ -143,7 +143,7 @@ func init() {
 
 	CmdKeeper.PersistentFlags().BoolVar(&cfg.canBeMaster, "can-be-master", true, "prevent keeper from being elected as master")
 	CmdKeeper.PersistentFlags().BoolVar(&cfg.canBeSynchronousReplica, "can-be-synchronous-replica", true, "prevent keeper from being chosen as synchronous replica")
-	CmdKeeper.PersistentFlags().BoolVar(&cfg.skipRenderHBA, "skip-render-hba", false, "boolean to render the hba configuration file even on restarts")
+	CmdKeeper.PersistentFlags().BoolVar(&cfg.skipHBARender, "skip-hba-render", false, "boolean to render the hba configuration file even on restarts")
 
 	if err := CmdKeeper.PersistentFlags().MarkDeprecated("id", "please use --uid"); err != nil {
 		log.Fatal(err)
@@ -472,7 +472,7 @@ type PostgresKeeper struct {
 
 	canBeMaster             *bool
 	canBeSynchronousReplica *bool
-	skipRenderHBA           bool // bool used to determine whether we want to render the hba configuration on restarts
+	skipHBARender           bool // bool used to determine whether we want to render the hba configuration on restarts
 }
 
 func NewPostgresKeeper(cfg *config, end chan error) (*PostgresKeeper, error) {
@@ -514,7 +514,7 @@ func NewPostgresKeeper(cfg *config, end chan error) (*PostgresKeeper, error) {
 
 		canBeMaster:             &cfg.canBeMaster,
 		canBeSynchronousReplica: &cfg.canBeSynchronousReplica,
-		skipRenderHBA:           cfg.skipRenderHBA,
+		skipHBARender:           cfg.skipHBARender,
 
 		e:   e,
 		end: end,
@@ -1486,10 +1486,10 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 		if !started {
 			// if we have syncrepl enabled and the postgres instance is stopped, before opening connections to normal users wait for having the defined synchronousStandbys in sync state.
 			if db.Spec.SynchronousReplication {
-				p.waitSyncStandbysSynced = true
+				p.waitSyncStandbysSynced = p.skipHBARender
 				log.Infow("not allowing connection as normal users since synchronous replication is enabled and instance was down")
-				log.Debugf("L:1491 p.generateHBA(cd, db, %v)", p.skipRenderHBA)
-				pgm.SetHba(p.generateHBA(cd, db, p.skipRenderHBA))
+				log.Infof("L:1491 p.generateHBA(cd, db, %v)", p.skipHBARender)
+				pgm.SetHba(p.generateHBA(cd, db, p.skipHBARender))
 			}
 
 			if err = pgm.Start(); err != nil {
@@ -1663,7 +1663,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 	} else {
 		p.waitSyncStandbysSynced = false
 	}
-	log.Debugf("L: 1666 not all sync standbys are synced p.generateHBA(cd, db, %v)", p.waitSyncStandbysSynced)
+	log.Infof("L: 1666 not all sync standbys are synced p.generateHBA(cd, db, %v)", p.waitSyncStandbysSynced)
 	newHBA := p.generateHBA(cd, db, p.waitSyncStandbysSynced)
 	if !reflect.DeepEqual(newHBA, pgm.CurHba()) {
 		log.Infow("postgres hba entries changed, reloading postgres instance")
@@ -1845,7 +1845,7 @@ func (p *PostgresKeeper) generateHBA(cd *cluster.ClusterData, db *cluster.DB, on
 	if !onlyInternal {
 		// By default, if no custom pg_hba entries are provided, accept
 		// connections for all databases and users with md5 auth
-		log.Debugf("generating pg_hba.conf file %v", onlyInternal)
+		log.Infof("generating pg_hba.conf file %v", onlyInternal)
 		if db.Spec.PGHBA != nil {
 			computedHBA = append(computedHBA, db.Spec.PGHBA...)
 		} else {
@@ -1857,7 +1857,7 @@ func (p *PostgresKeeper) generateHBA(cd *cluster.ClusterData, db *cluster.DB, on
 		}
 	}
 
-	log.Debugf("generated pg_hba.conf file %v", computedHBA)
+	log.Infof("generated pg_hba.conf file %v", computedHBA)
 
 	// return generated Hba merged with user Hba
 	return computedHBA
