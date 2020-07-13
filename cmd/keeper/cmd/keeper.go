@@ -514,7 +514,7 @@ func NewPostgresKeeper(cfg *config, end chan error) (*PostgresKeeper, error) {
 
 		canBeMaster:             &cfg.canBeMaster,
 		canBeSynchronousReplica: &cfg.canBeSynchronousReplica,
-		skipRenderHBA: &cfg.skipRenderHBA,
+		skipRenderHBA: cfg.skipRenderHBA,
 
 		e:   e,
 		end: end,
