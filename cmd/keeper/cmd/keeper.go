@@ -1488,7 +1488,6 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 			if db.Spec.SynchronousReplication {
 				p.waitSyncStandbysSynced = p.skipHBARender
 				log.Infow("not allowing connection as normal users since synchronous replication is enabled and instance was down")
-				log.Infof("L:1491 p.generateHBA(cd, db, %v)", p.skipHBARender)
 				pgm.SetHba(p.generateHBA(cd, db, p.skipHBARender))
 			}
 
@@ -1663,7 +1662,6 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 	} else {
 		p.waitSyncStandbysSynced = false
 	}
-	log.Infof("L: 1666 not all sync standbys are synced p.generateHBA(cd, db, %v)", p.waitSyncStandbysSynced)
 	newHBA := p.generateHBA(cd, db, p.waitSyncStandbysSynced)
 	if !reflect.DeepEqual(newHBA, pgm.CurHba()) {
 		log.Infow("postgres hba entries changed, reloading postgres instance")
@@ -1845,7 +1843,6 @@ func (p *PostgresKeeper) generateHBA(cd *cluster.ClusterData, db *cluster.DB, on
 	if !onlyInternal {
 		// By default, if no custom pg_hba entries are provided, accept
 		// connections for all databases and users with md5 auth
-		log.Infof("generating pg_hba.conf file %v", onlyInternal)
 		if db.Spec.PGHBA != nil {
 			computedHBA = append(computedHBA, db.Spec.PGHBA...)
 		} else {
