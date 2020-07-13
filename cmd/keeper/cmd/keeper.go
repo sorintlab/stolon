@@ -143,7 +143,7 @@ func init() {
 
 	CmdKeeper.PersistentFlags().BoolVar(&cfg.canBeMaster, "can-be-master", true, "prevent keeper from being elected as master")
 	CmdKeeper.PersistentFlags().BoolVar(&cfg.canBeSynchronousReplica, "can-be-synchronous-replica", true, "prevent keeper from being chosen as synchronous replica")
-	CmdKeeper.PersistentFlags().BoolVar(&cfg.debug, "skip-render-hba", true, "boolean to render the hba configuration file even on restarts")
+	CmdKeeper.PersistentFlags().BoolVar(&cfg.debug, "skip-render-hba", false, "boolean to render the hba configuration file even on restarts")
 
 	if err := CmdKeeper.PersistentFlags().MarkDeprecated("id", "please use --uid"); err != nil {
 		log.Fatal(err)
