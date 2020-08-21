@@ -225,6 +225,16 @@ func (s *Sentinel) updateKeepersStatus(cd *cluster.ClusterData, keepersInfo clus
 		}
 	}
 
+	// Keepers support several command line arguments that should be populated in the
+	// KeeperStatus by the sentinel. This allows us to make decisions about how to arrange
+	// the cluster that take into consideration the configuration of each keeper.
+	for keeperUID, k := range cd.Keepers {
+		if ki, ok := keepersInfo[keeperUID]; ok {
+			k.Status.CanBeMaster = ki.CanBeMaster
+			k.Status.CanBeSynchronousReplica = ki.CanBeSynchronousReplica
+		}
+	}
+
 	// Mark keepers without a keeperInfo (cleaned up above from not updated
 	// ones) as in error
 	for keeperUID, k := range cd.Keepers {
@@ -720,20 +730,35 @@ func (s *Sentinel) findBestStandbys(cd *cluster.ClusterData, masterDB *cluster.D
 	return bestDBs
 }
 
+// findBestNewMasters identifies the DBs that are elegible to become a new master. We do
+// this by selecting from valid standbys (those keepers that follow the same timeline as
+// our master, and have an acceptable replication lag) and also selecting from those nodes
+// that are valid to become master by their status.
 func (s *Sentinel) findBestNewMasters(cd *cluster.ClusterData, masterDB *cluster.DB) []*cluster.DB {
-	bestNewMasters := s.findBestStandbys(cd, masterDB)
+	bestNewMasters := []*cluster.DB{}
+	for _, db := range s.findBestStandbys(cd, masterDB) {
+		if k, ok := cd.Keepers[db.Spec.KeeperUID]; ok && (k.Status.CanBeMaster != nil && !*k.Status.CanBeMaster) {
+			log.Infow("ignoring keeper since it cannot be master (--can-be-master=false)", "db", db.UID, "keeper", db.Spec.KeeperUID)
+			continue
+		}
+
+		bestNewMasters = append(bestNewMasters, db)
+	}
+
 	// Add the previous masters to the best standbys (if valid and in good state)
-	goodMasters, _, _ := s.validMastersByStatus(cd)
-	log.Debugf("goodMasters: %s", spew.Sdump(goodMasters))
-	for _, db := range goodMasters {
+	validMastersByStatus, _, _ := s.validMastersByStatus(cd)
+	log.Debugf("validMastersByStatus: %s", spew.Sdump(validMastersByStatus))
+	for _, db := range validMastersByStatus {
 		if db.UID == masterDB.UID {
 			log.Debugw("ignoring db since it's the current master", "db", db.UID, "keeper", db.Spec.KeeperUID)
 			continue
 		}
+
 		if db.Status.TimelineID != masterDB.Status.TimelineID {
 			log.Debugw("ignoring keeper since its pg timeline is different than master timeline", "db", db.UID, "dbTimeline", db.Status.TimelineID, "masterTimeline", masterDB.Status.TimelineID)
 			continue
 		}
+
 		// do this only when not using synchronous replication since in sync repl we
 		// have to ignore the last reported xlogpos or valid sync standby will be
 		// skipped
@@ -743,8 +768,10 @@ func (s *Sentinel) findBestNewMasters(cd *cluster.ClusterData, masterDB *cluster
 				continue
 			}
 		}
+
 		bestNewMasters = append(bestNewMasters, db)
 	}
+
 	// Sort by XLogPos
 	sort.Sort(dbSlice(bestNewMasters))
 	log.Debugf("bestNewMasters: %s", spew.Sdump(bestNewMasters))
@@ -1302,6 +1329,15 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 							if _, ok := synchronousStandbys[bestStandby.UID]; ok {
 								continue
 							}
+
+							// ignore standbys that cannot be synchronous standbys
+							if db, ok := newcd.DBs[bestStandby.UID]; ok {
+								if keeper, ok := newcd.Keepers[db.Spec.KeeperUID]; ok && (keeper.Status.CanBeSynchronousReplica != nil && !*keeper.Status.CanBeSynchronousReplica) {
+									log.Infow("cannot choose standby as synchronous (--can-be-synchronous-replica=false)", "db", db.UID, "keeper", keeper.UID)
+									continue
+								}
+							}
+
 							log.Infow("adding new synchronous standby in good state trying to reach MaxSynchronousStandbys", "masterDB", masterDB.UID, "synchronousStandbyDB", bestStandby.UID, "keeper", bestStandby.Spec.KeeperUID)
 							synchronousStandbys[bestStandby.UID] = struct{}{}
 							addedCount++

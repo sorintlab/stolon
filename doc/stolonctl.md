@@ -3,7 +3,7 @@
 `stolonctl` is the stolon client which controls the stolon cluster(s). 
 
 Since `stolonctl`needs to communicate with the cluster backend store, it requires providing the requested cluster name (`--cluster-name`), its store backend type (`--store-backend`), and how to reach the store, such as:
-* For etcdv2, etcdv3 or consul as store, a comma separated list of endpoints (`--store--endpoints`).
+* For etcdv2, etcdv3 or consul as store, a comma separated list of endpoints (`--store-endpoints`).
 * For kubernetes as store, the kind of kubernetes resources (`--kube-resource-kind`). See below.
 
 `stolonctl` example for checking the status of a cluster named "stolon-cluster" using "etcdv3" as a store backend:

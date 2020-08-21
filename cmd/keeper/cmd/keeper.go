@@ -112,6 +112,9 @@ type config struct {
 	pgSUUsername       string
 	pgSUPassword       string
 	pgSUPasswordFile   string
+
+	canBeMaster             bool
+	canBeSynchronousReplica bool
 }
 
 var cfg config
@@ -136,6 +139,9 @@ func init() {
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgSUPassword, "pg-su-password", "", "postgres superuser password. Only one of --pg-su-password or --pg-su-passwordfile must be provided. Must be the same for all keepers.")
 	CmdKeeper.PersistentFlags().StringVar(&cfg.pgSUPasswordFile, "pg-su-passwordfile", "", "postgres superuser password file. Only one of --pg-su-password or --pg-su-passwordfile must be provided. Must be the same for all keepers)")
 	CmdKeeper.PersistentFlags().BoolVar(&cfg.debug, "debug", false, "enable debug logging")
+
+	CmdKeeper.PersistentFlags().BoolVar(&cfg.canBeMaster, "can-be-master", true, "prevent keeper from being elected as master")
+	CmdKeeper.PersistentFlags().BoolVar(&cfg.canBeSynchronousReplica, "can-be-synchronous-replica", true, "prevent keeper from being chosen as synchronous replica")
 
 	if err := CmdKeeper.PersistentFlags().MarkDeprecated("id", "please use --uid"); err != nil {
 		log.Fatal(err)
@@ -461,6 +467,9 @@ type PostgresKeeper struct {
 	lastPGState     *cluster.PostgresState
 
 	waitSyncStandbysSynced bool
+
+	canBeMaster             *bool
+	canBeSynchronousReplica *bool
 }
 
 func NewPostgresKeeper(cfg *config, end chan error) (*PostgresKeeper, error) {
@@ -499,6 +508,9 @@ func NewPostgresKeeper(cfg *config, end chan error) (*PostgresKeeper, error) {
 
 		keeperLocalState: &KeeperLocalState{},
 		dbLocalState:     &DBLocalState{},
+
+		canBeMaster:             &cfg.canBeMaster,
+		canBeSynchronousReplica: &cfg.canBeSynchronousReplica,
 
 		e:   e,
 		end: end,
@@ -567,6 +579,9 @@ func (p *PostgresKeeper) updateKeeperInfo() error {
 			Min: min,
 		},
 		PostgresState: p.getLastPGState(),
+
+		CanBeMaster:             p.canBeMaster,
+		CanBeSynchronousReplica: p.canBeSynchronousReplica,
 	}
 
 	// The time to live is just to automatically remove old entries, it's
