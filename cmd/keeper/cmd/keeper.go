@@ -58,8 +58,9 @@ var CmdKeeper = &cobra.Command{
 }
 
 const (
-	maxPostgresTimelinesHistory = 2
-	minWalKeepSegments          = 8
+	maxPostgresTimelinesHistory        = 2
+	minWalKeepSegments                 = 8
+	minWalKeepSize              string = "128MB"
 )
 
 type KeeperLocalState struct {
@@ -154,6 +155,7 @@ func init() {
 var managedPGParameters = []string{
 	"unix_socket_directories",
 	"wal_keep_segments",
+	"wal_keep_size",
 	"hot_standby",
 	"listen_addresses",
 	"port",
@@ -232,27 +234,58 @@ func (p *PostgresKeeper) walLevel(db *cluster.DB) string {
 	return walLevel
 }
 
-func (p *PostgresKeeper) walKeepSegments(db *cluster.DB) int {
-	walKeepSegments := minWalKeepSegments
-	if db.Spec.PGParameters != nil {
-		if v, ok := db.Spec.PGParameters["wal_keep_segments"]; ok {
-			// ignore wrong wal_keep_segments values
-			if configuredWalKeepSegments, err := strconv.Atoi(v); err == nil {
-				if configuredWalKeepSegments > walKeepSegments {
-					walKeepSegments = configuredWalKeepSegments
+func (p *PostgresKeeper) walKeepSettingName() string {
+	maj, _, err := p.pgm.BinaryVersion()
+	if err != nil {
+		// in case we fail to parse the binary version then log it and just use "wal_keep_segments" that works for old versions
+		log.Warnf("failed to get postgres binary version: %v", err)
+		return "wal_keep_segments"
+	}
+	if maj >= 13 {
+		return "wal_keep_size"
+	} else {
+		return "wal_keep_segments"
+	}
+}
+
+func (p *PostgresKeeper) walKeepSetting(db *cluster.DB, setting string) string {
+	var value string
+	if setting == "wal_keep_segments" {
+		walKeepSegments := minWalKeepSegments
+		if db.Spec.PGParameters != nil {
+			if v, ok := db.Spec.PGParameters["wal_keep_segments"]; ok {
+				// ignore wrong wal_keep_segments values
+				if configuredWalKeepSegments, err := strconv.Atoi(v); err == nil {
+					if configuredWalKeepSegments > walKeepSegments {
+						walKeepSegments = configuredWalKeepSegments
+					}
 				}
 			}
 		}
+		value = fmt.Sprintf("%d", walKeepSegments)
+	} else {
+		walKeepSize := minWalKeepSize
+		if db.Spec.PGParameters != nil {
+			if v, ok := db.Spec.PGParameters["wal_keep_size"]; ok {
+				/* well, we can't check if wal_keep_size value is incorrect
+				   without implementing conversion from PostgreSQL size string
+				   to bytes, so just trust user-provided value for now */
+				walKeepSize = v
+			}
+		}
+		value = walKeepSize
 	}
 
-	return walKeepSegments
+	return value
 }
 
 func (p *PostgresKeeper) mandatoryPGParameters(db *cluster.DB) common.Parameters {
+	wks := p.walKeepSettingName()
+
 	return common.Parameters{
 		"unix_socket_directories": common.PgUnixSocketDirectories,
 		"wal_level":               p.walLevel(db),
-		"wal_keep_segments":       fmt.Sprintf("%d", p.walKeepSegments(db)),
+		wks:                       p.walKeepSetting(db, wks),
 		"hot_standby":             "on",
 	}
 }
