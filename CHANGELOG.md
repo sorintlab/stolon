@@ -1,11 +1,3 @@
-### v0.17.0
-
-#### New features
-
-* keeper command: added flag noUseLockFile. If the flag is present keeper don't create the lock file
-
-
-
 ### v0.16.0
 
 #### New features
