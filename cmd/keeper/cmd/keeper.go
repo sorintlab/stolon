@@ -2038,7 +2038,7 @@ func keeper(c *cobra.Command, args []string) {
 	var lockFile *os.File
 	if !cfg.skipLockFile {
 		lockFileName := filepath.Join(cfg.dataDir, "lock")
-		lockFile, err := os.OpenFile(lockFileName, os.O_RDWR|os.O_CREATE, 0644)
+		lockFile, err = os.OpenFile(lockFileName, os.O_RDWR|os.O_CREATE, 0644)
 		if err != nil {
 			log.Fatalf("cannot take exclusive lock on data dir %q: %v", lockFileName, err)
 		}
