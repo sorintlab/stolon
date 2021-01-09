@@ -18,13 +18,11 @@ import (
 	"context"
 
 	"github.com/docker/leadership"
-	libkvstore "github.com/docker/libkv/store"
-	"github.com/docker/libkv/store/consul"
-	"github.com/docker/libkv/store/etcd"
+	libkvstore "github.com/superfly/libkv/store"
+	"github.com/superfly/libkv/store/consul"
 )
 
 func init() {
-	etcd.Register()
 	consul.Register()
 }
 

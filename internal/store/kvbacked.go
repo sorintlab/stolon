@@ -26,10 +26,10 @@ import (
 	"time"
 
 	"github.com/docker/leadership"
-	"github.com/docker/libkv"
-	libkvstore "github.com/docker/libkv/store"
 	"github.com/sorintlab/stolon/internal/cluster"
 	"github.com/sorintlab/stolon/internal/common"
+	"github.com/superfly/libkv"
+	libkvstore "github.com/superfly/libkv/store"
 	etcdclientv3 "go.etcd.io/etcd/clientv3"
 )
 
@@ -68,6 +68,7 @@ type Config struct {
 	Timeout       time.Duration
 	BasePath      string
 	Token         string
+	Node          string
 	CertFile      string
 	KeyFile       string
 	CAFile        string
@@ -180,6 +181,10 @@ func NewKVStore(cfg Config) (KVStore, error) {
 		if cfg.Backend == CONSUL && cfg.Token != "" {
 			config.Token = &cfg.Token
 
+		}
+
+		if cfg.Backend == CONSUL && cfg.Node != "" {
+			config.NodeName = cfg.Node
 		}
 
 		store, err := libkv.NewStore(kvBackend, addrs, config)
