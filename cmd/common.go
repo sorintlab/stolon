@@ -44,6 +44,7 @@ type CommonConfig struct {
 	StoreCAFile          string
 	StoreToken           string
 	StoreURL             string
+	StoreNode            string
 	StoreSkipTlsVerify   bool
 	ClusterName          string
 	MetricsListenAddress string
@@ -65,6 +66,7 @@ func AddCommonFlags(cmd *cobra.Command, cfg *CommonConfig) {
 	cmd.PersistentFlags().StringVar(&cfg.StorePrefix, "store-prefix", common.StorePrefix, "the store base prefix")
 	cmd.PersistentFlags().StringVar(&cfg.StoreToken, "store-token", "", "the store auth token (consul)")
 	cmd.PersistentFlags().StringVar(&cfg.StoreURL, "store-url", "", "url to store (consul)")
+	cmd.PersistentFlags().StringVar(&cfg.StoreNode, "store-node", "", "node name to use (consul)")
 
 	cmd.PersistentFlags().StringVar(&cfg.StoreCertFile, "store-cert-file", "", "certificate file for client identification to the store")
 	cmd.PersistentFlags().StringVar(&cfg.StoreKeyFile, "store-key", "", "private key file for client identification to the store")
@@ -171,6 +173,7 @@ func NewKVStore(cfg *CommonConfig) (store.KVStore, error) {
 		Backend:       store.Backend(cfg.StoreBackend),
 		Endpoints:     cfg.StoreEndpoints,
 		Token:         cfg.StoreToken,
+		Node:          cfg.StoreNode,
 		Timeout:       cfg.StoreTimeout,
 		CertFile:      cfg.StoreCertFile,
 		KeyFile:       cfg.StoreKeyFile,
