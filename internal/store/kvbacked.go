@@ -67,6 +67,7 @@ type Config struct {
 	Endpoints     string
 	Timeout       time.Duration
 	BasePath      string
+	Token         string
 	CertFile      string
 	KeyFile       string
 	CAFile        string
@@ -174,6 +175,11 @@ func NewKVStore(cfg Config) (KVStore, error) {
 		config := &libkvstore.Config{
 			TLS:               tlsConfig,
 			ConnectionTimeout: cfg.Timeout,
+		}
+
+		if cfg.Backend == CONSUL && cfg.Token != "" {
+			config.Token = &cfg.Token
+
 		}
 
 		store, err := libkv.NewStore(kvBackend, addrs, config)

@@ -16,6 +16,7 @@ package cmd
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"time"
@@ -41,6 +42,8 @@ type CommonConfig struct {
 	StoreCertFile        string
 	StoreKeyFile         string
 	StoreCAFile          string
+	StoreToken           string
+	StoreURL             string
 	StoreSkipTlsVerify   bool
 	ClusterName          string
 	MetricsListenAddress string
@@ -60,6 +63,9 @@ func AddCommonFlags(cmd *cobra.Command, cfg *CommonConfig) {
 	cmd.PersistentFlags().StringVar(&cfg.StoreEndpoints, "store-endpoints", "", "a comma-delimited list of store endpoints (use https scheme for tls communication) (defaults: http://127.0.0.1:2379 for etcd, http://127.0.0.1:8500 for consul)")
 	cmd.PersistentFlags().DurationVar(&cfg.StoreTimeout, "store-timeout", cluster.DefaultStoreTimeout, "store request timeout")
 	cmd.PersistentFlags().StringVar(&cfg.StorePrefix, "store-prefix", common.StorePrefix, "the store base prefix")
+	cmd.PersistentFlags().StringVar(&cfg.StoreToken, "store-token", "", "the store auth token (consul)")
+	cmd.PersistentFlags().StringVar(&cfg.StoreURL, "store-url", "", "url to store (consul)")
+
 	cmd.PersistentFlags().StringVar(&cfg.StoreCertFile, "store-cert-file", "", "certificate file for client identification to the store")
 	cmd.PersistentFlags().StringVar(&cfg.StoreKeyFile, "store-key", "", "private key file for client identification to the store")
 	cmd.PersistentFlags().BoolVar(&cfg.StoreSkipTlsVerify, "store-skip-tls-verify", false, "skip store certificate verification (insecure!!!)")
@@ -105,6 +111,23 @@ func CheckCommonConfig(cfg *CommonConfig) error {
 	if cfg.StoreBackend == "" {
 		return fmt.Errorf("store backend type required")
 	}
+	if cfg.StoreURL != "" {
+		u, err := url.Parse(cfg.StoreURL)
+		if err != nil {
+			return err
+		}
+		password, set := u.User.Password()
+		if set {
+			cfg.StoreToken = password
+		}
+		cfg.StorePrefix = u.Path[1:] + "/"
+
+		u.User = nil
+		u.Path = ""
+		cfg.StoreEndpoints = u.String()
+		cfg.StoreURL = ""
+
+	}
 
 	switch cfg.StoreBackend {
 	case "consul":
@@ -143,9 +166,11 @@ func IsColorLoggerEnable(cmd *cobra.Command, cfg *CommonConfig) bool {
 }
 
 func NewKVStore(cfg *CommonConfig) (store.KVStore, error) {
+	//fmt.Println(cfg.StoreEndpoints, cfg)
 	return store.NewKVStore(store.Config{
 		Backend:       store.Backend(cfg.StoreBackend),
 		Endpoints:     cfg.StoreEndpoints,
+		Token:         cfg.StoreToken,
 		Timeout:       cfg.StoreTimeout,
 		CertFile:      cfg.StoreCertFile,
 		KeyFile:       cfg.StoreKeyFile,

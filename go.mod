@@ -28,3 +28,5 @@ require (
 )
 
 go 1.12
+
+replace github.com/docker/libkv => github.com/superfly/libkv v0.2.2-0.20210106210655-25fa93f47f17
