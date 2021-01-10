@@ -60,10 +60,6 @@ github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/dgrijalva/jwt-go v3.2.0+incompatible h1:7qlOGliEKZXTDg6OTjfoBKDXWrumCAMpl/TFQ4/5kLM=
 github.com/dgrijalva/jwt-go v3.2.0+incompatible/go.mod h1:E3ru+11k8xSBh+hMPgOLZmtrrCbhqsmaPHjLKYnJCaQ=
-github.com/docker/leadership v0.1.0 h1:od6W3af8ONBDRFnOJb0JghHx8rHggGHaTYGTIwYMo/k=
-github.com/docker/leadership v0.1.0/go.mod h1:6yL2hg00l43fYEJagcF7eIS4PootU7TAO122H8bUUAo=
-github.com/docker/libkv v0.2.1 h1:PNXYaftMVCFS5CmnDtDWTg3wbBO61Q/cEo3KX1oKxto=
-github.com/docker/libkv v0.2.1/go.mod h1:r5hEwHwW8dr0TFBYGCarMNbrQOiwL1xoqDYZ/JqoTK0=
 github.com/docker/spdystream v0.0.0-20160310174837-449fdfce4d96/go.mod h1:Qh8CwZgvJUkLughtfhJv5dyTYa91l1fOUCrgjqmcifM=
 github.com/dustin/go-humanize v0.0.0-20171111073723-bb3d318650d4 h1:qk/FSDDxo05wdJH28W+p5yivv7LuLYLRXPPD8KQCtZs=
 github.com/dustin/go-humanize v0.0.0-20171111073723-bb3d318650d4/go.mod h1:HtrtbFcZ19U5GC7JDqmcUSB87Iq5E25KnS6fMYU6eOk=
@@ -328,10 +324,11 @@ github.com/stretchr/testify v1.4.0/go.mod h1:j7eGeouHqKxXV5pUuKE4zz7dFj8WfuZ+81P
 
 github.com/stretchr/testify v1.6.1 h1:hDPOHmpOpP40lSULcqw7IrRb/u7w6RpDC9399XyoNd0=
 github.com/stretchr/testify v1.6.1/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
-github.com/superfly/libkv v0.3.0 h1:njZQV51UOOxRA7Lk7cYyLjO3B9A2cYOeQwrmLoTLRSY=
-github.com/superfly/libkv v0.3.0/go.mod h1:j/Wpe7MRvC3q5lPNhRkxZa7WmCjC8JFMRi4iWu8ww1c=
-github.com/superfly/libkv v0.3.1 h1:6HfOywYH/dQPvUiOfeB7K33uVSo270SU5BAvWEzVAVM=
+github.com/superfly/leadership v0.2.0 h1:pS6PK9pRNSx9+kQN98yvVjYV6Mw1INP95o+0VWbzjBE=
+github.com/superfly/leadership v0.2.0/go.mod h1:Hc0C7u+T2lwK4PYBHNX0c7SghVDcr3QmNqX0SM52jm8=
 github.com/superfly/libkv v0.3.1/go.mod h1:j/Wpe7MRvC3q5lPNhRkxZa7WmCjC8JFMRi4iWu8ww1c=
+github.com/superfly/libkv v0.3.5 h1:TRlpEpCUihRJe562GakF0AyNYQ5VHIOTJ+07Xb6EsEw=
+github.com/superfly/libkv v0.3.5/go.mod h1:j/Wpe7MRvC3q5lPNhRkxZa7WmCjC8JFMRi4iWu8ww1c=
 github.com/tmc/grpc-websocket-proxy v0.0.0-20170815181823-89b8d40f7ca8 h1:ndzgwNDnKIqyCvHTXaCqh9KlOWKvBry6nuXMJmonVsE=
 github.com/tmc/grpc-websocket-proxy v0.0.0-20170815181823-89b8d40f7ca8/go.mod h1:ncp9v5uamzpCO7NfCPTXjqaC+bZgJeR0sMTm6dMHP7U=
 github.com/ugorji/go/codec v0.0.0-20181204163529-d75b2dcb6bc8/go.mod h1:VFNgLljTbGfSG7qAOspJ7OScBnGdDN/yBr0sguwnwf0=

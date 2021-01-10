@@ -4,8 +4,6 @@ require (
 	github.com/coreos/bbolt v1.3.3 // indirect
 	github.com/coreos/etcd v3.3.18+incompatible // indirect
 	github.com/davecgh/go-spew v1.1.1
-	github.com/docker/leadership v0.1.0
-	github.com/docker/libkv v0.2.1 // indirect
 	github.com/evanphx/json-patch v4.5.0+incompatible
 	github.com/golang/mock v1.4.0
 	github.com/google/go-cmp v0.4.0
@@ -21,13 +19,12 @@ require (
 	github.com/spf13/cobra v0.0.5
 	github.com/spf13/pflag v1.0.5
 	go.etcd.io/etcd v0.0.0-20201125193152-8a03d2e9614b
-	github.com/superfly/libkv v0.3.0
+	github.com/superfly/leadership v0.2.0
+	github.com/superfly/libkv v0.3.5
 	go.uber.org/zap v1.13.0
 	k8s.io/api v0.17.3
 	k8s.io/apimachinery v0.17.3
 	k8s.io/client-go v0.17.3
 )
 
-go 1.12
-
-replace github.com/docker/libkv => github.com/superfly/libkv v0.3.1
+go 1.15
