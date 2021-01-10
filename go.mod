@@ -2,8 +2,6 @@ module github.com/sorintlab/stolon
 
 require (
 	github.com/davecgh/go-spew v1.1.1
-	github.com/docker/leadership v0.1.0
-	github.com/docker/libkv v0.2.1 // indirect
 	github.com/evanphx/json-patch v4.5.0+incompatible
 	github.com/golang/mock v1.4.0
 	github.com/google/go-cmp v0.4.0
@@ -18,7 +16,8 @@ require (
 	github.com/sorintlab/pollon v0.0.0-20181009091703-248c68238c16
 	github.com/spf13/cobra v0.0.5
 	github.com/spf13/pflag v1.0.5
-	github.com/superfly/libkv v0.3.0
+	github.com/superfly/leadership v0.2.0
+	github.com/superfly/libkv v0.3.5
 	go.etcd.io/etcd v0.0.0-20191023171146-3cf2f69b5738
 	go.uber.org/zap v1.13.0
 	k8s.io/api v0.17.3
@@ -26,6 +25,4 @@ require (
 	k8s.io/client-go v0.17.3
 )
 
-go 1.12
-
-replace github.com/docker/libkv => github.com/superfly/libkv v0.3.1
+go 1.15

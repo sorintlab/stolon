@@ -17,7 +17,7 @@ package store
 import (
 	"context"
 
-	"github.com/docker/leadership"
+	"github.com/superfly/leadership"
 	libkvstore "github.com/superfly/libkv/store"
 	"github.com/superfly/libkv/store/consul"
 )

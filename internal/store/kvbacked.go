@@ -25,9 +25,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/docker/leadership"
 	"github.com/sorintlab/stolon/internal/cluster"
 	"github.com/sorintlab/stolon/internal/common"
+	"github.com/superfly/leadership"
 	"github.com/superfly/libkv"
 	libkvstore "github.com/superfly/libkv/store"
 	etcdclientv3 "go.etcd.io/etcd/clientv3"
