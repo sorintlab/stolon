@@ -115,6 +115,7 @@ type config struct {
 
 	canBeMaster             bool
 	canBeSynchronousReplica bool
+	disableDataDirLocking   bool
 }
 
 var cfg config
@@ -142,6 +143,7 @@ func init() {
 
 	CmdKeeper.PersistentFlags().BoolVar(&cfg.canBeMaster, "can-be-master", true, "prevent keeper from being elected as master")
 	CmdKeeper.PersistentFlags().BoolVar(&cfg.canBeSynchronousReplica, "can-be-synchronous-replica", true, "prevent keeper from being chosen as synchronous replica")
+	CmdKeeper.PersistentFlags().BoolVar(&cfg.disableDataDirLocking, "disable-data-dir-locking", false, "disable locking on data dir. Warning! It'll cause data corruptions if two keepers are concurrently running with the same data dir.")
 
 	if err := CmdKeeper.PersistentFlags().MarkDeprecated("id", "please use --uid"); err != nil {
 		log.Fatal(err)
@@ -2032,26 +2034,29 @@ func keeper(c *cobra.Command, args []string) {
 	// Open (and create if needed) the lock file.
 	// There is no need to clean up this file since we don't use the file as an actual lock. We get a lock
 	// on the file. So the lock get released when our process stops (or log.Fatalfs).
-	lockFileName := filepath.Join(cfg.dataDir, "lock")
-	lockFile, err := os.OpenFile(lockFileName, os.O_RDWR|os.O_CREATE, 0644)
-	if err != nil {
-		log.Fatalf("cannot take exclusive lock on data dir %q: %v", lockFileName, err)
-	}
+	var lockFile *os.File
+	if !cfg.disableDataDirLocking {
+		lockFileName := filepath.Join(cfg.dataDir, "lock")
+		lockFile, err = os.OpenFile(lockFileName, os.O_RDWR|os.O_CREATE, 0644)
+		if err != nil {
+			log.Fatalf("cannot take exclusive lock on data dir %q: %v", lockFileName, err)
+		}
 
-	// Get a lock on our lock file.
-	ft := &syscall.Flock_t{
-		Type:   syscall.F_WRLCK,
-		Whence: int16(io.SeekStart),
-		Start:  0,
-		Len:    0, // Entire file.
-	}
+		// Get a lock on our lock file.
+		ft := &syscall.Flock_t{
+			Type:   syscall.F_WRLCK,
+			Whence: int16(io.SeekStart),
+			Start:  0,
+			Len:    0, // Entire file.
+		}
 
-	err = syscall.FcntlFlock(lockFile.Fd(), syscall.F_SETLK, ft)
-	if err != nil {
-		log.Fatalf("cannot take exclusive lock on data dir %q: %v", lockFileName, err)
-	}
+		err = syscall.FcntlFlock(lockFile.Fd(), syscall.F_SETLK, ft)
+		if err != nil {
+			log.Fatalf("cannot take exclusive lock on data dir %q: %v", lockFileName, err)
+		}
 
-	log.Infow("exclusive lock on data dir taken")
+		log.Infow("exclusive lock on data dir taken")
+	}
 
 	if cfg.uid != "" {
 		if !pg.IsValidReplSlotName(cfg.uid) {
@@ -2084,5 +2089,7 @@ func keeper(c *cobra.Command, args []string) {
 
 	<-end
 
-	lockFile.Close()
+	if !cfg.disableDataDirLocking {
+		lockFile.Close()
+	}
 }
