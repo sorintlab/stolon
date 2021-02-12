@@ -148,6 +148,7 @@ func (c *ClusterChecker) startPollonProxy() error {
 		c.endPollonProxyCh <- c.pp.Start()
 	}()
 
+	proxyHealthGauge.Set(1)
 	return nil
 }
 
@@ -160,6 +161,7 @@ func (c *ClusterChecker) stopPollonProxy() {
 		c.pp = nil
 		c.listener.Close()
 		c.listener = nil
+		proxyHealthGauge.Set(0)
 	}
 }
 
