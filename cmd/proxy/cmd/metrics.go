@@ -25,8 +25,16 @@ var (
 			Help: "Set to 1 if proxy healthy and accepting connections",
 		},
 	)
+
+	clusterdataLastValidUpdateSeconds = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "stolon_proxy_clusterdata_last_valid_update_seconds",
+			Help: "Last time we received a valid clusterdata from our store as seconds since unix epoch",
+		},
+	)
 )
 
 func init() {
 	prometheus.MustRegister(proxyHealthGauge)
+	prometheus.MustRegister(clusterdataLastValidUpdateSeconds)
 }
