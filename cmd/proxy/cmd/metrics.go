@@ -32,9 +32,33 @@ var (
 			Help: "Last time we received a valid clusterdata from our store as seconds since unix epoch",
 		},
 	)
+
+	proxyListenerStartedSeconds = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "stolon_proxy_listener_started_seconds",
+			Help: "Last time we started the proxy listener as seconds since unix epoch",
+		},
+	)
+
+	getClusterInfoErrors = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "stolon_proxy_get_cluster_info_errors",
+			Help: "Count of failed getting and parsing cluster info operationss",
+		},
+	)
+
+	updateProxyInfoErrors = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "stolon_proxy_update_proxy_info_errors",
+			Help: "Count of update proxyInfo failures",
+		},
+	)
 )
 
 func init() {
 	prometheus.MustRegister(proxyHealthGauge)
 	prometheus.MustRegister(clusterdataLastValidUpdateSeconds)
+	prometheus.MustRegister(proxyListenerStartedSeconds)
+	prometheus.MustRegister(getClusterInfoErrors)
+	prometheus.MustRegister(updateProxyInfoErrors)
 }
