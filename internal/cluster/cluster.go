@@ -56,7 +56,7 @@ const (
 	DefaultFailInterval                               = 20 * time.Second
 	DefaultDeadKeeperRemovalInterval                  = 48 * time.Hour
 	DefaultProxyCheckInterval                         = 5 * time.Second
-	DefaultProxyTimeout                               = 15 * time.Second
+	DefaultProxyTimeout                               = 20 * time.Second
 	DefaultMaxStandbys               uint16           = 20
 	DefaultMaxStandbysPerSender      uint16           = 3
 	DefaultMaxStandbyLag                              = 1024 * 1204

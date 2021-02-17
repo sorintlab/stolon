@@ -185,6 +185,9 @@ func NewKVStore(cfg Config) (KVStore, error) {
 		config := etcdclientv3.Config{
 			Endpoints: addrs,
 			TLS:       tlsConfig,
+			DialTimeout: time.Second,
+			DialKeepAliveTime:    time.Second,
+			DialKeepAliveTimeout: 500 * time.Millisecond,
 		}
 
 		c, err := etcdclientv3.New(config)
