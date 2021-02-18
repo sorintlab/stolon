@@ -147,7 +147,7 @@ local task_build_push_images(name, pgversions, istag, push) =
             arch: 'amd64',
             containers: [
               {
-                image: 'bsycorp/kind:v1.15.1',
+                image: 'bsycorp/kind:v1.19.4',
                 privileged: true,
                 entrypoint: '/usr/bin/supervisord --nodaemon -c /etc/supervisord.conf',
               },
