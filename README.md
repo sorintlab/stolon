@@ -20,11 +20,11 @@ For an introduction to stolon you can also take a look at [this post](https://sg
 * Uses a cluster store like [etcd](https://etcd.io), [consul](https://www.consul.io) or kubernetes API server as an high available data store and for leader election
 * Asynchronous (default) and [synchronous](doc/syncrepl.md) replication.
 * Full cluster setup in minutes.
-* Easy [cluster admininistration](doc/stolonctl.md)
+* Easy [cluster administration](doc/stolonctl.md)
 * Can do point in time recovery integrating with your preferred backup/restore tool.
 * [Standby cluster](doc/standbycluster.md) (for multi site replication and near zero downtime migration).
 * Automatic service discovery and dynamic reconfiguration (handles postgres and stolon processes changing their addresses).
-* Can use [pg_rewind](doc/pg_rewind.md) for fast instance resyncronization with current master.
+* Can use [pg_rewind](doc/pg_rewind.md) for fast instance resynchronization with current master.
 
 ## Architecture
 
