@@ -1955,6 +1955,97 @@ func TestForceFailSyncReplStandbyCluster(t *testing.T) {
 	testForceFail(t, false, true)
 }
 
+func testKeeperPriority(t *testing.T, syncRepl bool, standbyCluster bool) {
+	dir, err := ioutil.TempDir("", "stolon")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer os.RemoveAll(dir)
+
+	// external primary in standbyCluster mode, nil otherwise
+	var ptk *TestKeeper
+	if standbyCluster {
+		primaryClusterName := uuid.NewV4().String()
+		ptks, ptss, ptp, ptstore := setupServers(t, primaryClusterName, dir, 1, 1, false, false, nil)
+		defer shutdown(ptks, ptss, ptp, ptstore)
+		for _, ptk = range ptks {
+			break
+		}
+	}
+
+	// spin up cluster from single keeper...
+	clusterName := uuid.NewV4().String()
+	tks, tss, tp, tstore := setupServers(t, clusterName, dir, 1, 1, syncRepl, false, ptk)
+	defer shutdown(tks, tss, tp, tstore)
+
+	// wait till it is up and running
+	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
+	storePath := filepath.Join(common.StorePrefix, clusterName)
+	sm := store.NewKVBackedStore(tstore.store, storePath)
+
+	keeper1, _ := waitMasterStandbysReady(t, sm, tks)
+
+	// now add another keeper with higher priority
+	keeper2, err := NewTestKeeperWithPriority(t, dir, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, tstore.storeBackend, storeEndpoints, 1)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	tks[keeper2.uid] = keeper2
+	if err := keeper2.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// it must become master
+	if err := keeper2.WaitDBRole(common.RoleMaster, ptk, 30*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// take it down...
+	t.Logf("Stopping current standby keeper: %s", keeper2.uid)
+	keeper2.Stop()
+	// now keeper 1 will be master again
+	if err := keeper1.WaitDBRole(common.RoleMaster, ptk, 30*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// but if we take keeper 2 up, it will be promoted
+	if err := keeper2.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := keeper2.WaitDBRole(common.RoleMaster, ptk, 30*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// and if increase keeper 1 priority online, it should become master back again
+	err = StolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "setkeeperpriority", keeper1.Process.uid, "2")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := keeper1.WaitDBRole(common.RoleMaster, ptk, 30*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+}
+
+func TestKeeperPriority(t *testing.T) {
+	t.Parallel()
+	testKeeperPriority(t, false, false)
+}
+
+func TestKeeperPrioritySyncRepl(t *testing.T) {
+	t.Parallel()
+	testKeeperPriority(t, true, false)
+}
+
+func TestKeeperPriorityStandbyCluster(t *testing.T) {
+	t.Parallel()
+	testKeeperPriority(t, false, true)
+}
+
+func TestKeeperPrioritySyncReplStandbyCluster(t *testing.T) {
+	t.Parallel()
+	testKeeperPriority(t, false, true)
+}
+
 // TestSyncStandbyNotInSync tests that, when using synchronous replication, a
 // normal user cannot connect to primary db after it has restarted until all
 // defined synchronous standbys are in sync.

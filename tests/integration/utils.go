@@ -337,6 +337,10 @@ type TestKeeper struct {
 }
 
 func NewTestKeeperWithID(t *testing.T, dir, uid, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword string, storeBackend store.Backend, storeEndpoints string, a ...string) (*TestKeeper, error) {
+	return NewTestKeeperWithIDWithPriority(t, dir, uid, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, storeBackend, storeEndpoints, 0)
+}
+
+func NewTestKeeperWithIDWithPriority(t *testing.T, dir, uid, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword string, storeBackend store.Backend, storeEndpoints string, priority int, a ...string) (*TestKeeper, error) {
 	args := []string{}
 
 	dataDir := filepath.Join(dir, fmt.Sprintf("st%s", uid))
@@ -359,6 +363,7 @@ func NewTestKeeperWithID(t *testing.T, dir, uid, clusterName, pgSUUsername, pgSU
 	}
 	args = append(args, fmt.Sprintf("--pg-repl-username=%s", pgReplUsername))
 	args = append(args, fmt.Sprintf("--pg-repl-password=%s", pgReplPassword))
+	args = append(args, fmt.Sprintf("--priority=%d", priority))
 	if os.Getenv("DEBUG") != "" {
 		args = append(args, "--debug")
 	}
@@ -422,10 +427,14 @@ func NewTestKeeperWithID(t *testing.T, dir, uid, clusterName, pgSUUsername, pgSU
 }
 
 func NewTestKeeper(t *testing.T, dir, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword string, storeBackend store.Backend, storeEndpoints string, a ...string) (*TestKeeper, error) {
+	return NewTestKeeperWithPriority(t, dir, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, storeBackend, storeEndpoints, 0, a...)
+}
+
+func NewTestKeeperWithPriority(t *testing.T, dir, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword string, storeBackend store.Backend, storeEndpoints string, priority int, a ...string) (*TestKeeper, error) {
 	u := uuid.NewV4()
 	uid := fmt.Sprintf("%x", u[:4])
 
-	return NewTestKeeperWithID(t, dir, uid, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, storeBackend, storeEndpoints, a...)
+	return NewTestKeeperWithIDWithPriority(t, dir, uid, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, storeBackend, storeEndpoints, priority, a...)
 }
 
 func (tk *TestKeeper) PGDataVersion() (int, int, error) {

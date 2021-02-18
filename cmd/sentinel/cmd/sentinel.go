@@ -243,6 +243,11 @@ func (s *Sentinel) updateKeepersStatus(cd *cluster.ClusterData, keepersInfo clus
 		} else {
 			s.CleanKeeperError(keeperUID)
 			// Update keeper status infos
+			// If keeper restarted with specified priority, update it
+			if ki.Priority != nil &&
+				k.Status.BootUUID != ki.BootUUID {
+				k.Spec.Priority = *ki.Priority
+			}
 			k.Status.BootUUID = ki.BootUUID
 			k.Status.PostgresBinaryVersion.Maj = ki.PostgresBinaryVersion.Maj
 			k.Status.PostgresBinaryVersion.Min = ki.PostgresBinaryVersion.Min
@@ -699,12 +704,17 @@ func (s *Sentinel) validStandbysByStatus(cd *cluster.ClusterData) (map[string]*c
 	return goodStandbys, failedStandbys, convergingStandbys
 }
 
-// dbSlice implements sort interface to sort by XLogPos
-type dbSlice []*cluster.DB
-
-func (p dbSlice) Len() int           { return len(p) }
-func (p dbSlice) Less(i, j int) bool { return p[i].Status.XLogPos < p[j].Status.XLogPos }
-func (p dbSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
+// sort dbs by XLogPos and keeper's priority
+func sortDBs(cd *cluster.ClusterData, dbs []*cluster.DB) {
+	sort.Slice(dbs, func(i, j int) bool {
+		if dbs[i].Status.XLogPos != dbs[j].Status.XLogPos {
+			return dbs[i].Status.XLogPos < dbs[j].Status.XLogPos
+		}
+		pi := cd.Keepers[dbs[i].Spec.KeeperUID].Spec.Priority
+		pj := cd.Keepers[dbs[j].Spec.KeeperUID].Spec.Priority
+		return pi < pj
+	})
+}
 
 func (s *Sentinel) findBestStandbys(cd *cluster.ClusterData, masterDB *cluster.DB) []*cluster.DB {
 	goodStandbys, _, _ := s.validStandbysByStatus(cd)
@@ -726,7 +736,7 @@ func (s *Sentinel) findBestStandbys(cd *cluster.ClusterData, masterDB *cluster.D
 		bestDBs = append(bestDBs, db)
 	}
 	// Sort by XLogPos
-	sort.Sort(dbSlice(bestDBs))
+	sortDBs(cd, bestDBs)
 	return bestDBs
 }
 
@@ -773,9 +783,52 @@ func (s *Sentinel) findBestNewMasters(cd *cluster.ClusterData, masterDB *cluster
 	}
 
 	// Sort by XLogPos
-	sort.Sort(dbSlice(bestNewMasters))
+	sortDBs(cd, bestNewMasters)
 	log.Debugf("bestNewMasters: %s", spew.Sdump(bestNewMasters))
 	return bestNewMasters
+}
+
+// findBestNewMaster returns the DB who can be a new master. This function mostly takes care of
+// sync mode; in async case new master is just a first element of findBestNewMasters.
+func (s *Sentinel) findBestNewMaster(cd *cluster.ClusterData, curMasterDB *cluster.DB, logErrors bool) *cluster.DB {
+	bestNewMasters := s.findBestNewMasters(cd, curMasterDB)
+	if len(bestNewMasters) == 0 {
+		if logErrors {
+			log.Errorw("no eligible masters")
+		}
+		return nil
+	}
+
+	// if synchronous replication is enabled, only choose new master in the synchronous replication standbys.
+	var bestNewMasterDB *cluster.DB = nil
+	if curMasterDB.Spec.SynchronousReplication {
+		commonSyncStandbys := util.CommonElements(curMasterDB.Status.SynchronousStandbys, curMasterDB.Spec.SynchronousStandbys)
+		if len(commonSyncStandbys) == 0 {
+			if logErrors {
+				log.Warnw("cannot choose synchronous standby since there are no common elements between the latest master reported synchronous standbys and the db spec ones", "reported", curMasterDB.Status.SynchronousStandbys, "spec", curMasterDB.Spec.SynchronousStandbys)
+			}
+			return nil
+		}
+		// In synchronous mode there is no need to choose DB with
+		// highest LSN; all found dbs must be in sync, so pick the one
+		// with highest priority.
+		var newMasterPriority int
+		for _, nm := range bestNewMasters {
+			if util.StringInSlice(commonSyncStandbys, nm.UID) {
+				nmPriority := cd.Keepers[nm.Spec.KeeperUID].Spec.Priority
+				if (bestNewMasterDB == nil) || (nmPriority > newMasterPriority) {
+					bestNewMasterDB = nm
+					newMasterPriority = nmPriority
+				}
+			}
+		}
+		if bestNewMasterDB == nil && logErrors {
+			log.Warnw("cannot choose synchronous standby since there's not match between the possible masters and the usable synchronousStandbys", "reported", curMasterDB.Status.SynchronousStandbys, "spec", curMasterDB.Spec.SynchronousStandbys, "common", commonSyncStandbys, "possibleMasters", bestNewMasters)
+		}
+	} else {
+		bestNewMasterDB = bestNewMasters[0]
+	}
+	return bestNewMasterDB
 }
 
 func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInfo) (*cluster.ClusterData, error) {
@@ -1002,37 +1055,20 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 			masterOK = false
 		}
 
-		if !masterOK {
-			log.Infow("trying to find a new master to replace failed master")
-			bestNewMasters := s.findBestNewMasters(newcd, curMasterDB)
-			if len(bestNewMasters) == 0 {
-				log.Errorw("no eligible masters")
+		bestNewMasterDB := s.findBestNewMaster(newcd, curMasterDB, !masterOK)
+		if bestNewMasterDB != nil {
+			if !masterOK {
+				log.Infow("electing db as the new master", "db", bestNewMasterDB.UID, "keeper", bestNewMasterDB.Spec.KeeperUID)
+				wantedMasterDBUID = bestNewMasterDB.UID
 			} else {
-				// if synchronous replication is enabled, only choose new master in the synchronous replication standbys.
-				var bestNewMasterDB *cluster.DB
-				if curMasterDB.Spec.SynchronousReplication {
-					commonSyncStandbys := util.CommonElements(curMasterDB.Status.SynchronousStandbys, curMasterDB.Spec.SynchronousStandbys)
-					if len(commonSyncStandbys) == 0 {
-						log.Warnw("cannot choose synchronous standby since there are no common elements between the latest master reported synchronous standbys and the db spec ones", "reported", curMasterDB.Status.SynchronousStandbys, "spec", curMasterDB.Spec.SynchronousStandbys)
-					} else {
-						for _, nm := range bestNewMasters {
-							if util.StringInSlice(commonSyncStandbys, nm.UID) {
-								bestNewMasterDB = nm
-								break
-							}
-						}
-						if bestNewMasterDB == nil {
-							log.Warnw("cannot choose synchronous standby since there's not match between the possible masters and the usable synchronousStandbys", "reported", curMasterDB.Status.SynchronousStandbys, "spec", curMasterDB.Spec.SynchronousStandbys, "common", commonSyncStandbys, "possibleMasters", bestNewMasters)
-						}
-					}
-				} else {
-					bestNewMasterDB = bestNewMasters[0]
-				}
-				if bestNewMasterDB != nil {
-					log.Infow("electing db as the new master", "db", bestNewMasterDB.UID, "keeper", bestNewMasterDB.Spec.KeeperUID)
+				// Even if current master is ok, we probably still
+				// want to change it if there is ready DB with higher
+				// keeper priority.
+				curMasterPriority := cd.Keepers[curMasterDB.Spec.KeeperUID].Spec.Priority
+				newMasterPriority := cd.Keepers[bestNewMasterDB.Spec.KeeperUID].Spec.Priority
+				if newMasterPriority > curMasterPriority {
+					log.Infow("electing db as the new master because it has higher priority", "db", bestNewMasterDB.UID, "keeper", bestNewMasterDB.Spec.KeeperUID, "currPriority", curMasterPriority, "newPriority", newMasterPriority)
 					wantedMasterDBUID = bestNewMasterDB.UID
-				} else {
-					log.Errorw("no eligible masters")
 				}
 			}
 		}
