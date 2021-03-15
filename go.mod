@@ -1,7 +1,7 @@
 module github.com/sorintlab/stolon
 
 require (
-	// force github.com/coreos/etcd to v3.3.18 that doesn't use github.com/ugorji/go
+	github.com/coreos/bbolt v1.3.3 // indirect
 	github.com/coreos/etcd v3.3.18+incompatible // indirect
 	github.com/davecgh/go-spew v1.1.1
 	github.com/docker/leadership v0.1.0
@@ -20,7 +20,7 @@ require (
 	github.com/sorintlab/pollon v0.0.0-20181009091703-248c68238c16
 	github.com/spf13/cobra v0.0.5
 	github.com/spf13/pflag v1.0.5
-	go.etcd.io/etcd v0.0.0-20191023171146-3cf2f69b5738
+	go.etcd.io/etcd v0.0.0-20201125193152-8a03d2e9614b
 	go.uber.org/zap v1.13.0
 	k8s.io/api v0.17.3
 	k8s.io/apimachinery v0.17.3
@@ -28,3 +28,5 @@ require (
 )
 
 go 1.12
+
+replace github.com/coreos/bbolt v1.3.3 => github.com/etcd-io/bbolt v1.3.3
