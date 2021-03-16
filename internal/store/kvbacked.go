@@ -183,8 +183,11 @@ func NewKVStore(cfg Config) (KVStore, error) {
 		return &libKVStore{store: store}, nil
 	case ETCDV3:
 		config := etcdclientv3.Config{
-			Endpoints: addrs,
-			TLS:       tlsConfig,
+			Endpoints:            addrs,
+			TLS:                  tlsConfig,
+			DialTimeout:          20 * time.Second,
+			DialKeepAliveTime:    1 * time.Second,
+			DialKeepAliveTimeout: cfg.Timeout,
 		}
 
 		c, err := etcdclientv3.New(config)
