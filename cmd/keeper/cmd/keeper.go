@@ -156,6 +156,7 @@ func init() {
 var managedPGParameters = []string{
 	"unix_socket_directories",
 	"wal_keep_segments",
+	"wal_keep_size",
 	"hot_standby",
 	"listen_addresses",
 	"port",
@@ -250,13 +251,42 @@ func (p *PostgresKeeper) walKeepSegments(db *cluster.DB) int {
 	return walKeepSegments
 }
 
+func (p *PostgresKeeper) walKeepSize(db *cluster.DB) string {
+	// assume default 16Mib wal segment size
+	walKeepSize := strconv.Itoa(minWalKeepSegments * 16)
+
+	// TODO(sgotti) currently we ignore if wal_keep_size value is less than our
+	// min value or wrong and just return it as is
+	if db.Spec.PGParameters != nil {
+		if v, ok := db.Spec.PGParameters["wal_keep_size"]; ok {
+			return v
+		}
+	}
+
+	return walKeepSize
+}
+
 func (p *PostgresKeeper) mandatoryPGParameters(db *cluster.DB) common.Parameters {
-	return common.Parameters{
+	params := common.Parameters{
 		"unix_socket_directories": common.PgUnixSocketDirectories,
 		"wal_level":               p.walLevel(db),
-		"wal_keep_segments":       fmt.Sprintf("%d", p.walKeepSegments(db)),
 		"hot_standby":             "on",
 	}
+
+	maj, _, err := p.pgm.BinaryVersion()
+	if err != nil {
+		// in case we fail to parse the binary version don't return any wal_keep_segments or wal_keep_size
+		log.Warnf("failed to get postgres binary version: %v", err)
+		return params
+	}
+
+	if maj >= 13 {
+		params["wal_keep_size"] = p.walKeepSize(db)
+	} else {
+		params["wal_keep_segments"] = fmt.Sprintf("%d", p.walKeepSegments(db))
+	}
+
+	return params
 }
 
 func (p *PostgresKeeper) getSUConnParams(db, followedDB *cluster.DB) pg.ConnParams {
