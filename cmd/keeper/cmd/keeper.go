@@ -1261,6 +1261,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				log.Errorw("failed to stop pg instance", zap.Error(err))
 				return
 			}
+
 		case cluster.DBInitModeResync:
 			log.Infow("resyncing the database cluster")
 			ndbls := &DBLocalState{
@@ -1476,6 +1477,9 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 			log.Errorw("database cluster not initialized but requested role is master. This shouldn't happen!")
 			return
 		}
+
+		pgm.SetRecoveryOptions(nil)
+
 		started, err := pgm.IsStarted()
 		if err != nil {
 			log.Errorw("failed to retrieve instance status", zap.Error(err))
@@ -1501,7 +1505,6 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 
 		if localRole == common.RoleStandby {
 			log.Infow("promoting to master")
-			pgm.SetRecoveryOptions(nil)
 			if err = pgm.Promote(); err != nil {
 				log.Errorw("failed to promote instance", zap.Error(err))
 				return
