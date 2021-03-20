@@ -8,6 +8,7 @@ metadata:
 spec:
   serviceName: "stolon-keeper"
   replicas: 2
+  podManagementPolicy: Parallel
   selector:
     matchLabels:
       component: stolon-keeper
