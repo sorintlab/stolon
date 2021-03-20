@@ -13,8 +13,9 @@ stolonctl clusterdata read [flags]
 ### Options
 
 ```
-  -h, --help     help for read
-      --pretty   pretty print
+  -f, --file string   file to write cluster data
+  -h, --help          help for read
+      --pretty        pretty print
 ```
 
 ### Options inherited from parent commands
