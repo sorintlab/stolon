@@ -15,6 +15,9 @@ services:
       - --initial-cluster=etcd-00=http://etcd-00:2380,etcd-01=http://etcd-01:2380,etcd-02=http://etcd-02:2380
       - --initial-cluster-state=new
       - --initial-cluster-token=${ETCD_TOKEN}
+      - --auto-compaction-mode=revision   # If You are using etcd only for stolon then You need no revision history at all
+      - --auto-compaction-retention=100   # on etcd (https://github.com/sorintlab/stolon/blob/master/doc/architecture.md#etcdv3-compaction)
+      - --log-level=warn
     volumes:
       - etcd-00vol:/data.etcd
     networks:
@@ -38,6 +41,9 @@ services:
       - --initial-cluster=etcd-00=http://etcd-00:2380,etcd-01=http://etcd-01:2380,etcd-02=http://etcd-02:2380
       - --initial-cluster-state=new
       - --initial-cluster-token=${ETCD_TOKEN}
+      - --auto-compaction-mode=revision
+      - --auto-compaction-retention=100
+      - --log-level=warn
     volumes:
       - etcd-01vol:/data.etcd
     networks:
@@ -59,6 +65,9 @@ services:
       - --initial-cluster=etcd-00=http://etcd-00:2380,etcd-01=http://etcd-01:2380,etcd-02=http://etcd-02:2380
       - --initial-cluster-state=new
       - --initial-cluster-token=${ETCD_TOKEN}
+      - --auto-compaction-mode=revision
+      - --auto-compaction-retention=100
+      - --log-level=warn
     volumes:
       - etcd-02vol:/data.etcd
     networks:
