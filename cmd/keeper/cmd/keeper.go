@@ -1100,6 +1100,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 
 	// Generate hba auth from clusterData
 	pgm.SetHba(p.generateHBA(cd, db, p.waitSyncStandbysSynced))
+	pgm.SetIdent(db.Spec.PgIdent)
 
 	var pgParameters common.Parameters
 
@@ -1521,6 +1522,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				p.waitSyncStandbysSynced = true
 				log.Infow("not allowing connection as normal users since synchronous replication is enabled and instance was down")
 				pgm.SetHba(p.generateHBA(cd, db, true))
+				pgm.SetIdent(db.Spec.PgIdent)
 			}
 
 			if err = pgm.Start(); err != nil {
@@ -1701,6 +1703,15 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 	} else {
 		// for tests
 		log.Infow("postgres hba entries not changed")
+	}
+	newIdent := db.Spec.PgIdent
+	if !reflect.DeepEqual(newIdent, pgm.CurIdent()) {
+		log.Infow("postgres ident entries changed, reloading postgres instance")
+		pgm.SetIdent(newIdent)
+		needsReload = true
+	} else {
+		// for tests
+		log.Infow("postgres ident entries not changed")
 	}
 
 	if needsReload {
