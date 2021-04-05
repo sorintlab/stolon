@@ -302,6 +302,14 @@ func TestWalKeepSegments(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
+	maj, _, err := tk.PGDataVersion()
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if maj >= 13 {
+		t.Skipf("skipping since postgres version %d >= 13", maj)
+	}
+
 	// "archive" isn't an accepted wal_level
 	err = StolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "pgParameters" : { "wal_level": "archive" } }`)
 	if err != nil {
