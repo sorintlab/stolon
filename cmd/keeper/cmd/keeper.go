@@ -1927,6 +1927,7 @@ func keeper(c *cobra.Command, args []string) {
 	validAuthMethods := make(map[string]struct{})
 	validAuthMethods["trust"] = struct{}{}
 	validAuthMethods["md5"] = struct{}{}
+	validAuthMethods["scram-sha-256"] = struct{}{}
 	switch cfg.LogLevel {
 	case "error":
 		slog.SetLevel(zap.ErrorLevel)

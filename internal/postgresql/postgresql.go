@@ -217,7 +217,8 @@ func (p *Manager) Init(initConfig *InitConfig) error {
 
 	name := filepath.Join(p.pgBinPath, "initdb")
 	cmd := exec.Command(name, "-D", p.dataDir, "-U", p.suUsername)
-	if p.suAuthMethod == "md5" {
+	if p.suAuthMethod == "md5" || p.suAuthMethod == "scram-sha-256" {
+		cmd.Args = append(cmd.Args, "--auth", p.suAuthMethod)
 		cmd.Args = append(cmd.Args, "--pwfile", pwfile.Name())
 	}
 	log.Debugw("execing cmd", "cmd", cmd)
