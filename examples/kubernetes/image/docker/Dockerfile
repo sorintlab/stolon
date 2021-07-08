@@ -1,7 +1,7 @@
 ARG PGVERSION
 
 # base build image
-FROM golang:1.14-buster AS build_base
+FROM golang:1.16-buster AS build_base
 
 WORKDIR /stolon
 
