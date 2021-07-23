@@ -29,6 +29,7 @@ var (
 	ErrKeyNotFound      = errors.New("Key not found in store")
 	ErrKeyModified      = errors.New("Unable to complete atomic operation, key modified")
 	ErrElectionNoLeader = errors.New("election: no leader")
+	ErrPermissionDenied = errors.New("Permission denied")
 )
 
 type Store interface {

@@ -34,9 +34,10 @@ import (
 )
 
 type CommonConfig struct {
-	IsStolonCtl bool
-
+	IsStolonCtl          bool
 	StoreBackend         string
+	StoreUsername        string
+	StorePassword        string
 	StoreEndpoints       string
 	StorePrefix          string
 	StoreCertFile        string
@@ -65,7 +66,7 @@ func AddCommonFlags(cmd *cobra.Command, cfg *CommonConfig) {
 	cmd.PersistentFlags().DurationVar(&cfg.StoreTimeout, "store-timeout", cluster.DefaultStoreTimeout, "store request timeout")
 	cmd.PersistentFlags().StringVar(&cfg.StorePrefix, "store-prefix", common.StorePrefix, "the store base prefix")
 	cmd.PersistentFlags().StringVar(&cfg.StoreToken, "store-token", "", "the store auth token (consul)")
-	cmd.PersistentFlags().StringVar(&cfg.StoreURL, "store-url", "", "url to store (consul)")
+	cmd.PersistentFlags().StringVar(&cfg.StoreURL, "store-url", "", "url to store (consul, etcdv3)")
 	cmd.PersistentFlags().StringVar(&cfg.StoreNode, "store-node", "", "node name to use (consul)")
 
 	cmd.PersistentFlags().StringVar(&cfg.StoreCertFile, "store-cert-file", "", "certificate file for client identification to the store")
@@ -118,9 +119,12 @@ func CheckCommonConfig(cfg *CommonConfig) error {
 		if err != nil {
 			return err
 		}
+
+		cfg.StoreUsername = u.User.Username() // etcdv3
 		password, set := u.User.Password()
 		if set {
 			cfg.StoreToken = password
+			cfg.StorePassword = password // etcdv3
 		}
 		cfg.StorePrefix = u.Path[1:] + "/"
 
@@ -170,15 +174,17 @@ func IsColorLoggerEnable(cmd *cobra.Command, cfg *CommonConfig) bool {
 func NewKVStore(cfg *CommonConfig) (store.KVStore, error) {
 	//fmt.Println(cfg.StoreEndpoints, cfg)
 	return store.NewKVStore(store.Config{
-		Backend:       store.Backend(cfg.StoreBackend),
-		Endpoints:     cfg.StoreEndpoints,
-		Token:         cfg.StoreToken,
-		Node:          cfg.StoreNode,
-		Timeout:       cfg.StoreTimeout,
-		CertFile:      cfg.StoreCertFile,
-		KeyFile:       cfg.StoreKeyFile,
-		CAFile:        cfg.StoreCAFile,
-		SkipTLSVerify: cfg.StoreSkipTlsVerify,
+		Backend:         store.Backend(cfg.StoreBackend),
+		BackendUsername: cfg.StoreUsername,
+		BackendPassword: cfg.StorePassword,
+		Endpoints:       cfg.StoreEndpoints,
+		Token:           cfg.StoreToken,
+		Node:            cfg.StoreNode,
+		Timeout:         cfg.StoreTimeout,
+		CertFile:        cfg.StoreCertFile,
+		KeyFile:         cfg.StoreKeyFile,
+		CAFile:          cfg.StoreCAFile,
+		SkipTLSVerify:   cfg.StoreSkipTlsVerify,
 	})
 }
 

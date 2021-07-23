@@ -30,7 +30,7 @@ import (
 	"github.com/superfly/leadership"
 	"github.com/superfly/libkv"
 	libkvstore "github.com/superfly/libkv/store"
-	etcdclientv3 "go.etcd.io/etcd/clientv3"
+	etcdclientv3 "go.etcd.io/etcd/client/v3"
 )
 
 // Backend represents a KV Store Backend
@@ -63,16 +63,18 @@ const (
 var URLSchemeRegexp = regexp.MustCompile(`^([a-zA-Z][a-zA-Z0-9+-.]*)://`)
 
 type Config struct {
-	Backend       Backend
-	Endpoints     string
-	Timeout       time.Duration
-	BasePath      string
-	Token         string
-	Node          string
-	CertFile      string
-	KeyFile       string
-	CAFile        string
-	SkipTLSVerify bool
+	Backend         Backend
+	BackendUsername string
+	BackendPassword string
+	Endpoints       string
+	Timeout         time.Duration
+	BasePath        string
+	Token           string
+	Node            string
+	CertFile        string
+	KeyFile         string
+	CAFile          string
+	SkipTLSVerify   bool
 }
 
 // KVPair represents {Key, Value, Lastindex} tuple
@@ -199,6 +201,8 @@ func NewKVStore(cfg Config) (KVStore, error) {
 			DialTimeout:          20 * time.Second,
 			DialKeepAliveTime:    1 * time.Second,
 			DialKeepAliveTimeout: cfg.Timeout,
+			Username:             cfg.BackendUsername,
+			Password:             cfg.BackendPassword,
 		}
 
 		c, err := etcdclientv3.New(config)
