@@ -456,9 +456,6 @@ func (os *ClusterSpec) Validate() error {
 	if *s.MaxStandbysPerSender < 1 {
 		return fmt.Errorf("maxStandbysPerSender must be at least 1")
 	}
-	if *s.MinSynchronousStandbys < 1 {
-		return fmt.Errorf("minSynchronousStandbys must be at least 1")
-	}
 	if *s.MaxSynchronousStandbys < 1 {
 		return fmt.Errorf("maxSynchronousStandbys must be at least 1")
 	}
