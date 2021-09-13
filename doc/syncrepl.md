@@ -9,6 +9,10 @@ You can enable/disable synchronous replication at any time and the keepers will 
 
 In the cluster spec you can set the `MinSynchronousStandbys` and `MaxSynchronousStandbys` values (they both defaults to 1). Having multiple synchronous standbys is a feature provided starting from [PostgreSQL 9.6](https://www.postgresql.org/docs/9.6/static/warm-standby.html#SYNCHRONOUS-REPLICATION). Values different than 1 for postgres versions below 9.6 will be ignored.
 
+For postgres versions over 9.6, you are also allowed to set `MinSynchronousStandbys` to 0. When set to 0, stolon will keep healthy sync standbys in the `synchronous_standby_names` list (up to `MaxSynchronousStandbys`), but will not force the primary to block if there isn't any healthy sync standby to add to the list.
+
+Notice that `MinSynchronousStandbys` = 0 can cause loss of committed transactions if the primary restarts while the list of synchronous standbys is empty. So this is only advised for clusters with just one primary and one sync standby, when you value availability over consistency. For availability _and_ consistency, you should set `MinSynchronousStandbys` > 0, and have at least `MinSynchronousStandbys` + 1 standbys.
+
 ## Enable synchronous replication.
 
 Assuming that your cluster name is `mycluster` and using etcd (v3 api) listening on localhost:2379:
