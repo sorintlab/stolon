@@ -655,6 +655,24 @@ func (tk *TestKeeper) WaitDBRole(r common.Role, ptk *TestKeeper, timeout time.Du
 	return fmt.Errorf("timeout")
 }
 
+func (tk *TestKeeper) WaitPGParameter(parameter, value string, timeout time.Duration) error {
+	latestValue := ""
+	start := time.Now()
+	for time.Now().Add(-timeout).Before(start) {
+		pgParameters, err := GetPGParameters(tk)
+		if err != nil {
+			goto end
+		}
+		latestValue = pgParameters[parameter]
+		if latestValue == value {
+			return nil
+		}
+	end:
+		time.Sleep(sleepInterval)
+	}
+	return fmt.Errorf("timeout waiting for pgParamater %q (%q) to equal %q", parameter, latestValue, value)
+}
+
 func (tk *TestKeeper) GetPGParameters() (common.Parameters, error) {
 	return GetPGParameters(tk)
 }
@@ -862,19 +880,7 @@ func (tp *TestProxy) GetPGParameters() (common.Parameters, error) {
 }
 
 func (tp *TestProxy) WaitRightMaster(tk *TestKeeper, timeout time.Duration) error {
-	start := time.Now()
-	for time.Now().Add(-timeout).Before(start) {
-		pgParameters, err := GetPGParameters(tp)
-		if err != nil {
-			goto end
-		}
-		if pgParameters["port"] == tk.pgPort {
-			return nil
-		}
-	end:
-		time.Sleep(sleepInterval)
-	}
-	return fmt.Errorf("timeout")
+	return tk.WaitPGParameter("port", tk.pgPort, timeout)
 }
 
 func StolonCtl(t *testing.T, clusterName string, storeBackend store.Backend, storeEndpoints string, a ...string) error {

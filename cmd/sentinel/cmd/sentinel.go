@@ -1078,7 +1078,7 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 						newMasterDB.Spec.SynchronousStandbys = append(newMasterDB.Spec.SynchronousStandbys, oldMasterdb.UID)
 					}
 				}
-				if len(newMasterDB.Spec.SynchronousStandbys) == 0 {
+				if len(newMasterDB.Spec.SynchronousStandbys) == 0 && *clusterSpec.MinSynchronousStandbys > 0 {
 					newMasterDB.Spec.ExternalSynchronousStandbys = []string{fakeStandbyName}
 				}
 
