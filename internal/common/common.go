@@ -16,14 +16,13 @@ package common
 
 import (
 	"fmt"
+	"github.com/satori/go.uuid"
 	"io"
 	"io/ioutil"
 	"os"
 	"path"
 	"reflect"
 	"strings"
-
-	"github.com/satori/go.uuid"
 )
 
 const (
@@ -47,6 +46,10 @@ var Roles = []Role{
 	RoleUndefined,
 	RoleMaster,
 	RoleStandby,
+}
+
+func init() {
+	setHostname()
 }
 
 func UID() string {
@@ -136,4 +139,20 @@ func WriteFileAtomic(filename string, perm os.FileMode, data []byte) error {
 			_, err := f.Write(data)
 			return err
 		})
+}
+
+var (
+	hostname string
+)
+
+func GetHostname() string {
+	return hostname
+}
+
+func setHostname() {
+	var err error
+	hostname, err = os.Hostname()
+	if err != nil {
+		hostname = ""
+	}
 }

@@ -129,7 +129,8 @@ func (s *Sentinel) syncRepl(spec *cluster.ClusterSpec) bool {
 
 func (s *Sentinel) setSentinelInfo(ctx context.Context, ttl time.Duration) error {
 	sentinelInfo := &cluster.SentinelInfo{
-		UID: s.uid,
+		UID:      s.uid,
+		Hostname: common.GetHostname(),
 	}
 	log.Debugw("sentinelInfo dump", "sentinelInfo", sentinelInfo)
 

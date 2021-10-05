@@ -47,6 +47,7 @@ type KeeperInfo struct {
 	UID        string `json:"uid,omitempty"`
 	ClusterUID string `json:"clusterUID,omitempty"`
 	BootUUID   string `json:"bootUUID,omitempty"`
+	Hostname   string `json:"hostname,omitempty"`
 
 	PostgresBinaryVersion PostgresBinaryVersion `json:"postgresBinaryVersion,omitempty"`
 
@@ -127,7 +128,8 @@ func (s SentinelsInfo) Less(i, j int) bool { return s[i].UID < s[j].UID }
 func (s SentinelsInfo) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 
 type SentinelInfo struct {
-	UID string
+	UID      string
+	Hostname string `json:"hostname,omitempty"`
 }
 
 type ProxyInfo struct {
@@ -137,6 +139,8 @@ type ProxyInfo struct {
 
 	UID        string
 	Generation int64
+
+	Hostname string `json:"hostname,omitempty"`
 
 	// ProxyTimeout is the current proxyTimeout used by the proxy
 	// at the time of publishing its state.
