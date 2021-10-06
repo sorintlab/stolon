@@ -597,10 +597,11 @@ func TestUpdateCluster(t *testing.T) {
 					UID:        "cluster1",
 					Generation: 1,
 					Spec: &cluster.ClusterSpec{
-						ConvergenceTimeout:   &cluster.Duration{Duration: cluster.DefaultConvergenceTimeout},
-						InitTimeout:          &cluster.Duration{Duration: cluster.DefaultInitTimeout},
-						SyncTimeout:          &cluster.Duration{Duration: cluster.DefaultSyncTimeout},
-						MaxStandbysPerSender: cluster.Uint16P(cluster.DefaultMaxStandbysPerSender),
+						ConvergenceTimeout:     &cluster.Duration{Duration: cluster.DefaultConvergenceTimeout},
+						InitTimeout:            &cluster.Duration{Duration: cluster.DefaultInitTimeout},
+						SyncTimeout:            &cluster.Duration{Duration: cluster.DefaultSyncTimeout},
+						MaxStandbysPerSender:   cluster.Uint16P(cluster.DefaultMaxStandbysPerSender),
+						SynchronousReplication: cluster.BoolP(false),
 					},
 					Status: cluster.ClusterStatus{
 						CurrentGeneration: 1,
@@ -685,10 +686,11 @@ func TestUpdateCluster(t *testing.T) {
 					UID:        "cluster1",
 					Generation: 1,
 					Spec: &cluster.ClusterSpec{
-						ConvergenceTimeout:   &cluster.Duration{Duration: cluster.DefaultConvergenceTimeout},
-						InitTimeout:          &cluster.Duration{Duration: cluster.DefaultInitTimeout},
-						SyncTimeout:          &cluster.Duration{Duration: cluster.DefaultSyncTimeout},
-						MaxStandbysPerSender: cluster.Uint16P(cluster.DefaultMaxStandbysPerSender),
+						ConvergenceTimeout:     &cluster.Duration{Duration: cluster.DefaultConvergenceTimeout},
+						InitTimeout:            &cluster.Duration{Duration: cluster.DefaultInitTimeout},
+						SyncTimeout:            &cluster.Duration{Duration: cluster.DefaultSyncTimeout},
+						MaxStandbysPerSender:   cluster.Uint16P(cluster.DefaultMaxStandbysPerSender),
+						SynchronousReplication: cluster.BoolP(false),
 					},
 					Status: cluster.ClusterStatus{
 						CurrentGeneration: 1,
@@ -1127,10 +1129,11 @@ func TestUpdateCluster(t *testing.T) {
 					UID:        "cluster1",
 					Generation: 1,
 					Spec: &cluster.ClusterSpec{
-						ConvergenceTimeout:   &cluster.Duration{Duration: cluster.DefaultConvergenceTimeout},
-						InitTimeout:          &cluster.Duration{Duration: cluster.DefaultInitTimeout},
-						SyncTimeout:          &cluster.Duration{Duration: cluster.DefaultSyncTimeout},
-						MaxStandbysPerSender: cluster.Uint16P(cluster.DefaultMaxStandbysPerSender),
+						ConvergenceTimeout:     &cluster.Duration{Duration: cluster.DefaultConvergenceTimeout},
+						InitTimeout:            &cluster.Duration{Duration: cluster.DefaultInitTimeout},
+						SyncTimeout:            &cluster.Duration{Duration: cluster.DefaultSyncTimeout},
+						MaxStandbysPerSender:   cluster.Uint16P(cluster.DefaultMaxStandbysPerSender),
+						SynchronousReplication: cluster.BoolP(false),
 					},
 					Status: cluster.ClusterStatus{
 						CurrentGeneration: 1,
@@ -1215,10 +1218,11 @@ func TestUpdateCluster(t *testing.T) {
 					UID:        "cluster1",
 					Generation: 1,
 					Spec: &cluster.ClusterSpec{
-						ConvergenceTimeout:   &cluster.Duration{Duration: cluster.DefaultConvergenceTimeout},
-						InitTimeout:          &cluster.Duration{Duration: cluster.DefaultInitTimeout},
-						SyncTimeout:          &cluster.Duration{Duration: cluster.DefaultSyncTimeout},
-						MaxStandbysPerSender: cluster.Uint16P(cluster.DefaultMaxStandbysPerSender),
+						ConvergenceTimeout:     &cluster.Duration{Duration: cluster.DefaultConvergenceTimeout},
+						InitTimeout:            &cluster.Duration{Duration: cluster.DefaultInitTimeout},
+						SyncTimeout:            &cluster.Duration{Duration: cluster.DefaultSyncTimeout},
+						MaxStandbysPerSender:   cluster.Uint16P(cluster.DefaultMaxStandbysPerSender),
+						SynchronousReplication: cluster.BoolP(false),
 					},
 					Status: cluster.ClusterStatus{
 						CurrentGeneration: 1,
