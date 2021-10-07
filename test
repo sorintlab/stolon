@@ -35,17 +35,24 @@ echo "Running tests..."
 
 COVER=${COVER:-"-cover"}
 
-# Use only of specific go version to run gofmt since it'll break when some formatting rules change between versions
-GOFMT_VERSION="go1.14"
+## Use this code in case we are testing with multiple go versions that have different gofmt outputs
+# # Use only of specific go version to run gofmt since it'll break when some formatting rules change between versions
+# GOFMT_VERSION="go1.14"
+# MAJOR_GOVERSION=$( echo -n $(go version) | grep -o 'go1\.[0-9]*' || true )
+# if [ "${MAJOR_GOVERSION}" == "${GOFMT_VERSION}" ]; then
+# 	echo "Checking gofmt..."
+# 	fmtRes=$(gofmt -l $(find . -type f -name '*.go' ! -path './vendor/*' ! -path '*/\.*'))
+# 	if [ -n "${fmtRes}" ]; then
+# 		echo -e "gofmt checking failed:\n${fmtRes}"
+# 		exit 255
+# 	fi
+# fi
 
-MAJOR_GOVERSION=$( echo -n $(go version) | grep -o 'go1\.[0-9]*' || true )
-if [ "${MAJOR_GOVERSION}" == "${GOFMT_VERSION}" ]; then
-	echo "Checking gofmt..."
-	fmtRes=$(gofmt -l $(find . -type f -name '*.go' ! -path './vendor/*' ! -path '*/\.*'))
-	if [ -n "${fmtRes}" ]; then
-		echo -e "gofmt checking failed:\n${fmtRes}"
-		exit 255
-	fi
+echo "Checking gofmt..."
+fmtRes=$(gofmt -l $(find . -type f -name '*.go' ! -path './vendor/*' ! -path '*/\.*'))
+if [ -n "${fmtRes}" ]; then
+	echo -e "gofmt checking failed:\n${fmtRes}"
+	exit 255
 fi
 
 echo "Checking govet..."
