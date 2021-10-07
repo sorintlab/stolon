@@ -172,15 +172,15 @@ local task_build_push_images(name, pgversions, istag, push) =
           task_integration_tests(store, pgversion, 'amd64'),
         ]
         for store in ['etcdv2', 'consul']
-        for pgversion in ['13']
+        for pgversion in ['14']
       ]) + std.flattenArrays([
         [
           task_integration_tests(store, pgversion, 'amd64'),
         ]
         for store in ['etcdv3']
-        for pgversion in [ '9.6', '10', '11', '12', '13']
+        for pgversion in [ '10', '11', '12', '13', '14']
       ]) + [
-        task_build_push_images('test build docker "stolon" images', '9.6 10 11 12 13', false, false)
+        task_build_push_images('test build docker "stolon" images', '10 11 12 13 14', false, false)
         + {
           when: {
             branch: {
@@ -190,13 +190,13 @@ local task_build_push_images(name, pgversions, istag, push) =
             ref: '#refs/pull/\\d+/head#',
           },
         },
-        task_build_push_images('build and push docker "stolon" master branch images', '9.6 10 11 12 13', false, true)
+        task_build_push_images('build and push docker "stolon" master branch images', '10 11 12 13 14', false, true)
         + {
           when: {
             branch: 'master',
           },
         },
-        task_build_push_images('build and push docker "stolon" tag images', '9.6 10 11 12 13', true, true)
+        task_build_push_images('build and push docker "stolon" tag images', '10 11 12 13 14', true, true)
         + {
           when: {
             tag: '#v.*#',
