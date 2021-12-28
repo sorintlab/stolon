@@ -68,8 +68,23 @@ func setPassword(ctx context.Context, connParams ConnParams, username, password 
 	}
 	defer db.Close()
 
-	_, err = dbExec(ctx, db, fmt.Sprintf(`alter role "%s" with password '%s';`, username, password))
-	return err
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+
+	query := fmt.Sprintf("set local log_statement = %s", pq.QuoteLiteral("none"))
+	if _, err = tx.ExecContext(ctx, query); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	query = fmt.Sprintf("alter role %s with encrypted password %s", pq.QuoteIdentifier(username), pq.QuoteLiteral(password))
+	if _, err = tx.ExecContext(ctx, query); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	return tx.Commit()
 }
 
 func createRole(ctx context.Context, connParams ConnParams, roles []string, username, password string) error {
@@ -79,8 +94,23 @@ func createRole(ctx context.Context, connParams ConnParams, roles []string, user
 	}
 	defer db.Close()
 
-	_, err = dbExec(ctx, db, fmt.Sprintf(`create role "%s" with login replication encrypted password '%s';`, username, password))
-	return err
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+
+	query := fmt.Sprintf("set local log_statement = %s", pq.QuoteLiteral("none"))
+	if _, err = tx.ExecContext(ctx, query); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	query = fmt.Sprintf("create role %s with login replication encrypted password %s", pq.QuoteIdentifier(username), pq.QuoteLiteral(password))
+	if _, err = tx.ExecContext(ctx, query); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	return tx.Commit()
 }
 
 func createPasswordlessRole(ctx context.Context, connParams ConnParams, roles []string, username string) error {
@@ -101,8 +131,23 @@ func alterRole(ctx context.Context, connParams ConnParams, roles []string, usern
 	}
 	defer db.Close()
 
-	_, err = dbExec(ctx, db, fmt.Sprintf(`alter role "%s" with login replication encrypted password '%s';`, username, password))
-	return err
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+
+	query := fmt.Sprintf("set local log_statement = %s", pq.QuoteLiteral("none"))
+	if _, err = tx.ExecContext(ctx, query); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	query = fmt.Sprintf("alter role %s with login replication encrypted password %s", pq.QuoteIdentifier(username), pq.QuoteLiteral(password))
+	if _, err = tx.ExecContext(ctx, query); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	return tx.Commit()
 }
 
 func alterPasswordlessRole(ctx context.Context, connParams ConnParams, roles []string, username string) error {

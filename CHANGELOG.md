@@ -1,3 +1,14 @@
+### v0.17.0
+
+#### New features
+
+* Support PostgreSQL 13 ([#831](https://github.com/sorintlab/stolon/pull/831))
+* Add configurable store timeouts ([#765](https://github.com/sorintlab/stolon/pull/765))
+
+and [many other](https://github.com/sorintlab/stolon/milestone/16) changes.
+
+A big Thank You to everybody who contributed to this release!
+
 ### v0.16.0
 
 #### New features
