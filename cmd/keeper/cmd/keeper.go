@@ -156,7 +156,6 @@ func init() {
 var managedPGParameters = []string{
 	"unix_socket_directories",
 	"wal_keep_segments",
-	"wal_keep_size",
 	"hot_standby",
 	"listen_addresses",
 	"port",
