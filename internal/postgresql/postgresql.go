@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -331,7 +332,8 @@ func (p *Manager) moveWal() (err error) {
 		return err
 	}
 	log.Debugf("moving WAL files from %s to %s", curPath, tmpPath)
-	if entries, err := ioutil.ReadDir(curPath); err != nil {
+	var entries []fs.FileInfo
+	if entries, err = ioutil.ReadDir(curPath); err != nil {
 		log.Errorf("could not read contents of folder %s: %e", curPath, err)
 		return err
 	} else {
@@ -346,7 +348,8 @@ func (p *Manager) moveWal() (err error) {
 		}
 	}
 
-	if symlinkStat, err := os.Lstat(symlinkPath); err != nil {
+	var symlinkStat fs.FileInfo
+	if symlinkStat, err = os.Lstat(symlinkPath); err != nil {
 		log.Errorf("could not get info on current pg_wal folder/symlink %s: %e", symlinkPath, err)
 		return err
 	} else if symlinkStat.Mode()&os.ModeSymlink != 0 {
@@ -355,12 +358,12 @@ func (p *Manager) moveWal() (err error) {
 			return err
 		}
 	} else if symlinkStat.IsDir() {
-		if err := syscall.Rmdir(symlinkPath); err != nil {
+		if err = syscall.Rmdir(symlinkPath); err != nil {
 			log.Errorf("could not remove current folder %s: %e", symlinkPath, err)
 			return err
 		}
 	} else {
-		err := fmt.Errorf("location %s is no symlink and no dir, so please check and resolve by hand", symlinkPath)
+		err = fmt.Errorf("location %s is no symlink and no dir, so please check and resolve by hand", symlinkPath)
 		log.Error(err)
 		return err
 	}
