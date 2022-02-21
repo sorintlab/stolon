@@ -299,8 +299,96 @@ func (p *Manager) StartTmpMerged() error {
 	return p.start("-c", fmt.Sprintf("config_file=%s", tmpPostgresConfPath))
 }
 
+func (p *Manager) moveWal() (err error) {
+	var curPath string
+	var desiredPath string
+	var tmpPath string
+	symlinkPath := filepath.Join(p.dataDir, "pg_wal")
+	if curPath, err = filepath.EvalSymlinks(symlinkPath); err != nil {
+		log.Errorf("could not evaluate symlink %s: %e", symlinkPath, err)
+		return err
+	}
+	if p.walDir == "" {
+		desiredPath = symlinkPath
+		tmpPath = filepath.Join(p.dataDir, "pg_wal_new")
+	} else {
+		desiredPath = p.walDir
+		tmpPath = p.walDir
+	}
+	if curPath == desiredPath {
+		return nil
+	}
+	if p.walDir == "" {
+		log.Infof("moving WAL from %s to %s first and then to %s", curPath, tmpPath, desiredPath)
+	} else {
+		log.Infof("moving WAL from %s to new location %s", curPath, desiredPath)
+	}
+	// We use tmpPath here first and (if needed) mv tmpPath to desiredPath when all is copied.
+	// This allows stolon-keeper to re-read symlink dest and continue should stolon-keeper be restarted while copying.
+	log.Debugf("creating %s", tmpPath)
+	if err = os.MkdirAll(tmpPath, 0700); err != nil && !os.IsExist(err) {
+		log.Errorf("could not create new dest folder %s: %e", tmpPath, err)
+		return err
+	}
+	log.Debugf("moving WAL files from %s to %s", curPath, tmpPath)
+	if entries, err := ioutil.ReadDir(curPath); err != nil {
+		log.Errorf("could not read contents of folder %s: %e", curPath, err)
+		return err
+	} else {
+		for _, entry := range entries {
+			srcEntry := filepath.Join(curPath, entry.Name())
+			dstEntry := filepath.Join(tmpPath, entry.Name())
+			log.Debugf("moving %s to %s", srcEntry, dstEntry)
+			if err = os.Rename(srcEntry, dstEntry); err != nil {
+				log.Errorf("could not move %s to %s: %e", srcEntry, dstEntry, err)
+				return err
+			}
+		}
+	}
+
+	if symlinkStat, err := os.Lstat(symlinkPath); err != nil {
+		log.Errorf("could not get info on current pg_wal folder/symlink %s: %e", symlinkPath, err)
+		return err
+	} else if symlinkStat.Mode()&os.ModeSymlink != 0 {
+		if err = os.Remove(symlinkPath); err != nil {
+			log.Errorf("could not remove current pg_wal symlink %s: %e", symlinkPath, err)
+			return err
+		}
+	} else if symlinkStat.IsDir() {
+		if err := syscall.Rmdir(symlinkPath); err != nil {
+			log.Errorf("could not remove current folder %s: %e", symlinkPath, err)
+			return err
+		}
+	} else {
+		err := fmt.Errorf("location %s is no symlink and no dir, so please check and resolve by hand", symlinkPath)
+		log.Error(err)
+		return err
+	}
+	if p.walDir == "" {
+		// So we were moving WAL files back into PGDATA. Let's rename the tmpDir now holding all WAL files and use that
+		// as PGDATA/pg_wal
+		if err = os.Rename(tmpPath, desiredPath); err != nil {
+			log.Errorf("cannot move %s to %s: %e", tmpPath, desiredPath, err)
+			return err
+		}
+	} else {
+		log.Infof("symlinking %s to %s", symlinkPath, desiredPath)
+		if err = os.Symlink(desiredPath, symlinkPath); err != nil {
+			// We were copying WAL files from PGDATA (or another location) to a location outside of PGDATA and
+			// pointing the symlink in the right direction failed.
+			log.Errorf("could not create symlink %s to %s: %e", symlinkPath, desiredPath, err)
+			return err
+		}
+	}
+	log.Infof("moving pg_wal from %s to %s is succesful", curPath, desiredPath)
+	return nil
+}
+
 func (p *Manager) Start() error {
 	if err := p.writeConfs(false); err != nil {
+		return err
+	}
+	if err := p.moveWal(); err != nil {
 		return err
 	}
 	return p.start()
