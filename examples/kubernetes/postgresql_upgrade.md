@@ -103,7 +103,7 @@ pg_upgrade said that two script were generated (at least for 9.6 to 10.0):
 Exit and delete this stolon-upgrade pod:
 
 ```
-kubectl detele pod stolon-upgrade
+kubectl delete pod stolon-upgrade
 ```
 
 For all other data volume of stolon-keeper, run the same step. Just update the yaml used in
