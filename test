@@ -37,23 +37,23 @@ COVER=${COVER:-"-cover"}
 
 ## Use this code in case we are testing with multiple go versions that have different gofmt outputs
 # # Use only of specific go version to run gofmt since it'll break when some formatting rules change between versions
-# GOFMT_VERSION="go1.14"
-# MAJOR_GOVERSION=$( echo -n $(go version) | grep -o 'go1\.[0-9]*' || true )
-# if [ "${MAJOR_GOVERSION}" == "${GOFMT_VERSION}" ]; then
-# 	echo "Checking gofmt..."
-# 	fmtRes=$(gofmt -l $(find . -type f -name '*.go' ! -path './vendor/*' ! -path '*/\.*'))
-# 	if [ -n "${fmtRes}" ]; then
-# 		echo -e "gofmt checking failed:\n${fmtRes}"
-# 		exit 255
-# 	fi
-# fi
-
-echo "Checking gofmt..."
-fmtRes=$(gofmt -l $(find . -type f -name '*.go' ! -path './vendor/*' ! -path '*/\.*'))
-if [ -n "${fmtRes}" ]; then
-	echo -e "gofmt checking failed:\n${fmtRes}"
-	exit 255
+GOFMT_VERSION="go1.12"
+MAJOR_GOVERSION=$( echo -n $(go version) | grep -o 'go1\.[0-9]*' || true )
+if [ "${MAJOR_GOVERSION}" == "${GOFMT_VERSION}" ]; then
+	echo "Checking gofmt..."
+	fmtRes=$(gofmt -l $(find . -type f -name '*.go' ! -path './vendor/*' ! -path '*/\.*'))
+	if [ -n "${fmtRes}" ]; then
+		echo -e "gofmt checking failed:\n${fmtRes}"
+		exit 255
+	fi
 fi
+
+# echo "Checking gofmt..."
+# fmtRes=$(gofmt -l $(find . -type f -name '*.go' ! -path './vendor/*' ! -path '*/\.*'))
+# if [ -n "${fmtRes}" ]; then
+# 	echo -e "gofmt checking failed:\n${fmtRes}"
+# 	exit 255
+# fi
 
 echo "Checking govet..."
 vetRes=$(go vet ${PACKAGES})
@@ -87,7 +87,7 @@ curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/instal
 ${BINDIR}/golangci-lint run --deadline 5m
 
 echo "Running tests"
-go test -timeout 3m ${COVER} $@ ${PACKAGES} ${RACE}
+go test -timeout 3m ${COVER} "$@" ${PACKAGES} ${RACE}
 
 if [ -n "$INTEGRATION" ]; then
 	echo "Running integration tests..."
@@ -125,7 +125,7 @@ if [ -n "$INTEGRATION" ]; then
 	fi
 
 	[ -z "$PARALLEL" ] && PARALLEL=4
-	go test -timeout 20m $@ -v -count 1 -parallel ${PARALLEL} ${REPO_PATH}/tests/integration
+	go test -timeout 20m "$@" -v -count 1 -parallel ${PARALLEL} "${REPO_PATH}/tests/integration"
 fi
 
 echo "Success"
