@@ -18,10 +18,16 @@ import (
 	"bufio"
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"io"
+	"io/fs"
+	"io/ioutil"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/sorintlab/stolon/internal/common"
 
@@ -555,4 +561,78 @@ func WalFileNameNoTimeLine(name string) (string, error) {
 		return "", fmt.Errorf("bad wal file name")
 	}
 	return name[8:24], nil
+}
+
+func moveFile(sourcePath, destPath string) error {
+	// using os.Rename is faster when on same filesystem
+	if err := os.Rename(sourcePath, destPath); err == nil {
+		return nil
+	}
+	// Error. Let's try to write
+	inputFile, err := os.Open(sourcePath)
+	if err != nil {
+		return fmt.Errorf("Couldn't open source file: %s", err)
+	}
+	inFileStat, err := inputFile.Stat()
+	if err != nil {
+		return err
+	}
+	flag := os.O_WRONLY | os.O_CREATE | os.O_TRUNC
+	perm := inFileStat.Mode() & os.ModePerm
+	outputFile, err := os.OpenFile(destPath, flag, perm)
+	if err != nil {
+		return err
+	}
+	defer outputFile.Close()
+	_, err = io.Copy(outputFile, inputFile)
+	inputFile.Close()
+	if err != nil {
+		return fmt.Errorf("Writing to output file failed: %s", err)
+	}
+	// The copy was successful, so now delete the original file
+	err = os.Remove(sourcePath)
+	if err != nil {
+		return fmt.Errorf("Failed removing original file: %s", err)
+	}
+	return nil
+}
+
+func moveDirRecursive(src string, dest string) error {
+	log.Infof("Moving %s to %s", src, dest)
+	if stat, err := os.Stat(src); err != nil {
+		log.Errorf("could not get stat of %s: %e", src, err)
+		return err
+	} else if stat.IsDir() {
+		// Make the dir if it doesn't exist
+		if _, err := os.Stat(dest); errors.Is(err, os.ErrNotExist) {
+			if err := os.MkdirAll(dest, stat.Mode()&os.ModePerm); err != nil {
+				return err
+			}
+		} else if err != nil {
+			log.Errorf("could not get stat of %s: %e", dest, err)
+			return err
+		}
+		// Copy all files and folders in this folder
+		var entries []fs.FileInfo
+		if entries, err = ioutil.ReadDir(src); err != nil {
+			log.Errorf("could not read contents of folder %s: %e", src, err)
+			return err
+		} else {
+			for _, entry := range entries {
+				srcEntry := filepath.Join(src, entry.Name())
+				dstEntry := filepath.Join(dest, entry.Name())
+				if err := moveDirRecursive(srcEntry, dstEntry); err != nil {
+					return err
+				}
+			}
+		}
+		// Remove this folder, which is now supposedly empty
+		if err := syscall.Rmdir(src); err != nil {
+			log.Errorf("could not remove folder %s: %e", src, err)
+			return err
+		}
+	} else {
+		return moveFile(src, dest)
+	}
+	return nil
 }

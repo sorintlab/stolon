@@ -326,30 +326,14 @@ func (p *Manager) moveWal() (err error) {
 	}
 	// We use tmpPath here first and (if needed) mv tmpPath to desiredPath when all is copied.
 	// This allows stolon-keeper to re-read symlink dest and continue should stolon-keeper be restarted while copying.
-	log.Debugf("creating %s", tmpPath)
-	if err = os.MkdirAll(tmpPath, 0700); err != nil && !os.IsExist(err) {
-		log.Errorf("could not create new dest folder %s: %e", tmpPath, err)
+	if err = moveDirRecursive(curPath, tmpPath); err != nil {
 		return err
-	}
-	log.Debugf("moving WAL files from %s to %s", curPath, tmpPath)
-	var entries []fs.FileInfo
-	if entries, err = ioutil.ReadDir(curPath); err != nil {
-		log.Errorf("could not read contents of folder %s: %e", curPath, err)
-		return err
-	} else {
-		for _, entry := range entries {
-			srcEntry := filepath.Join(curPath, entry.Name())
-			dstEntry := filepath.Join(tmpPath, entry.Name())
-			log.Debugf("moving %s to %s", srcEntry, dstEntry)
-			if err = os.Rename(srcEntry, dstEntry); err != nil {
-				log.Errorf("could not move %s to %s: %e", srcEntry, dstEntry, err)
-				return err
-			}
-		}
 	}
 
 	var symlinkStat fs.FileInfo
-	if symlinkStat, err = os.Lstat(symlinkPath); err != nil {
+	if symlinkStat, err = os.Lstat(symlinkPath); errors.Is(err, os.ErrNotExist) {
+		// File or folder already removed
+	} else if err != nil {
 		log.Errorf("could not get info on current pg_wal folder/symlink %s: %e", symlinkPath, err)
 		return err
 	} else if symlinkStat.Mode()&os.ModeSymlink != 0 {
