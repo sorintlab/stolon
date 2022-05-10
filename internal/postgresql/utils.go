@@ -629,7 +629,8 @@ func moveDirRecursive(src string, dest string) error {
 		// Remove this folder, which is now supposedly empty
 		if err := syscall.Rmdir(src); err != nil {
 			log.Errorf("could not remove folder %s: %e", src, err)
-			return err
+			// If this is a mountpoint or you don't have enough permissions, you might nog be able to. But that is fine.
+			//return err
 		}
 	} else {
 		return moveFile(src, dest)
