@@ -7,6 +7,7 @@ require (
 	github.com/docker/leadership v0.1.0
 	github.com/docker/libkv v0.2.1
 	github.com/evanphx/json-patch v4.5.0+incompatible
+	github.com/gofrs/uuid v4.2.0+incompatible
 	github.com/golang/mock v1.4.0
 	github.com/google/go-cmp v0.4.0
 	github.com/hashicorp/consul/api v1.4.0
@@ -14,7 +15,6 @@ require (
 	github.com/mattn/go-isatty v0.0.12
 	github.com/mitchellh/copystructure v1.0.0
 	github.com/prometheus/client_golang v1.4.1
-	github.com/satori/go.uuid v1.2.0
 	github.com/sgotti/gexpect v0.0.0-20210315095146-1ec64e69809b
 	github.com/sorintlab/pollon v0.0.0-20181009091703-248c68238c16
 	github.com/spf13/cobra v0.0.5

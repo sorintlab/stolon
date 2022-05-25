@@ -26,7 +26,7 @@ import (
 	"testing"
 	"time"
 
-	uuid "github.com/satori/go.uuid"
+	"github.com/gofrs/uuid"
 	"github.com/sorintlab/stolon/internal/cluster"
 	"github.com/sorintlab/stolon/internal/common"
 	pg "github.com/sorintlab/stolon/internal/postgresql"
@@ -70,7 +70,7 @@ func TestInitWithMultipleKeepers(t *testing.T) {
 
 	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
 
-	clusterName := uuid.NewV4().String()
+	clusterName := uuid.Must(uuid.NewV4()).String()
 
 	storePath := filepath.Join(common.StorePrefix, clusterName)
 
@@ -333,7 +333,7 @@ func testMasterStandby(t *testing.T, syncRepl bool) {
 	}
 	defer os.RemoveAll(dir)
 
-	clusterName := uuid.NewV4().String()
+	clusterName := uuid.Must(uuid.NewV4()).String()
 
 	tks, tss, tp, tstore := setupServers(t, clusterName, dir, 2, 1, syncRepl, false, nil)
 	defer shutdown(tks, tss, tp, tstore)
@@ -388,7 +388,7 @@ func testFailover(t *testing.T, syncRepl bool, standbyCluster bool) {
 	var ptk *TestKeeper
 	var primary *TestKeeper
 	if standbyCluster {
-		primaryClusterName := uuid.NewV4().String()
+		primaryClusterName := uuid.Must(uuid.NewV4()).String()
 		ptks, ptss, ptp, ptstore := setupServers(t, primaryClusterName, dir, 1, 1, false, false, nil)
 		defer shutdown(ptks, ptss, ptp, ptstore)
 		for _, ptk = range ptks {
@@ -397,7 +397,7 @@ func testFailover(t *testing.T, syncRepl bool, standbyCluster bool) {
 		primary = ptk
 	}
 
-	clusterName := uuid.NewV4().String()
+	clusterName := uuid.Must(uuid.NewV4()).String()
 
 	tks, tss, tp, tstore := setupServers(t, clusterName, dir, 2, 1, syncRepl, false, ptk)
 	defer shutdown(tks, tss, tp, tstore)
@@ -499,7 +499,7 @@ func testFailoverFailed(t *testing.T, syncRepl bool, standbyCluster bool) {
 	var ptk *TestKeeper
 	var primary *TestKeeper
 	if standbyCluster {
-		primaryClusterName := uuid.NewV4().String()
+		primaryClusterName := uuid.Must(uuid.NewV4()).String()
 		ptks, ptss, ptp, ptstore := setupServers(t, primaryClusterName, dir, 1, 1, false, false, nil)
 		defer shutdown(ptks, ptss, ptp, ptstore)
 		for _, ptk = range ptks {
@@ -508,7 +508,7 @@ func testFailoverFailed(t *testing.T, syncRepl bool, standbyCluster bool) {
 		primary = ptk
 	}
 
-	clusterName := uuid.NewV4().String()
+	clusterName := uuid.Must(uuid.NewV4()).String()
 
 	tks, tss, tp, tstore := setupServers(t, clusterName, dir, 2, 1, syncRepl, false, ptk)
 	defer shutdown(tks, tss, tp, tstore)
@@ -611,7 +611,7 @@ func testFailoverTooMuchLag(t *testing.T, standbyCluster bool) {
 	var ptk *TestKeeper
 	var primary *TestKeeper
 	if standbyCluster {
-		primaryClusterName := uuid.NewV4().String()
+		primaryClusterName := uuid.Must(uuid.NewV4()).String()
 		ptks, ptss, ptp, ptstore := setupServers(t, primaryClusterName, dir, 1, 1, false, false, nil)
 		defer shutdown(ptks, ptss, ptp, ptstore)
 		for _, ptk = range ptks {
@@ -620,7 +620,7 @@ func testFailoverTooMuchLag(t *testing.T, standbyCluster bool) {
 		primary = ptk
 	}
 
-	clusterName := uuid.NewV4().String()
+	clusterName := uuid.Must(uuid.NewV4()).String()
 
 	tks, tss, tp, tstore := setupServers(t, clusterName, dir, 2, 1, false, false, ptk)
 	defer shutdown(tks, tss, tp, tstore)
@@ -690,7 +690,7 @@ func testOldMasterRestart(t *testing.T, syncRepl, minSync0 bool, usePgrewind boo
 	var ptk *TestKeeper
 	var primary *TestKeeper
 	if standbyCluster {
-		primaryClusterName := uuid.NewV4().String()
+		primaryClusterName := uuid.Must(uuid.NewV4()).String()
 		ptks, ptss, ptp, ptstore := setupServers(t, primaryClusterName, dir, 1, 1, false, false, nil)
 		defer shutdown(ptks, ptss, ptp, ptstore)
 		for _, ptk = range ptks {
@@ -699,7 +699,7 @@ func testOldMasterRestart(t *testing.T, syncRepl, minSync0 bool, usePgrewind boo
 		primary = ptk
 	}
 
-	clusterName := uuid.NewV4().String()
+	clusterName := uuid.Must(uuid.NewV4()).String()
 
 	specOptions := []optionSetter{
 		withMinSync0(minSync0),
@@ -844,7 +844,7 @@ func testPartition1(t *testing.T, syncRepl, minSync0, usePgrewind bool, standbyC
 	var ptk *TestKeeper
 	var primary *TestKeeper
 	if standbyCluster {
-		primaryClusterName := uuid.NewV4().String()
+		primaryClusterName := uuid.Must(uuid.NewV4()).String()
 		ptks, ptss, ptp, ptstore := setupServers(t, primaryClusterName, dir, 1, 1, false, false, nil)
 		defer shutdown(ptks, ptss, ptp, ptstore)
 		for _, ptk = range ptks {
@@ -853,7 +853,7 @@ func testPartition1(t *testing.T, syncRepl, minSync0, usePgrewind bool, standbyC
 		primary = ptk
 	}
 
-	clusterName := uuid.NewV4().String()
+	clusterName := uuid.Must(uuid.NewV4()).String()
 
 	specOptions := []optionSetter{
 		withMinSync0(minSync0),
@@ -1010,7 +1010,7 @@ func testTimelineFork(t *testing.T, syncRepl, usePgrewind bool) {
 	}
 	defer os.RemoveAll(dir)
 
-	clusterName := uuid.NewV4().String()
+	clusterName := uuid.Must(uuid.NewV4()).String()
 
 	tks, tss, tp, tstore := setupServers(t, clusterName, dir, 2, 1, syncRepl, usePgrewind, nil)
 	defer shutdown(tks, tss, tp, tstore)
@@ -1206,7 +1206,7 @@ func testMasterChangedAddress(t *testing.T, standbyCluster bool) {
 	var ptk *TestKeeper
 	var primary *TestKeeper
 	if standbyCluster {
-		primaryClusterName := uuid.NewV4().String()
+		primaryClusterName := uuid.Must(uuid.NewV4()).String()
 		ptks, ptss, ptp, ptstore := setupServers(t, primaryClusterName, dir, 1, 1, false, false, nil)
 		defer shutdown(ptks, ptss, ptp, ptstore)
 		for _, ptk = range ptks {
@@ -1215,7 +1215,7 @@ func testMasterChangedAddress(t *testing.T, standbyCluster bool) {
 		primary = ptk
 	}
 
-	clusterName := uuid.NewV4().String()
+	clusterName := uuid.Must(uuid.NewV4()).String()
 
 	tks, tss, tp, tstore := setupServers(t, clusterName, dir, 2, 1, false, false, ptk)
 	defer shutdown(tks, tss, tp, tstore)
@@ -1301,7 +1301,7 @@ func TestFailedStandby(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 
-	clusterName := uuid.NewV4().String()
+	clusterName := uuid.Must(uuid.NewV4()).String()
 
 	initialClusterSpec := &cluster.ClusterSpec{
 		InitMode:             cluster.ClusterInitModeP(cluster.ClusterInitModeNew),
@@ -1392,7 +1392,7 @@ func TestLoweredMaxStandbysPerSender(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 
-	clusterName := uuid.NewV4().String()
+	clusterName := uuid.Must(uuid.NewV4()).String()
 
 	initialClusterSpec := &cluster.ClusterSpec{
 		InitMode:             cluster.ClusterInitModeP(cluster.ClusterInitModeNew),
@@ -1457,7 +1457,7 @@ func TestKeeperRemoval(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 
-	clusterName := uuid.NewV4().String()
+	clusterName := uuid.Must(uuid.NewV4()).String()
 
 	initialClusterSpec := &cluster.ClusterSpec{
 		InitMode:           cluster.ClusterInitModeP(cluster.ClusterInitModeNew),
@@ -1565,7 +1565,7 @@ func testKeeperRemovalStolonCtl(t *testing.T, syncRepl bool) {
 	}
 	defer os.RemoveAll(dir)
 
-	clusterName := uuid.NewV4().String()
+	clusterName := uuid.Must(uuid.NewV4()).String()
 
 	initialClusterSpec := &cluster.ClusterSpec{
 		InitMode:               cluster.ClusterInitModeP(cluster.ClusterInitModeNew),
@@ -1691,7 +1691,7 @@ func TestStandbyCantSync(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 
-	clusterName := uuid.NewV4().String()
+	clusterName := uuid.Must(uuid.NewV4()).String()
 
 	initialClusterSpec := &cluster.ClusterSpec{
 		InitMode:           cluster.ClusterInitModeP(cluster.ClusterInitModeNew),
@@ -1821,7 +1821,7 @@ func TestDisappearedKeeperData(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 
-	clusterName := uuid.NewV4().String()
+	clusterName := uuid.Must(uuid.NewV4()).String()
 
 	tks, tss, tp, tstore := setupServers(t, clusterName, dir, 2, 1, false, false, nil)
 	defer shutdown(tks, tss, tp, tstore)
@@ -1905,7 +1905,7 @@ func testForceFail(t *testing.T, syncRepl bool, standbyCluster bool) {
 	var ptk *TestKeeper
 	var primary *TestKeeper
 	if standbyCluster {
-		primaryClusterName := uuid.NewV4().String()
+		primaryClusterName := uuid.Must(uuid.NewV4()).String()
 		ptks, ptss, ptp, ptstore := setupServers(t, primaryClusterName, dir, 1, 1, false, false, nil)
 		defer shutdown(ptks, ptss, ptp, ptstore)
 		for _, ptk = range ptks {
@@ -1914,7 +1914,7 @@ func testForceFail(t *testing.T, syncRepl bool, standbyCluster bool) {
 		primary = ptk
 	}
 
-	clusterName := uuid.NewV4().String()
+	clusterName := uuid.Must(uuid.NewV4()).String()
 
 	tks, tss, tp, tstore := setupServers(t, clusterName, dir, 2, 1, syncRepl, false, ptk)
 	defer shutdown(tks, tss, tp, tstore)
@@ -2017,7 +2017,7 @@ func testSyncStandbyNotInSync(t *testing.T, minSync0 bool) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	defer os.RemoveAll(dir)
-	clusterName := uuid.NewV4().String()
+	clusterName := uuid.Must(uuid.NewV4()).String()
 	clusterOpts := []optionSetter{
 		withMinSync0(minSync0),
 	}
