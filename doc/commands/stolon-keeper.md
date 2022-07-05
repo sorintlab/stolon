@@ -44,6 +44,8 @@ stolon-keeper [flags]
       --store-prefix string             the store base prefix (default "stolon/cluster")
       --store-skip-tls-verify           skip store certificate verification (insecure!!!)
       --store-timeout duration          store request timeout (default 5s)
+      --store-username string           username for client identification to the store
+      --store-password string           password for client identification to the store
       --uid string                      keeper uid (must be unique in the cluster and can contain only lower-case letters, numbers and the underscore character). If not provided a random uid will be generated.
 ```
 

@@ -30,6 +30,8 @@ stolon-proxy [flags]
       --store-prefix string             the store base prefix (default "stolon/cluster")
       --store-skip-tls-verify           skip store certificate verification (insecure!!!)
       --store-timeout duration          store request timeout (default 5s)
+      --store-username string           username for client identification to the store
+      --store-password string           password for client identification to the store
       --tcp-keepalive-count int         set tcp keepalive probe count number
       --tcp-keepalive-idle int          set tcp keepalive idle (seconds)
       --tcp-keepalive-interval int      set tcp keepalive interval (seconds)
