@@ -56,6 +56,8 @@ type config struct {
 	keepAliveIdle     int
 	keepAliveCount    int
 	keepAliveInterval int
+
+	storeRequestRetryTimes int
 }
 
 var cfg config
@@ -70,6 +72,7 @@ func init() {
 	CmdProxy.PersistentFlags().IntVar(&cfg.keepAliveIdle, "tcp-keepalive-idle", 0, "set tcp keepalive idle (seconds)")
 	CmdProxy.PersistentFlags().IntVar(&cfg.keepAliveCount, "tcp-keepalive-count", 0, "set tcp keepalive probe count number")
 	CmdProxy.PersistentFlags().IntVar(&cfg.keepAliveInterval, "tcp-keepalive-interval", 0, "set tcp keepalive interval (seconds)")
+	CmdProxy.PersistentFlags().IntVar(&cfg.storeRequestRetryTimes, "store-request-retry-times", 1, "retry times to request store")
 
 	if err := CmdProxy.PersistentFlags().MarkDeprecated("debug", "use --log-level=debug instead"); err != nil {
 		log.Fatal(err)
@@ -93,6 +96,8 @@ type ClusterChecker struct {
 	proxyCheckInterval time.Duration
 	proxyTimeout       time.Duration
 	configMutex        sync.Mutex
+
+	storeRequestRetryTimes int
 }
 
 func NewClusterChecker(uid string, cfg config) (*ClusterChecker, error) {
@@ -111,6 +116,8 @@ func NewClusterChecker(uid string, cfg config) (*ClusterChecker, error) {
 
 		proxyCheckInterval: cluster.DefaultProxyCheckInterval,
 		proxyTimeout:       cluster.DefaultProxyTimeout,
+
+		storeRequestRetryTimes: cfg.storeRequestRetryTimes,
 	}, nil
 }
 
@@ -186,9 +193,25 @@ func (c *ClusterChecker) SetProxyInfo(e store.Store, generation int64, proxyTime
 	return nil
 }
 
+func (c *ClusterChecker) getClusterDataWithRetry() (*cluster.ClusterData, error) {
+	var attempts = 1
+	for {
+		cd, _, err := c.e.GetClusterData(context.TODO())
+		if err == nil {
+			return cd, nil
+		} else {
+			attempts++
+			if attempts > c.storeRequestRetryTimes {
+				return nil, err
+			}
+			log.Errorf("get cluster data failed, error: %v, attempt time: %d, will retry...", err, attempts-1)
+		}
+	}
+}
+
 // Check reads the cluster data and applies the right pollon configuration.
 func (c *ClusterChecker) Check() error {
-	cd, _, err := c.e.GetClusterData(context.TODO())
+	cd, err := c.getClusterDataWithRetry()
 	if err != nil {
 		return fmt.Errorf("cannot get cluster data: %v", err)
 	}
