@@ -10,7 +10,7 @@
 
 stolon is a cloud native PostgreSQL manager for PostgreSQL high availability. It's cloud native because it'll let you keep an high available PostgreSQL inside your containers (kubernetes integration) but also on every other kind of infrastructure (cloud IaaS, old style infrastructures etc...)
 
-For an introduction to stolon you can also take a look at [this post](https://sgotti.me/post/stolon-introduction/)
+For an introduction to stolon you can also take a look at [this post](https://sgotti.dev/post/stolon-introduction/)
 
 ## Features
 
