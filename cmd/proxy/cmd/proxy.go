@@ -176,6 +176,7 @@ func (c *ClusterChecker) SetProxyInfo(e store.Store, generation int64, proxyTime
 		InfoUID:      common.UID(),
 		UID:          c.uid,
 		Generation:   generation,
+		Hostname:     common.GetHostname(),
 		ProxyTimeout: proxyTimeout,
 	}
 	log.Debugf("proxyInfo dump: %s", spew.Sdump(proxyInfo))

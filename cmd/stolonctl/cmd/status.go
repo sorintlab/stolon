@@ -51,16 +51,19 @@ type Status struct {
 	Proxies   []ProxyStatus    `json:"proxies"`
 	Keepers   []KeeperStatus   `json:"keepers"`
 	Cluster   ClusterStatus    `json:"cluster"`
+	DBs       cluster.DBs      `json:"-"`
 }
 
 type SentinelStatus struct {
-	UID    string `json:"uid"`
-	Leader bool   `json:"leader"`
+	UID      string `json:"uid"`
+	Leader   bool   `json:"leader"`
+	Hostname string `json:"hostname"`
 }
 
 type ProxyStatus struct {
 	UID        string `json:"uid"`
 	Generation int64  `json:"generation"`
+	Hostname   string `json:"hostname"`
 }
 
 type KeeperStatus struct {
@@ -70,6 +73,7 @@ type KeeperStatus struct {
 	PgHealthy           bool   `json:"pg_healthy"`
 	PgWantedGeneration  int64  `json:"pg_wanted_generation"`
 	PgCurrentGeneration int64  `json:"pg_current_generation"`
+	Hostname            string `json:"hostname"`
 }
 
 type ClusterStatus struct {
@@ -121,9 +125,9 @@ func renderText(status Status, generateErr error) {
 	if len(status.Sentinels) == 0 {
 		stdout("No active sentinels")
 	} else {
-		fmt.Fprintf(tabOut, "ID\tLEADER\n")
+		fmt.Fprintf(tabOut, "ID\tLEADER\tHOSTNAME\n")
 		for _, s := range status.Sentinels {
-			fmt.Fprintf(tabOut, "%s\t%t\n", s.UID, s.Leader)
+			fmt.Fprintf(tabOut, "%s\t%t\t%s\n", s.UID, s.Leader, s.Hostname)
 			tabOut.Flush()
 		}
 	}
@@ -134,9 +138,9 @@ func renderText(status Status, generateErr error) {
 	if len(status.Proxies) == 0 {
 		stdout("No active proxies")
 	} else {
-		fmt.Fprintf(tabOut, "ID\n")
+		fmt.Fprintf(tabOut, "ID\tHOSTNAME\n")
 		for _, p := range status.Proxies {
-			fmt.Fprintf(tabOut, "%s\n", p.UID)
+			fmt.Fprintf(tabOut, "%s\t%s\n", p.UID, p.Hostname)
 			tabOut.Flush()
 		}
 	}
@@ -148,9 +152,9 @@ func renderText(status Status, generateErr error) {
 		stdout("No keepers available")
 		stdout("")
 	} else {
-		fmt.Fprintf(tabOut, "UID\tHEALTHY\tPG LISTENADDRESS\tPG HEALTHY\tPG WANTEDGENERATION\tPG CURRENTGENERATION\n")
+		fmt.Fprintf(tabOut, "UID\tHEALTHY\tPG LISTENADDRESS\tPG HEALTHY\tPG WANTEDGENERATION\tPG CURRENTGENERATION\tHOSTNAME\n")
 		for _, k := range status.Keepers {
-			fmt.Fprintf(tabOut, "%s\t%t\t%s\t%t\t%d\t%d\t\n", k.UID, k.Healthy, k.ListenAddress, k.PgHealthy, k.PgWantedGeneration, k.PgCurrentGeneration)
+			fmt.Fprintf(tabOut, "%s\t%t\t%s\t%t\t%d\t%d\t%s\n", k.UID, k.Healthy, k.ListenAddress, k.PgHealthy, k.PgWantedGeneration, k.PgCurrentGeneration, k.Hostname)
 			tabOut.Flush()
 		}
 	}
@@ -168,29 +172,20 @@ func renderText(status Status, generateErr error) {
 		}
 	}
 
-	// This tree data isn't currently available in the Status struct
-	e, err := cmdcommon.NewStore(&cfg.CommonConfig)
-	if err != nil {
-		die("%v", err)
-	}
-	cd, _, err := getClusterData(e)
-	if err != nil {
-		die("%v", err)
-	}
 	if status.Cluster.MasterDBUID != "" {
 		stdout("")
 		stdout("===== Keepers/DB tree =====")
 		stdout("")
-		printTree(status.Cluster.MasterDBUID, cd, 0, "", true)
+		printTree(status.Cluster.MasterDBUID, status, 0, "", true)
 	}
 	stdout("")
 }
 
-func printTree(dbuid string, cd *cluster.ClusterData, level int, prefix string, tail bool) {
+func printTree(dbuid string, status Status, level int, prefix string, tail bool) {
 	// skip not existing db: specified as a follower but not available in the
 	// cluster spec (this should happen only when doing a stolonctl
 	// removekeeper)
-	if _, ok := cd.DBs[dbuid]; !ok {
+	if _, ok := status.DBs[dbuid]; !ok {
 		return
 	}
 	out := prefix
@@ -201,12 +196,12 @@ func printTree(dbuid string, cd *cluster.ClusterData, level int, prefix string, 
 			out += "├─"
 		}
 	}
-	out += cd.DBs[dbuid].Spec.KeeperUID
-	if dbuid == cd.Cluster.Status.Master {
+	out += status.DBs[dbuid].Spec.KeeperUID
+	if dbuid == status.Cluster.MasterDBUID {
 		out += " (master)"
 	}
 	stdout(out)
-	db := cd.DBs[dbuid]
+	db := status.DBs[dbuid]
 	followers := db.Spec.Followers
 	c := len(followers)
 	for i, f := range followers {
@@ -217,15 +212,15 @@ func printTree(dbuid string, cd *cluster.ClusterData, level int, prefix string, 
 		linespace := "│ "
 		if i < c-1 {
 			if tail {
-				printTree(f, cd, level+1, prefix+emptyspace, false)
+				printTree(f, status, level+1, prefix+emptyspace, false)
 			} else {
-				printTree(f, cd, level+1, prefix+linespace, false)
+				printTree(f, status, level+1, prefix+linespace, false)
 			}
 		} else {
 			if tail {
-				printTree(f, cd, level+1, prefix+emptyspace, true)
+				printTree(f, status, level+1, prefix+emptyspace, true)
 			} else {
-				printTree(f, cd, level+1, prefix+linespace, true)
+				printTree(f, status, level+1, prefix+linespace, true)
 			}
 		}
 	}
@@ -260,7 +255,7 @@ func generateStatus() (Status, error) {
 	sort.Sort(sentinelsInfo)
 	for _, si := range sentinelsInfo {
 		leader := lsid != "" && si.UID == lsid
-		sentinels = append(sentinels, SentinelStatus{UID: si.UID, Leader: leader})
+		sentinels = append(sentinels, SentinelStatus{UID: si.UID, Leader: leader, Hostname: si.Hostname})
 	}
 	status.Sentinels = sentinels
 
@@ -273,13 +268,18 @@ func generateStatus() (Status, error) {
 	proxies := make([]ProxyStatus, 0)
 	sort.Sort(proxiesInfoSlice)
 	for _, pi := range proxiesInfoSlice {
-		proxies = append(proxies, ProxyStatus{UID: pi.UID, Generation: pi.Generation})
+		proxies = append(proxies, ProxyStatus{UID: pi.UID, Generation: pi.Generation, Hostname: pi.Hostname})
 	}
 	status.Proxies = proxies
 
 	cd, _, err := getClusterData(e)
 	if err != nil {
 		return status, err
+	}
+
+	keeInfo, err := e.GetKeepersInfo(context.TODO())
+	if err != nil {
+		keeInfo = map[string]*cluster.KeeperInfo{}
 	}
 
 	keepers := make([]KeeperStatus, 0)
@@ -303,6 +303,10 @@ func generateStatus() (Status, error) {
 				dbListenAddress = fmt.Sprintf("%s:%s", db.Status.ListenAddress, db.Status.Port)
 			}
 		}
+		hostName := ""
+		if ki, ok := keeInfo[kuid]; ok && ki != nil {
+			hostName = ki.Hostname
+		}
 		keeper := KeeperStatus{
 			UID:                 kuid,
 			ListenAddress:       dbListenAddress,
@@ -310,6 +314,7 @@ func generateStatus() (Status, error) {
 			PgHealthy:           pgHealthy,
 			PgWantedGeneration:  pgWantedGeneration,
 			PgCurrentGeneration: pgCurrentGeneration,
+			Hostname:            hostName,
 		}
 		keepers = append(keepers, keeper)
 	}
@@ -329,5 +334,6 @@ func generateStatus() (Status, error) {
 	}
 	status.Cluster = cluster
 
+	status.DBs = cd.DBs
 	return status, nil
 }

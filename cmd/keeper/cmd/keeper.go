@@ -606,6 +606,7 @@ func (p *PostgresKeeper) updateKeeperInfo() error {
 		UID:        keeperUID,
 		ClusterUID: clusterUID,
 		BootUUID:   p.bootUUID,
+		Hostname:   common.GetHostname(),
 		PostgresBinaryVersion: cluster.PostgresBinaryVersion{
 			Maj: maj,
 			Min: min,
