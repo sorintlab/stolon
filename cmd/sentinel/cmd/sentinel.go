@@ -968,8 +968,9 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 			// get db associated to the keeper
 			db := cd.FindDB(k)
 			if db != nil {
+				log.Infow("removing a keeper with associated db", "db", db.UID, "keeper", k.UID)
 				// skip keepers with an assigned db
-				continue
+				// continue
 			}
 			if time.Now().After(k.Status.LastHealthyTime.Add(cd.Cluster.DefSpec().DeadKeeperRemovalInterval.Duration)) {
 				log.Infow("removing old dead keeper", "keeper", k.UID)
