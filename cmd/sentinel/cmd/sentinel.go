@@ -616,7 +616,6 @@ func (s *Sentinel) dbStatus(cd *cluster.ClusterData, dbUID string) dbStatus {
 	// if keeper failed then mark as failed
 	keeper := cd.Keepers[db.Spec.KeeperUID]
 	if !keeper.Status.Healthy {
-		log.Infow("database ", db.UID, " keeper ", keeper.UID, " is not healthy, returning status failed")
 		return dbStatusFailed
 	}
 
@@ -632,17 +631,12 @@ func (s *Sentinel) dbStatus(cd *cluster.ClusterData, dbUID string) dbStatus {
 	switch convergenceState {
 	// if convergence failed then mark as failed
 	case ConvergenceFailed:
-		log.Infow("convergence state", "convergence", "failed", "database", db.UID, "keeper ", db.Spec.KeeperUID)
-
 		return dbStatusFailed
 	// if converging then it's not failed (it can also be not healthy since it could be resyncing)
 	case Converging:
-		log.Infow("convergence state", "convergence", "converging", "database", db.UID, "keeper ", db.Spec.KeeperUID)
 		return dbStatusConverging
 	}
 	// if converged but not healthy mark as failed
-	log.Infow("db health", "healthy", db.Status.Healthy, "database", db.UID, "Keeper ", db.Spec.KeeperUID)
-
 	if !db.Status.Healthy {
 		return dbStatusFailed
 	}
@@ -656,8 +650,6 @@ func (s *Sentinel) dbStatus(cd *cluster.ClusterData, dbUID string) dbStatus {
 	// master if the elected standby db cluster doesn't have all the wals)
 
 	// db is good
-	log.Infow("current state", "database", db.UID, "status", "good", "keeper ", db.Spec.KeeperUID)
-
 	return dbStatusGood
 }
 
@@ -970,20 +962,18 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 		}
 
 	case cluster.ClusterPhaseNormal:
-		// Remove old keepers
+		// Remove keepers/databases that have been in a failing state for longer than the
+		// specified dead keeper removal intervalj.
 		keepersToRemove := []*cluster.Keeper{}
 		dbsToRemove := []*cluster.DB{}
+
 		for _, k := range newcd.Keepers {
-			// get db associated to the keeper
-			db := cd.FindDB(k)
-			// if db != nil {
-			// 	// skip keepers with an assigned db
-			// 	continue
-			// }
 			if time.Now().After(k.Status.LastHealthyTime.Add(cd.Cluster.DefSpec().DeadKeeperRemovalInterval.Duration)) {
 				log.Infow("removing old dead keeper", "keeper", k.UID)
 				keepersToRemove = append(keepersToRemove, k)
-				//remove db associated to keeper
+
+				// get db associated to the keeper
+				db := cd.FindDB(k)
 				if db != nil {
 					dbsToRemove = append(dbsToRemove, db)
 				}
