@@ -1459,32 +1459,6 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 
 				// Remove dbs in excess if we have a good number >= MaxStandbysPerSender
 				// We don't remove failed db until the number of good db is >= MaxStandbysPerSender since they can come back
-				// Delete db if keeper is bad news bears.
-
-				// log.Infow("Evaluating standby nodes")
-
-				// for _, db := range newcd.DBs {
-
-				// 	// Don't remove standbys marked as synchronous standbys
-				// 	if util.StringInSlice(masterDB.Spec.SynchronousStandbys, db.UID) {
-				// 		log.Infow("I'm a sync standby. skipping")
-				// 		continue
-				// 	}
-
-				// 	keeper := newcd.Keepers[db.Spec.KeeperUID]
-
-				// 	if keeper == nil {
-				// 		log.Infow("No keeper tied to db: ", db.UID)
-				// 		continue
-				// 	}
-
-				// 	if time.Now().After(keeper.Status.LastHealthyTime.Add(cd.Cluster.DefSpec().DeadKeeperRemovalInterval.Duration)) {
-				// 		log.Infow("Removing db with bad keeper", "db", db.UID)
-				// 		delete(newcd.DBs, db.UID)
-				// 	}
-
-				// }
-
 				if uint16(goodStandbysCount) >= *clusterSpec.MaxStandbysPerSender {
 					toRemove := []*cluster.DB{}
 					// Remove all non good standbys
@@ -1519,6 +1493,7 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 					for _, db := range toRemove {
 						delete(newcd.DBs, db.UID)
 					}
+
 				} else {
 					// Add new dbs to substitute failed dbs, if there're available keepers.
 
