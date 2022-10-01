@@ -616,6 +616,7 @@ func (s *Sentinel) dbStatus(cd *cluster.ClusterData, dbUID string) dbStatus {
 	// if keeper failed then mark as failed
 	keeper := cd.Keepers[db.Spec.KeeperUID]
 	if !keeper.Status.Healthy {
+		log.Infow("database ", db.UID, " keeper ", keeper.UID, " is not healthy, returning status failed")
 		return dbStatusFailed
 	}
 
@@ -631,12 +632,17 @@ func (s *Sentinel) dbStatus(cd *cluster.ClusterData, dbUID string) dbStatus {
 	switch convergenceState {
 	// if convergence failed then mark as failed
 	case ConvergenceFailed:
+		log.Infow("convergence state", "convergence", "failed", "database", db.UID, "keeper ", db.Spec.KeeperUID)
+
 		return dbStatusFailed
 	// if converging then it's not failed (it can also be not healthy since it could be resyncing)
 	case Converging:
+		log.Infow("convergence state", "convergence", "converging", "database", db.UID, "keeper ", db.Spec.KeeperUID)
 		return dbStatusConverging
 	}
 	// if converged but not healthy mark as failed
+	log.Infow("db health", "healthy", db.Status.Healthy, "database", db.UID, "Keeper ", db.Spec.KeeperUID)
+
 	if !db.Status.Healthy {
 		return dbStatusFailed
 	}
@@ -650,6 +656,8 @@ func (s *Sentinel) dbStatus(cd *cluster.ClusterData, dbUID string) dbStatus {
 	// master if the elected standby db cluster doesn't have all the wals)
 
 	// db is good
+	log.Infow("current state", "database", db.UID, "status", "good", "keeper ", db.Spec.KeeperUID)
+
 	return dbStatusGood
 }
 
@@ -964,21 +972,28 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 	case cluster.ClusterPhaseNormal:
 		// Remove old keepers
 		keepersToRemove := []*cluster.Keeper{}
+		dbsToRemove := []*cluster.DB{}
 		for _, k := range newcd.Keepers {
 			// get db associated to the keeper
 			db := cd.FindDB(k)
-			if db != nil {
-				log.Infow("removing a keeper with associated db", "db", db.UID, "keeper", k.UID)
-				// skip keepers with an assigned db
-				// continue
-			}
+			// if db != nil {
+			// 	// skip keepers with an assigned db
+			// 	continue
+			// }
 			if time.Now().After(k.Status.LastHealthyTime.Add(cd.Cluster.DefSpec().DeadKeeperRemovalInterval.Duration)) {
 				log.Infow("removing old dead keeper", "keeper", k.UID)
 				keepersToRemove = append(keepersToRemove, k)
+				//remove db associated to keeper
+				if db != nil {
+					dbsToRemove = append(dbsToRemove, db)
+				}
 			}
 		}
 		for _, k := range keepersToRemove {
 			delete(newcd.Keepers, k.UID)
+		}
+		for _, db := range dbsToRemove {
+			delete(newcd.DBs, db.UID)
 		}
 
 		// Calculate current master status
@@ -1444,6 +1459,32 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 
 				// Remove dbs in excess if we have a good number >= MaxStandbysPerSender
 				// We don't remove failed db until the number of good db is >= MaxStandbysPerSender since they can come back
+				// Delete db if keeper is bad news bears.
+
+				// log.Infow("Evaluating standby nodes")
+
+				// for _, db := range newcd.DBs {
+
+				// 	// Don't remove standbys marked as synchronous standbys
+				// 	if util.StringInSlice(masterDB.Spec.SynchronousStandbys, db.UID) {
+				// 		log.Infow("I'm a sync standby. skipping")
+				// 		continue
+				// 	}
+
+				// 	keeper := newcd.Keepers[db.Spec.KeeperUID]
+
+				// 	if keeper == nil {
+				// 		log.Infow("No keeper tied to db: ", db.UID)
+				// 		continue
+				// 	}
+
+				// 	if time.Now().After(keeper.Status.LastHealthyTime.Add(cd.Cluster.DefSpec().DeadKeeperRemovalInterval.Duration)) {
+				// 		log.Infow("Removing db with bad keeper", "db", db.UID)
+				// 		delete(newcd.DBs, db.UID)
+				// 	}
+
+				// }
+
 				if uint16(goodStandbysCount) >= *clusterSpec.MaxStandbysPerSender {
 					toRemove := []*cluster.DB{}
 					// Remove all non good standbys
@@ -1478,7 +1519,6 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 					for _, db := range toRemove {
 						delete(newcd.DBs, db.UID)
 					}
-
 				} else {
 					// Add new dbs to substitute failed dbs, if there're available keepers.
 
