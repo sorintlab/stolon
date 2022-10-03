@@ -974,7 +974,7 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 
 				// get db associated to the keeper
 				db := cd.FindDB(k)
-				if db != nil {
+				if db != nil && s.dbType(newcd, db.UID) != dbTypeMaster {
 					dbsToRemove = append(dbsToRemove, db)
 				}
 			}
