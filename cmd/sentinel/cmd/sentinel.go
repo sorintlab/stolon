@@ -962,22 +962,28 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 		}
 
 	case cluster.ClusterPhaseNormal:
-		// Remove old keepers
+		// Remove keepers/databases that have been in a failing state for longer than the
+		// specified dead keeper removal intervalj.
 		keepersToRemove := []*cluster.Keeper{}
+		dbsToRemove := []*cluster.DB{}
+
 		for _, k := range newcd.Keepers {
-			// get db associated to the keeper
-			db := cd.FindDB(k)
-			if db != nil {
-				// skip keepers with an assigned db
-				continue
-			}
 			if time.Now().After(k.Status.LastHealthyTime.Add(cd.Cluster.DefSpec().DeadKeeperRemovalInterval.Duration)) {
 				log.Infow("removing old dead keeper", "keeper", k.UID)
 				keepersToRemove = append(keepersToRemove, k)
+
+				// get db associated to the keeper
+				db := cd.FindDB(k)
+				if db != nil {
+					dbsToRemove = append(dbsToRemove, db)
+				}
 			}
 		}
 		for _, k := range keepersToRemove {
 			delete(newcd.Keepers, k.UID)
+		}
+		for _, db := range dbsToRemove {
+			delete(newcd.DBs, db.UID)
 		}
 
 		// Calculate current master status
