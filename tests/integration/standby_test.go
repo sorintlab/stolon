@@ -22,7 +22,7 @@ import (
 	"testing"
 	"time"
 
-	uuid "github.com/satori/go.uuid"
+	"github.com/gofrs/uuid"
 	"github.com/sorintlab/stolon/internal/cluster"
 	"github.com/sorintlab/stolon/internal/common"
 	"github.com/sorintlab/stolon/internal/store"
@@ -38,7 +38,7 @@ func TestInitStandbyCluster(t *testing.T) {
 	defer os.RemoveAll(dir)
 
 	// Setup a remote stolon cluster (with just one keeper and one sentinel)
-	primaryClusterName := uuid.NewV4().String()
+	primaryClusterName := uuid.Must(uuid.NewV4()).String()
 
 	ptstore := setupStore(t, dir)
 	defer ptstore.Stop()
@@ -87,7 +87,7 @@ func TestInitStandbyCluster(t *testing.T) {
 	}
 
 	// setup a standby cluster
-	clusterName := uuid.NewV4().String()
+	clusterName := uuid.Must(uuid.NewV4()).String()
 
 	tstore := setupStore(t, dir)
 	defer tstore.Stop()
@@ -171,7 +171,7 @@ func TestPromoteStandbyCluster(t *testing.T) {
 	defer os.RemoveAll(dir)
 
 	// Setup a remote stolon cluster (with just one keeper and one sentinel)
-	primaryClusterName := uuid.NewV4().String()
+	primaryClusterName := uuid.Must(uuid.NewV4()).String()
 
 	ptstore := setupStore(t, dir)
 	defer ptstore.Stop()
@@ -220,7 +220,7 @@ func TestPromoteStandbyCluster(t *testing.T) {
 	}
 
 	// setup a standby cluster
-	clusterName := uuid.NewV4().String()
+	clusterName := uuid.Must(uuid.NewV4()).String()
 
 	tstore := setupStore(t, dir)
 	defer tstore.Stop()
@@ -320,7 +320,7 @@ func TestPromoteStandbyClusterArchiveRecovery(t *testing.T) {
 	}
 
 	// Setup a remote stolon cluster (with just one keeper and one sentinel)
-	primaryClusterName := uuid.NewV4().String()
+	primaryClusterName := uuid.Must(uuid.NewV4()).String()
 
 	ptstore := setupStore(t, dir)
 	defer ptstore.Stop()
@@ -373,7 +373,7 @@ func TestPromoteStandbyClusterArchiveRecovery(t *testing.T) {
 	}
 
 	// setup a standby cluster
-	clusterName := uuid.NewV4().String()
+	clusterName := uuid.Must(uuid.NewV4()).String()
 
 	tstore := setupStore(t, dir)
 	defer tstore.Stop()
