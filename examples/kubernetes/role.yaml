@@ -6,7 +6,7 @@
 # sentinel/stolonctl: list components pods
 # sentinel/stolonctl: get components pods annotations
 
-apiVersion: rbac.authorization.k8s.io/v1beta1
+apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: stolon
