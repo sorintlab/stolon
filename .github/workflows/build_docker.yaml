@@ -1,0 +1,22 @@
+name: 'Build image'
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: 'tag of the build image'
+        type: string
+        required: true
+      pg_version:
+        description: 'postgres version included in the image (the postgres:PG_VERSION is used as base image)'
+        type: string
+        required: true
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    env:
+      PGVERSION: ${{ vars.pg_version }}
+      TAG: stolon:${{ vars.tag }}
+    steps:
+    - name: make docker
+      run: make docker

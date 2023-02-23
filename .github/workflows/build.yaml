@@ -1,0 +1,28 @@
+name: Build images
+
+on: ["push", "pull_request"]
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        pg_version: ["15", "14", "12", "11", "10"]
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+    - name: make docker
+      env:
+        PGVERSION: ${{ matrix.pg_version }}
+        TAG: stolon:${{ matrix.pg_version }}
+      run: make docker
+    - name: publish
+      if: |
+         false
+         || github.ref == 'refs/heads/main'
+         || startsWith( github.ref, 'refs/tags/')
+      run: |
+        docker login "${{ vars.DOCKER_REGISTRY }}" -u "${{ vars.DOCKER_REGISTRY_USER }}" -p "${{ secrets.DOCKER_REGISTRY_TOKEN }}"
+        IMG_NAME="${{ vars.DOCKER_REGISTRY }}:${GITHUB_REF_NAME}-${{ matrix.pg_version }}"
+        docker tag stolon:${{ matrix.pg_version }} "${IMG_NAME}"
+        docker push ${{ vars.DOCKER_REGISTRY }}:${{ matrix.pg_version }} "${IMG_NAME}"
