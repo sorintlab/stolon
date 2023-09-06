@@ -17,13 +17,12 @@ make PGVERSION=11 TAG=stolon:master-pg11 docker
 
 pushd examples/kubernetes
 
-# TODO(sgotti) bsycorp kind:v1.19.4 doesn't correctly parse kubectl output and will never report kubernetes in ready state
-#echo -n "Waiting for kubernetes to be ready"
-#until curl -s --fail http://127.0.0.1:10080/kubernetes-ready; do
-#    sleep 1;
-#    echo -n "."
-#done
-#echo " Ready"
+echo -n "Waiting for kubernetes to be ready"
+until curl -s --fail http://127.0.0.1:10080/kubernetes-ready; do
+   sleep 1;
+   echo -n "."
+done
+echo " Ready"
 
 sed -i 's#sorintlab/stolon:master-pg10#stolon:master-pg11#' *.yaml
 
