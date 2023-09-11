@@ -71,6 +71,8 @@ type Config struct {
 	KeyFile       string
 	CAFile        string
 	SkipTLSVerify bool
+	Username      string
+	Password      string
 }
 
 // KVPair represents {Key, Value, Lastindex} tuple
@@ -174,6 +176,8 @@ func NewKVStore(cfg Config) (KVStore, error) {
 		config := &libkvstore.Config{
 			TLS:               tlsConfig,
 			ConnectionTimeout: cfg.Timeout,
+			Username:          cfg.Username,
+			Password:          cfg.Password,
 		}
 
 		store, err := libkv.NewStore(kvBackend, addrs, config)
@@ -188,6 +192,8 @@ func NewKVStore(cfg Config) (KVStore, error) {
 			DialTimeout:          20 * time.Second,
 			DialKeepAliveTime:    1 * time.Second,
 			DialKeepAliveTimeout: cfg.Timeout,
+			Username:             cfg.Username,
+			Password:             cfg.Password,
 		}
 
 		c, err := etcdclientv3.New(config)

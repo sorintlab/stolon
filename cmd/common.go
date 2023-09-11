@@ -52,6 +52,8 @@ type CommonConfig struct {
 	KubeContext          string
 	KubeNamespace        string
 	StoreTimeout         time.Duration
+	StoreUsername        string
+	StorePassword        string
 }
 
 func AddCommonFlags(cmd *cobra.Command, cfg *CommonConfig) {
@@ -64,6 +66,8 @@ func AddCommonFlags(cmd *cobra.Command, cfg *CommonConfig) {
 	cmd.PersistentFlags().StringVar(&cfg.StoreKeyFile, "store-key", "", "private key file for client identification to the store")
 	cmd.PersistentFlags().BoolVar(&cfg.StoreSkipTlsVerify, "store-skip-tls-verify", false, "skip store certificate verification (insecure!!!)")
 	cmd.PersistentFlags().StringVar(&cfg.StoreCAFile, "store-ca-file", "", "verify certificates of HTTPS-enabled store servers using this CA bundle")
+	cmd.PersistentFlags().StringVar(&cfg.StoreUsername, "store-username", "", "Username for client identification to the store")
+	cmd.PersistentFlags().StringVar(&cfg.StorePassword, "store-password", "", "Password for client identification to the store")
 	cmd.PersistentFlags().StringVar(&cfg.MetricsListenAddress, "metrics-listen-address", "", "metrics listen address i.e \"0.0.0.0:8080\" (disabled by default)")
 	cmd.PersistentFlags().StringVar(&cfg.KubeResourceKind, "kube-resource-kind", "", `the k8s resource kind to be used to store stolon clusterdata and do sentinel leader election (only "configmap" is currently supported)`)
 
@@ -106,14 +110,39 @@ func CheckCommonConfig(cfg *CommonConfig) error {
 		return fmt.Errorf("store backend type required")
 	}
 
+	checkCredentials := func() error {
+		if cfg.StoreUsername == "" && cfg.StorePassword != "" {
+			return fmt.Errorf("missing store username")
+		}
+		if cfg.StoreUsername != "" && cfg.StorePassword == "" {
+			return fmt.Errorf("missing store password")
+		}
+		return nil
+	}
+
 	switch cfg.StoreBackend {
 	case "consul":
+		if err := checkCredentials(); err != nil {
+			return err
+		}
 	case "etcd":
 		// etcd is old alias for etcdv2
 		cfg.StoreBackend = "etcdv2"
+		if err := checkCredentials(); err != nil {
+			return err
+		}
 	case "etcdv2":
+		if err := checkCredentials(); err != nil {
+			return err
+		}
 	case "etcdv3":
+		if err := checkCredentials(); err != nil {
+			return err
+		}
 	case "kubernetes":
+		if cfg.StoreUsername != "" || cfg.StorePassword != "" {
+			return fmt.Errorf("kubernetes store does not support username and password")
+		}
 		if cfg.KubeResourceKind == "" {
 			return fmt.Errorf("unspecified kubernetes resource kind")
 		}
@@ -151,6 +180,8 @@ func NewKVStore(cfg *CommonConfig) (store.KVStore, error) {
 		KeyFile:       cfg.StoreKeyFile,
 		CAFile:        cfg.StoreCAFile,
 		SkipTLSVerify: cfg.StoreSkipTlsVerify,
+		Username:      cfg.StoreUsername,
+		Password:      cfg.StorePassword,
 	})
 }
 

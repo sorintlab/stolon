@@ -30,6 +30,8 @@ Manage current cluster data
       --store-prefix string             the store base prefix (default "stolon/cluster")
       --store-skip-tls-verify           skip store certificate verification (insecure!!!)
       --store-timeout duration          store request timeout (default 5s)
+      --store-username string           username for client identification to the store
+      --store-password string           password for client identification to the store
 ```
 
 ### SEE ALSO
