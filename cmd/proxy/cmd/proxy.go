@@ -148,6 +148,8 @@ func (c *ClusterChecker) startPollonProxy() error {
 		c.endPollonProxyCh <- c.pp.Start()
 	}()
 
+	proxyHealthGauge.Set(1)
+	proxyListenerStartedSeconds.SetToCurrentTime()
 	return nil
 }
 
@@ -160,6 +162,7 @@ func (c *ClusterChecker) stopPollonProxy() {
 		c.pp = nil
 		c.listener.Close()
 		c.listener = nil
+		proxyHealthGauge.Set(0)
 	}
 }
 
@@ -190,6 +193,7 @@ func (c *ClusterChecker) SetProxyInfo(e store.Store, generation int64, proxyTime
 func (c *ClusterChecker) Check() error {
 	cd, _, err := c.e.GetClusterData(context.TODO())
 	if err != nil {
+		getClusterInfoErrors.Inc()
 		return fmt.Errorf("cannot get cluster data: %v", err)
 	}
 
@@ -206,12 +210,19 @@ func (c *ClusterChecker) Check() error {
 	}
 	if cd.FormatVersion != cluster.CurrentCDFormatVersion {
 		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
+		getClusterInfoErrors.Inc()
 		return fmt.Errorf("unsupported clusterdata format version: %d", cd.FormatVersion)
 	}
 	if err = cd.Cluster.Spec.Validate(); err != nil {
 		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
+		getClusterInfoErrors.Inc()
 		return fmt.Errorf("clusterdata validation failed: %v", err)
 	}
+
+	// Mark that the clusterdata we've received is valid. We'll use this metric to detect
+	// when our store is failing to serve a valid clusterdata, so it's important we only
+	// update the metric here.
+	clusterdataLastValidUpdateSeconds.SetToCurrentTime()
 
 	cdProxyCheckInterval := cd.Cluster.DefSpec().ProxyCheckInterval.Duration
 	cdProxyTimeout := cd.Cluster.DefSpec().ProxyTimeout.Duration
@@ -231,6 +242,7 @@ func (c *ClusterChecker) Check() error {
 		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
 		// ignore errors on setting proxy info
 		if err = c.SetProxyInfo(c.e, cluster.NoGeneration, proxyTimeout); err != nil {
+			updateProxyInfoErrors.Inc()
 			log.Errorw("failed to update proxyInfo", zap.Error(err))
 		} else {
 			// update proxyCheckinterval and proxyTimeout only if we successfully updated our proxy info
@@ -248,6 +260,7 @@ func (c *ClusterChecker) Check() error {
 		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
 		// ignore errors on setting proxy info
 		if err = c.SetProxyInfo(c.e, proxy.Generation, proxyTimeout); err != nil {
+			updateProxyInfoErrors.Inc()
 			log.Errorw("failed to update proxyInfo", zap.Error(err))
 		} else {
 			// update proxyCheckinterval and proxyTimeout only if we successfully updated our proxy info
@@ -271,6 +284,7 @@ func (c *ClusterChecker) Check() error {
 		// cannot ignore this error since the sentinel won't know that we exist
 		// and are sending connections to a master so, when electing a new
 		// master, it'll not wait for us to close connections to the old one.
+		updateProxyInfoErrors.Inc()
 		return fmt.Errorf("failed to update proxyInfo: %v", err)
 	} else {
 		// update proxyCheckinterval and proxyTimeout only if we successfully updated our proxy info
