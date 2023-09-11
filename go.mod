@@ -6,10 +6,10 @@ require (
 	github.com/davecgh/go-spew v1.1.1
 	github.com/docker/leadership v0.1.0
 	github.com/docker/libkv v0.2.1
-	github.com/evanphx/json-patch v4.5.0+incompatible
+	github.com/evanphx/json-patch v4.9.0+incompatible
 	github.com/gofrs/uuid v4.2.0+incompatible
-	github.com/golang/mock v1.4.0
-	github.com/google/go-cmp v0.4.0
+	github.com/golang/mock v1.4.1
+	github.com/google/go-cmp v0.5.2
 	github.com/hashicorp/consul/api v1.4.0
 	github.com/lib/pq v1.3.0
 	github.com/mattn/go-isatty v0.0.12
@@ -21,9 +21,9 @@ require (
 	github.com/spf13/pflag v1.0.5
 	go.etcd.io/etcd v0.0.0-20201125193152-8a03d2e9614b
 	go.uber.org/zap v1.13.0
-	k8s.io/api v0.17.3
-	k8s.io/apimachinery v0.17.3
-	k8s.io/client-go v0.17.3
+	k8s.io/api v0.20.0
+	k8s.io/apimachinery v0.20.0
+	k8s.io/client-go v0.20.0
 )
 
 go 1.12
