@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -50,6 +51,7 @@ type config struct {
 
 	listenAddress string
 	port          string
+	exitOnStoreError bool
 	stopListening bool
 	debug         bool
 
@@ -65,6 +67,7 @@ func init() {
 
 	CmdProxy.PersistentFlags().StringVar(&cfg.listenAddress, "listen-address", "127.0.0.1", "proxy listening address")
 	CmdProxy.PersistentFlags().StringVar(&cfg.port, "port", "5432", "proxy listening port")
+	CmdProxy.PersistentFlags().BoolVar(&cfg.exitOnStoreError, "exit-on-store-error", false, "exit on store error; can be used to work around deadlock, see https://github.com/sorintlab/stolon/issues/888")
 	CmdProxy.PersistentFlags().BoolVar(&cfg.stopListening, "stop-listening", true, "stop listening on store error")
 	CmdProxy.PersistentFlags().BoolVar(&cfg.debug, "debug", false, "enable debug logging")
 	CmdProxy.PersistentFlags().IntVar(&cfg.keepAliveIdle, "tcp-keepalive-idle", 0, "set tcp keepalive idle (seconds)")
@@ -81,6 +84,7 @@ type ClusterChecker struct {
 	listenAddress string
 	port          string
 
+	exitOnStoreError bool
 	stopListening bool
 
 	listener         *net.TCPListener
@@ -105,6 +109,7 @@ func NewClusterChecker(uid string, cfg config) (*ClusterChecker, error) {
 		uid:              uid,
 		listenAddress:    cfg.listenAddress,
 		port:             cfg.port,
+		exitOnStoreError: cfg.exitOnStoreError,
 		stopListening:    cfg.stopListening,
 		e:                e,
 		endPollonProxyCh: make(chan error),
@@ -306,7 +311,10 @@ func (c *ClusterChecker) TimeoutChecker(checkOkCh chan struct{}) {
 			// (for example to avoid load balancers forward connections to us
 			// since we aren't ready or in a bad state)
 			c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
-			if c.stopListening {
+			if c.exitOnStoreError {
+				log.Fatal("exiting due to store error")
+				os.Exit(1)
+			} else if c.stopListening {
 				c.stopPollonProxy()
 			}
 
@@ -330,6 +338,10 @@ func (c *ClusterChecker) Start() error {
 
 	// TODO(sgotti) TimeoutCecker is needed to forcefully close connection also
 	// if the Check method is blocked somewhere.
+	// Currently, if the Check is blocked somehwere, stolon-proxy will
+	// deadlock forever (see https://github.com/sorintlab/stolon/issues/888).
+	// `exitOnStoreError` is a workaround for that, which makes stolon-proxy
+	// exit instead of deadlock, so that whatever started it may restart it.
 	// The idomatic/cleaner solution will be to use a context instead of this
 	// TimeoutChecker but we have to change the libkv stores to support contexts.
 	go c.TimeoutChecker(checkOkCh)
