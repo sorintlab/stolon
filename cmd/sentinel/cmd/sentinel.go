@@ -1010,10 +1010,11 @@ func (s *Sentinel) updateCluster(cd *cluster.ClusterData, pis cluster.ProxiesInf
 			} else {
 				// if synchronous replication is enabled, only choose new master in the synchronous replication standbys.
 				var bestNewMasterDB *cluster.DB
-				if curMasterDB.Spec.SynchronousReplication {
+				if *cd.Cluster.Spec.SynchronousReplication {
 					commonSyncStandbys := util.CommonElements(curMasterDB.Status.SynchronousStandbys, curMasterDB.Spec.SynchronousStandbys)
 					if len(commonSyncStandbys) == 0 {
 						log.Warnw("cannot choose synchronous standby since there are no common elements between the latest master reported synchronous standbys and the db spec ones", "reported", curMasterDB.Status.SynchronousStandbys, "spec", curMasterDB.Spec.SynchronousStandbys)
+						bestNewMasterDB = bestNewMasters[0]
 					} else {
 						for _, nm := range bestNewMasters {
 							if util.StringInSlice(commonSyncStandbys, nm.UID) {
