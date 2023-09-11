@@ -59,6 +59,13 @@ var (
 
 var log = slog.S()
 
+type PgIdent map[string][]UserMaps
+
+type UserMaps struct {
+	SystemUsername string `json:"systemUsername"`
+	DBUsername     string `json:"databaseUsername"`
+}
+
 type PGManager interface {
 	GetTimelinesHistory(timeline uint64) ([]*TimelineHistory, error)
 }
@@ -69,6 +76,8 @@ type Manager struct {
 	parameters         common.Parameters
 	recoveryOptions    *RecoveryOptions
 	hba                []string
+	ident              PgIdent
+	currentIdent       PgIdent
 	curParameters      common.Parameters
 	curRecoveryOptions *RecoveryOptions
 	curHba             []string
@@ -178,8 +187,16 @@ func (p *Manager) SetHba(hba []string) {
 	p.hba = hba
 }
 
+func (p *Manager) SetIdent(ident PgIdent) {
+	p.ident = ident
+}
+
 func (p *Manager) CurHba() []string {
 	return p.curHba
+}
+
+func (p *Manager) CurIdent() PgIdent {
+	return p.currentIdent
 }
 
 func (p *Manager) UpdateCurParameters() {
@@ -200,6 +217,14 @@ func (p *Manager) UpdateCurHba() {
 		panic(err)
 	}
 	p.curHba = n.([]string)
+}
+
+func (p *Manager) UpdateCurIdent() {
+	n, err := copystructure.Copy(p.ident)
+	if err != nil {
+		panic(err)
+	}
+	p.currentIdent = n.(PgIdent)
 }
 
 func (p *Manager) Init(initConfig *InitConfig) error {
@@ -374,6 +399,7 @@ func (p *Manager) start(args ...string) error {
 	p.UpdateCurParameters()
 	p.UpdateCurRecoveryOptions()
 	p.UpdateCurHba()
+	p.UpdateCurIdent()
 
 	return nil
 }
@@ -438,6 +464,7 @@ func (p *Manager) Reload() error {
 	p.UpdateCurParameters()
 	p.UpdateCurRecoveryOptions()
 	p.UpdateCurHba()
+	p.UpdateCurIdent()
 
 	return nil
 }
@@ -767,6 +794,9 @@ func (p *Manager) writeConfs(useTmpPostgresConf bool) error {
 			return fmt.Errorf("error writing %s file: %v", postgresRecoverySignal, err)
 		}
 	}
+	if err := p.writePgIdent(); err != nil {
+		return fmt.Errorf("error writing pg_ident.conf file: %v", err)
+	}
 	return nil
 }
 
@@ -870,6 +900,25 @@ func (p *Manager) writePgHba() error {
 				for _, e := range p.hba {
 					if _, err := f.Write([]byte(e + "\n")); err != nil {
 						return err
+					}
+				}
+			}
+			return nil
+		})
+}
+
+func (p *Manager) writePgIdent() error {
+	return common.WriteFileAtomicFunc(filepath.Join(p.dataDir, "pg_ident.conf"), 0600,
+		func(f io.Writer) error {
+			if p.ident != nil && len(p.ident) > 0 {
+				if _, err := f.Write([]byte("# MAPNAME\tSYSTEM-USERNAME\tPG-USERNAME" + "\n")); err != nil {
+					return err
+				}
+				for key, value := range p.ident {
+					for _, v := range value {
+						if _, err := f.Write([]byte(fmt.Sprintf("%s\t%s\t%s", key, v.SystemUsername, v.DBUsername) + "\n")); err != nil {
+							return err
+						}
 					}
 				}
 			}
