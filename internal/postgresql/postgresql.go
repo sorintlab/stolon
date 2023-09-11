@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -66,6 +67,7 @@ type PGManager interface {
 type Manager struct {
 	pgBinPath          string
 	dataDir            string
+	walDir             string
 	parameters         common.Parameters
 	recoveryOptions    *RecoveryOptions
 	hba                []string
@@ -133,10 +135,11 @@ func SetLogger(l *zap.SugaredLogger) {
 	log = l
 }
 
-func NewManager(pgBinPath string, dataDir string, localConnParams, replConnParams ConnParams, suAuthMethod, suUsername, suPassword, replAuthMethod, replUsername, replPassword string, requestTimeout time.Duration) *Manager {
+func NewManager(pgBinPath string, dataDir, walDir string, localConnParams, replConnParams ConnParams, suAuthMethod, suUsername, suPassword, replAuthMethod, replUsername, replPassword string, requestTimeout time.Duration) *Manager {
 	return &Manager{
 		pgBinPath:          pgBinPath,
 		dataDir:            filepath.Join(dataDir, "postgres"),
+		walDir:             walDir,
 		parameters:         make(common.Parameters),
 		recoveryOptions:    NewRecoveryOptions(),
 		curParameters:      make(common.Parameters),
@@ -222,6 +225,13 @@ func (p *Manager) Init(initConfig *InitConfig) error {
 	}
 	log.Debugw("execing cmd", "cmd", cmd)
 
+	// initdb supports configuring a separate wal directory via symlinks. Normally this
+	// parameter might be part of the initConfig, but it will also be required whenever we
+	// fall-back to a pg_basebackup during a re-sync, which is why it's a Manager field.
+	if p.walDir != "" {
+		cmd.Args = append(cmd.Args, "--waldir", p.walDir)
+	}
+
 	if initConfig.Locale != "" {
 		cmd.Args = append(cmd.Args, "--locale", initConfig.Locale)
 	}
@@ -240,7 +250,9 @@ func (p *Manager) Init(initConfig *InitConfig) error {
 	}
 	// remove the dataDir, so we don't end with an half initialized database
 	if err != nil {
-		os.RemoveAll(p.dataDir)
+		if cleanupErr := p.RemoveAll(); cleanupErr != nil {
+			log.Errorf("failed to cleanup database: %v", cleanupErr)
+		}
 		return err
 	}
 	return nil
@@ -250,7 +262,7 @@ func (p *Manager) Restore(command string) error {
 	var err error
 	var cmd *exec.Cmd
 
-	command = expand(command, p.dataDir)
+	command = expandRecoveryCommand(command, p.dataDir, p.walDir)
 
 	if err = os.MkdirAll(p.dataDir, 0700); err != nil {
 		err = fmt.Errorf("cannot create data dir: %v", err)
@@ -269,7 +281,9 @@ func (p *Manager) Restore(command string) error {
 	// On every error remove the dataDir, so we don't end with an half initialized database
 out:
 	if err != nil {
-		os.RemoveAll(p.dataDir)
+		if cleanupErr := p.RemoveAll(); cleanupErr != nil {
+			log.Errorf("failed to cleanup database: %v", cleanupErr)
+		}
 		return err
 	}
 	return nil
@@ -286,8 +300,82 @@ func (p *Manager) StartTmpMerged() error {
 	return p.start("-c", fmt.Sprintf("config_file=%s", tmpPostgresConfPath))
 }
 
+func (p *Manager) moveWal() (err error) {
+	var curPath string
+	var desiredPath string
+	var tmpPath string
+	symlinkPath := filepath.Join(p.dataDir, "pg_wal")
+	if curPath, err = filepath.EvalSymlinks(symlinkPath); err != nil {
+		log.Errorf("could not evaluate symlink %s: %e", symlinkPath, err)
+		return err
+	}
+	if p.walDir == "" {
+		desiredPath = symlinkPath
+		tmpPath = filepath.Join(p.dataDir, "pg_wal_new")
+	} else {
+		desiredPath = p.walDir
+		tmpPath = p.walDir
+	}
+	if curPath == desiredPath {
+		return nil
+	}
+	if p.walDir == "" {
+		log.Infof("moving WAL from %s to %s first and then to %s", curPath, tmpPath, desiredPath)
+	} else {
+		log.Infof("moving WAL from %s to new location %s", curPath, desiredPath)
+	}
+	// We use tmpPath here first and (if needed) mv tmpPath to desiredPath when all is copied.
+	// This allows stolon-keeper to re-read symlink dest and continue should stolon-keeper be restarted while copying.
+	if err = moveDirRecursive(curPath, tmpPath); err != nil {
+		return err
+	}
+
+	var symlinkStat fs.FileInfo
+	if symlinkStat, err = os.Lstat(symlinkPath); errors.Is(err, os.ErrNotExist) {
+		// File or folder already removed
+	} else if err != nil {
+		log.Errorf("could not get info on current pg_wal folder/symlink %s: %e", symlinkPath, err)
+		return err
+	} else if symlinkStat.Mode()&os.ModeSymlink != 0 {
+		if err = os.Remove(symlinkPath); err != nil {
+			log.Errorf("could not remove current pg_wal symlink %s: %e", symlinkPath, err)
+			return err
+		}
+	} else if symlinkStat.IsDir() {
+		if err = syscall.Rmdir(symlinkPath); err != nil {
+			log.Errorf("could not remove current folder %s: %e", symlinkPath, err)
+			return err
+		}
+	} else {
+		err = fmt.Errorf("location %s is no symlink and no dir, so please check and resolve by hand", symlinkPath)
+		log.Error(err)
+		return err
+	}
+	if p.walDir == "" {
+		// So we were moving WAL files back into PGDATA. Let's rename the tmpDir now holding all WAL files and use that
+		// as PGDATA/pg_wal
+		if err = os.Rename(tmpPath, desiredPath); err != nil {
+			log.Errorf("cannot move %s to %s: %e", tmpPath, desiredPath, err)
+			return err
+		}
+	} else {
+		log.Infof("symlinking %s to %s", symlinkPath, desiredPath)
+		if err = os.Symlink(desiredPath, symlinkPath); err != nil {
+			// We were copying WAL files from PGDATA (or another location) to a location outside of PGDATA and
+			// pointing the symlink in the right direction failed.
+			log.Errorf("could not create symlink %s to %s: %e", symlinkPath, desiredPath, err)
+			return err
+		}
+	}
+	log.Infof("moving pg_wal from %s to %s is succesful", curPath, desiredPath)
+	return nil
+}
+
 func (p *Manager) Start() error {
 	if err := p.writeConfs(false); err != nil {
+		return err
+	}
+	if err := p.moveWal(); err != nil {
 		return err
 	}
 	return p.start()
@@ -967,6 +1055,9 @@ func (p *Manager) SyncFromFollowed(followedConnParams ConnParams, replSlot strin
 	if replSlot != "" {
 		args = append(args, "--slot", replSlot)
 	}
+	if p.walDir != "" {
+		args = append(args, "--waldir", p.walDir)
+	}
 	cmd := exec.Command(name, args...)
 
 	cmd.Env = append(os.Environ(), fmt.Sprintf("PGPASSFILE=%s", pgpass.Name()))
@@ -1000,7 +1091,7 @@ func (p *Manager) SyncFromFollowed(followedConnParams ConnParams, replSlot strin
 	return nil
 }
 
-func (p *Manager) RemoveAll() error {
+func (p *Manager) RemoveAllIfInitialized() error {
 	initialized, err := p.IsInitialized()
 	if err != nil {
 		return fmt.Errorf("failed to retrieve instance state: %v", err)
@@ -1016,6 +1107,17 @@ func (p *Manager) RemoveAll() error {
 	if started {
 		return fmt.Errorf("cannot remove postregsql database. Instance is active")
 	}
+
+	return p.RemoveAll()
+}
+
+// RemoveAll entirely cleans up the data directory, including any wal directory if that
+// exists outside of the data directory.
+func (p *Manager) RemoveAll() error {
+	if p.walDir != "" {
+		os.RemoveAll(p.walDir)
+	}
+
 	return os.RemoveAll(p.dataDir)
 }
 
