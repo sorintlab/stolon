@@ -56,6 +56,8 @@ type config struct {
 	keepAliveIdle     int
 	keepAliveCount    int
 	keepAliveInterval int
+
+	slaveNode bool
 }
 
 var cfg config
@@ -67,6 +69,7 @@ func init() {
 	CmdProxy.PersistentFlags().StringVar(&cfg.port, "port", "5432", "proxy listening port")
 	CmdProxy.PersistentFlags().BoolVar(&cfg.stopListening, "stop-listening", true, "stop listening on store error")
 	CmdProxy.PersistentFlags().BoolVar(&cfg.debug, "debug", false, "enable debug logging")
+	CmdProxy.PersistentFlags().BoolVar(&cfg.slaveNode, "slave-node-exposure", false, "expose first slave node instead of master")
 	CmdProxy.PersistentFlags().IntVar(&cfg.keepAliveIdle, "tcp-keepalive-idle", 0, "set tcp keepalive idle (seconds)")
 	CmdProxy.PersistentFlags().IntVar(&cfg.keepAliveCount, "tcp-keepalive-count", 0, "set tcp keepalive probe count number")
 	CmdProxy.PersistentFlags().IntVar(&cfg.keepAliveInterval, "tcp-keepalive-interval", 0, "set tcp keepalive interval (seconds)")
@@ -243,6 +246,15 @@ func (c *ClusterChecker) Check() error {
 	}
 
 	db, ok := cd.DBs[proxy.Spec.MasterDBUID]
+	if cfg.slaveNode {
+		ok = false
+		for k, v := range cd.DBs {
+			if k != proxy.Spec.MasterDBUID && v.Status.Healthy {
+				ok = true
+				db = v
+			}
+		}
+	}
 	if !ok {
 		log.Infow("no db object available, closing connections to master", "db", proxy.Spec.MasterDBUID)
 		c.sendPollonConfData(pollon.ConfData{DestAddr: nil})
