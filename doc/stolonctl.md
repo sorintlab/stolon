@@ -24,7 +24,7 @@ STOLONCTL_CLUSTER_NAME
 
 `stolonctl` behaves like [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/) when choosing how to access the kubernetes API server(s): 
 * When run inside a pod it uses the pod service account to connect to the k8s API servers.
-* When run externally it honors the $KUBECONFIG environment variable to connect. It is thus possible to use the default `~/.kube/config` file or an overriden kube-config file path, context and namespace to set the `stolonctl` options `--kubeconfig`, `--kube-context` and `--kube-namespace`.
+* When run externally it honors the $KUBECONFIG environment variable to connect. It is thus possible to use the default `~/.kube/config` file or an overridden kube-config file path, context and namespace to set the `stolonctl` options `--kubeconfig`, `--kube-context` and `--kube-namespace`.
 
 `stolonctl` example for checking the status of a cluster named "kube-stolon" using "kubernetes" as a store backend and "configmap" as the resource kind where the `stolonctl` command is invoked via one of the stolon proxy pods: 
 ```
