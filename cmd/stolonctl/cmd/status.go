@@ -29,6 +29,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const noRole = "no role assigned"
+
 var cmdStatus = &cobra.Command{
 	Use:   "status",
 	Run:   status,
@@ -64,12 +66,13 @@ type ProxyStatus struct {
 }
 
 type KeeperStatus struct {
-	UID                 string `json:"uid"`
-	ListenAddress       string `json:"listen_address"`
-	Healthy             bool   `json:"healthy"`
-	PgHealthy           bool   `json:"pg_healthy"`
-	PgWantedGeneration  int64  `json:"pg_wanted_generation"`
-	PgCurrentGeneration int64  `json:"pg_current_generation"`
+	UID                 string  `json:"uid"`
+	Role                *string `json:"role"`
+	ListenAddress       string  `json:"listen_address"`
+	Healthy             bool    `json:"healthy"`
+	PgHealthy           bool    `json:"pg_healthy"`
+	PgWantedGeneration  int64   `json:"pg_wanted_generation"`
+	PgCurrentGeneration int64   `json:"pg_current_generation"`
 }
 
 type ClusterStatus struct {
@@ -178,15 +181,16 @@ func renderText(status Status, generateErr error) {
 		die("%v", err)
 	}
 	if status.Cluster.MasterDBUID != "" {
+		keeperRoles := getKeeperRoles(status.Cluster.MasterDBUID, cd)
 		stdout("")
 		stdout("===== Keepers/DB tree =====")
 		stdout("")
-		printTree(status.Cluster.MasterDBUID, cd, 0, "", true)
+		printTree(status.Cluster.MasterDBUID, cd, keeperRoles, 0, "", true)
 	}
 	stdout("")
 }
 
-func printTree(dbuid string, cd *cluster.ClusterData, level int, prefix string, tail bool) {
+func printTree(dbuid string, cd *cluster.ClusterData, keeperRoles map[string]string, level int, prefix string, tail bool) {
 	// skip not existing db: specified as a follower but not available in the
 	// cluster spec (this should happen only when doing a stolonctl
 	// removekeeper)
@@ -202,8 +206,10 @@ func printTree(dbuid string, cd *cluster.ClusterData, level int, prefix string, 
 		}
 	}
 	out += cd.DBs[dbuid].Spec.KeeperUID
-	if dbuid == cd.Cluster.Status.Master {
-		out += " (master)"
+	if role, ok := keeperRoles[dbuid]; ok {
+		out += " (" + role + ")"
+	} else {
+		out += " (" + noRole + ")"
 	}
 	stdout(out)
 	db := cd.DBs[dbuid]
@@ -217,15 +223,15 @@ func printTree(dbuid string, cd *cluster.ClusterData, level int, prefix string, 
 		linespace := "│ "
 		if i < c-1 {
 			if tail {
-				printTree(f, cd, level+1, prefix+emptyspace, false)
+				printTree(f, cd, keeperRoles, level+1, prefix+emptyspace, false)
 			} else {
-				printTree(f, cd, level+1, prefix+linespace, false)
+				printTree(f, cd, keeperRoles, level+1, prefix+linespace, false)
 			}
 		} else {
 			if tail {
-				printTree(f, cd, level+1, prefix+emptyspace, true)
+				printTree(f, cd, keeperRoles, level+1, prefix+emptyspace, true)
 			} else {
-				printTree(f, cd, level+1, prefix+linespace, true)
+				printTree(f, cd, keeperRoles, level+1, prefix+linespace, true)
 			}
 		}
 	}
@@ -282,39 +288,6 @@ func generateStatus() (Status, error) {
 		return status, err
 	}
 
-	keepers := make([]KeeperStatus, 0)
-	kssKeys := cd.Keepers.SortedKeys()
-	for _, kuid := range kssKeys {
-		k := cd.Keepers[kuid]
-		db := cd.FindDB(k)
-		dbListenAddress := "(no db assigned)"
-		var (
-			pgHealthy           bool
-			pgCurrentGeneration int64
-			pgWantedGeneration  int64
-		)
-		if db != nil {
-			pgHealthy = db.Status.Healthy
-			pgCurrentGeneration = db.Status.CurrentGeneration
-			pgWantedGeneration = db.Generation
-
-			dbListenAddress = "(unknown)"
-			if db.Status.ListenAddress != "" {
-				dbListenAddress = fmt.Sprintf("%s:%s", db.Status.ListenAddress, db.Status.Port)
-			}
-		}
-		keeper := KeeperStatus{
-			UID:                 kuid,
-			ListenAddress:       dbListenAddress,
-			Healthy:             k.Status.Healthy,
-			PgHealthy:           pgHealthy,
-			PgWantedGeneration:  pgWantedGeneration,
-			PgCurrentGeneration: pgCurrentGeneration,
-		}
-		keepers = append(keepers, keeper)
-	}
-	status.Keepers = keepers
-
 	cluster := ClusterStatus{}
 	if cd.Cluster == nil || cd.DBs == nil {
 		cluster.Available = false
@@ -329,5 +302,106 @@ func generateStatus() (Status, error) {
 	}
 	status.Cluster = cluster
 
+	keepers := make([]KeeperStatus, 0)
+	kssKeys := cd.Keepers.SortedKeys()
+	keeperRoles := getKeeperRoles(status.Cluster.MasterDBUID, cd)
+	for _, kuid := range kssKeys {
+		k := cd.Keepers[kuid]
+		db := cd.FindDB(k)
+		dbListenAddress := "(no db assigned)"
+		role := noRole
+
+		var (
+			pgHealthy           bool
+			pgCurrentGeneration int64
+			pgWantedGeneration  int64
+		)
+
+		if db != nil {
+			pgHealthy = db.Status.Healthy
+			pgCurrentGeneration = db.Status.CurrentGeneration
+			pgWantedGeneration = db.Generation
+
+			dbListenAddress = "(unknown)"
+			if db.Status.ListenAddress != "" {
+				dbListenAddress = fmt.Sprintf("%s:%s", db.Status.ListenAddress, db.Status.Port)
+			}
+			if keeperRole, ok := keeperRoles[db.UID]; ok {
+				role = keeperRole
+			}
+		}
+
+		var rolePtr *string
+		if role != noRole {
+			rolePtr = &role
+		}
+
+		keeper := KeeperStatus{
+			UID:                 kuid,
+			Role:                rolePtr,
+			ListenAddress:       dbListenAddress,
+			Healthy:             k.Status.Healthy,
+			PgHealthy:           pgHealthy,
+			PgWantedGeneration:  pgWantedGeneration,
+			PgCurrentGeneration: pgCurrentGeneration,
+		}
+		keepers = append(keepers, keeper)
+	}
+	status.Keepers = keepers
+
 	return status, nil
+}
+
+func getKeeperRoles(dbuid string, cd *cluster.ClusterData) map[string]string {
+	keeperRoles := make(map[string]string)
+
+	// Avoid panicking if dbuid is empty.
+	if dbuid != "" {
+		var buildRoles func(parentDbuid, dbuid string, cd *cluster.ClusterData, keeperRoles map[string]string) map[string]string
+		buildRoles = func(parentDbuid, dbuid string, cd *cluster.ClusterData, keeperRoles map[string]string) map[string]string {
+			if dbuid == cd.Cluster.Status.Master {
+				keeperRoles[dbuid] = "master"
+			} else if isSynchronousStandby(parentDbuid, dbuid, cd) {
+				keeperRoles[dbuid] = "sync"
+			} else if isExternalSynchronousStandby(parentDbuid, dbuid, cd) {
+				keeperRoles[dbuid] = "external sync"
+			} else {
+				keeperRoles[dbuid] = "async"
+			}
+			db := cd.DBs[dbuid]
+
+			// Only iterate over Followers if there are roles to avoid panicking.
+			if db.Spec.Followers != nil {
+				followers := db.Spec.Followers
+				for _, f := range followers {
+					buildRoles(dbuid, f, cd, keeperRoles)
+				}
+			}
+
+			return keeperRoles
+		}
+
+		keeperRoles = buildRoles("", dbuid, cd, keeperRoles)
+	}
+
+	return keeperRoles
+}
+
+func isSynchronousStandby(parentDbuid, dbuid string, cd *cluster.ClusterData) bool {
+	for _, standbyDbuid := range cd.DBs[parentDbuid].Status.SynchronousStandbys {
+		if dbuid == standbyDbuid {
+			return true
+		}
+	}
+
+	return false
+}
+
+func isExternalSynchronousStandby(parentDbuid, dbuid string, cd *cluster.ClusterData) bool {
+	for _, standbyDbuid := range cd.DBs[parentDbuid].Spec.ExternalSynchronousStandbys {
+		if dbuid == standbyDbuid {
+			return true
+		}
+	}
+	return false
 }
