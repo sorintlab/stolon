@@ -88,6 +88,8 @@ func TestProxyListening(t *testing.T) {
 			Spec: &cluster.ClusterSpec{
 				InitMode:     cluster.ClusterInitModeP(cluster.ClusterInitModeNew),
 				FailInterval: &cluster.Duration{Duration: 10 * time.Second},
+				// user faster check interval for tests
+				ProxyCheckInterval: &cluster.Duration{Duration: 1 * time.Second},
 			},
 			Status: cluster.ClusterStatus{
 				CurrentGeneration: 1,
