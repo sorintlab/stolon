@@ -33,8 +33,9 @@ var cmdInit = &cobra.Command{
 }
 
 type InitOptions struct {
-	file     string
-	forceYes bool
+	file          string
+	forceYes      bool
+	skipIfInitialized bool
 }
 
 var initOpts InitOptions
@@ -42,6 +43,7 @@ var initOpts InitOptions
 func init() {
 	cmdInit.PersistentFlags().StringVarP(&initOpts.file, "file", "f", "", "file contaning the new cluster spec")
 	cmdInit.PersistentFlags().BoolVarP(&initOpts.forceYes, "yes", "y", false, "don't ask for confirmation")
+	cmdInit.PersistentFlags().BoolVarP(&initOpts.skipIfInitialized, "skip-if-initialized", "s", false, "skip if cluster is already initialized")
 
 	CmdStolonCtl.AddCommand(cmdInit)
 }
@@ -85,6 +87,10 @@ func initCluster(cmd *cobra.Command, args []string) {
 		die("cannot get cluster data: %v", err)
 	}
 	if cd != nil {
+		if initOpts.skipIfInitialized {
+			stdout("Exiting as cluster is already initialized")
+			os.Exit(0)
+		}
 		stdout("WARNING: The current cluster data will be removed")
 	}
 	stdout("WARNING: The databases managed by the keepers will be overwritten depending on the provided cluster spec.")
