@@ -22,6 +22,16 @@ spec:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8080"
     spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: component
+                operator: In
+                values:
+                - stolon-keeper
+            topologyKey: "kubernetes.io/hostname"
       terminationGracePeriodSeconds: 10
       containers:
         - name: stolon-keeper

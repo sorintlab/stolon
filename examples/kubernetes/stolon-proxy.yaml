@@ -17,6 +17,16 @@ spec:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8080"
     spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: component
+                operator: In
+                values:
+                - stolon-proxy
+            topologyKey: "kubernetes.io/hostname"
       containers:
         - name: stolon-proxy
           image: sorintlab/stolon:master-pg10
