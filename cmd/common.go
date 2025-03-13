@@ -158,11 +158,7 @@ func NewStore(cfg *CommonConfig) (store.Store, error) {
 	var s store.Store
 
 	switch cfg.StoreBackend {
-	case "consul":
-		fallthrough
-	case "etcdv2":
-		fallthrough
-	case "etcdv3":
+	case "consul", "etcdv2", "etcdv3":
 		storePath := filepath.Join(cfg.StorePrefix, cfg.ClusterName)
 
 		kvstore, err := NewKVStore(cfg)

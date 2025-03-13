@@ -87,7 +87,7 @@ func (info *ServiceInfo) Compare(target ServiceInfo) bool {
 func NewServiceInfo(name string, db *cluster.DB, tags []string, isMaster bool) (*ServiceInfo, error) {
 	port, err := strconv.Atoi(db.Status.Port)
 	if err != nil {
-		return nil, fmt.Errorf(fmt.Sprintf("invalid database port '%s' for %s with uid %s", db.Status.Port, name, db.UID))
+		return nil, fmt.Errorf("invalid database port '%s' for %s with uid %s", db.Status.Port, name, db.UID)
 	}
 	return &ServiceInfo{
 		Name:     name,

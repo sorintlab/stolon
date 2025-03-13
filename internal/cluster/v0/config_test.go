@@ -20,8 +20,6 @@ import (
 	"reflect"
 	"testing"
 	"time"
-
-	"github.com/davecgh/go-spew/spew"
 )
 
 func TestParseConfig(t *testing.T) {
@@ -109,7 +107,7 @@ func TestParseConfig(t *testing.T) {
 				t.Errorf("#%d: got no error, wanted error: %v", i, tt.err)
 			}
 			if !reflect.DeepEqual(cfg, tt.cfg) {
-				t.Errorf(spew.Sprintf("#%d: wrong config: got: %#v, want: %#v", i, cfg, tt.cfg))
+				t.Errorf("#%d: wrong config: got: %#v, want: %#v", i, cfg, tt.cfg)
 			}
 		}
 

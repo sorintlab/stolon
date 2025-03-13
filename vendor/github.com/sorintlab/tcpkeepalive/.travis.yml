@@ -1,0 +1,13 @@
+language: go
+
+go:
+  - 1.9.x
+
+env:
+  - TARGET=amd64
+
+install:
+  -
+
+script:
+  go test -v ./...

@@ -1,0 +1,7 @@
+- [Alexandre Beslic](https://github.com/abronan)
+- [Victor Castell](https://github.com/victorcoder)
+- [Nicolas Mengin](https://github.com/nmengin)
+- [Maciej Winnicki](https://github.com/mthenw)
+- [Ludovic Fernandez](https://github.com/ldez)
+- [Kevin Pollet](https://github.com/kevinpollet)
+- [Tom Moulard](https://github.com/tomMoulard)

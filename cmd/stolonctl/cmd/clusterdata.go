@@ -19,7 +19,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 
 	cmdcommon "github.com/sorintlab/stolon/cmd"
@@ -118,7 +117,7 @@ func clusterData(data []byte) (*cluster.ClusterData, error) {
 }
 
 func writeClusterdata(reader io.Reader, s store.Store) error {
-	data, err := ioutil.ReadAll(reader)
+	data, err := io.ReadAll(reader)
 	if err != nil {
 		return fmt.Errorf("error while reading data: %v", err)
 	}

@@ -14,4 +14,15 @@
 
 package cmd
 
+import (
+	"fmt"
+	"runtime/debug"
+)
+
 var Version = "No version defined at build time"
+
+func init() {
+	info, _ := debug.ReadBuildInfo()
+
+	Version = fmt.Sprintf("%s (%s)", info.Main.Version, info.GoVersion)
+}

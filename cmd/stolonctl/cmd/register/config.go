@@ -58,13 +58,13 @@ func (config *Config) Validate() error {
 // ConsulConfig returns consul.api.ConsulConfig if register endpoint is valid consul url
 // else will return error with appropriate reason
 func (config *Config) ConsulConfig() (*api.Config, error) {
-	url, err := url.Parse(config.Endpoints)
+	c_url, err := url.Parse(config.Endpoints)
 	if err != nil {
 		return nil, err
 	}
 	return &api.Config{
-		Address: url.Host,
-		Scheme:  url.Scheme,
+		Address: c_url.Host,
+		Scheme:  c_url.Scheme,
 		TLSConfig: api.TLSConfig{
 			Address:            config.TLSAddress,
 			CAFile:             config.TLSCAFile,

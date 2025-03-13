@@ -20,7 +20,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -204,7 +203,7 @@ func (p *Manager) UpdateCurHba() {
 
 func (p *Manager) Init(initConfig *InitConfig) error {
 	// ioutil.Tempfile already creates files with 0600 permissions
-	pwfile, err := ioutil.TempFile("", "pwfile")
+	pwfile, err := os.CreateTemp("", "pwfile")
 	if err != nil {
 		return err
 	}
@@ -898,7 +897,7 @@ func (p *Manager) SyncFromFollowedPGRewind(followedConnParams ConnParams, passwo
 	}
 
 	// ioutil.Tempfile already creates files with 0600 permissions
-	pgpass, err := ioutil.TempFile("", "pgpass")
+	pgpass, err := os.CreateTemp("", "pgpass")
 	if err != nil {
 		return err
 	}
@@ -937,7 +936,7 @@ func (p *Manager) SyncFromFollowed(followedConnParams ConnParams, replSlot strin
 	fcp := followedConnParams.Copy()
 
 	// ioutil.Tempfile already creates files with 0600 permissions
-	pgpass, err := ioutil.TempFile("", "pgpass")
+	pgpass, err := os.CreateTemp("", "pgpass")
 	if err != nil {
 		return err
 	}

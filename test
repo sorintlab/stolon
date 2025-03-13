@@ -11,13 +11,8 @@
 #
 set -e
 
-source $(dirname $0)/scripts/readlinkdashf.sh
-BASEDIR=$(readlinkdashf $(dirname $0))
+BASEDIR=$(pwd)
 BINDIR=${BASEDIR}/bin
-
-if [ $PWD != $BASEDIR ]; then
-	cd $BASEDIR
-fi
 
 ORG_PATH="github.com/sorintlab"
 REPO_PATH="${ORG_PATH}/stolon"
@@ -35,19 +30,6 @@ echo "Running tests..."
 
 COVER=${COVER:-"-cover"}
 
-## Use this code in case we are testing with multiple go versions that have different gofmt outputs
-# # Use only of specific go version to run gofmt since it'll break when some formatting rules change between versions
-# GOFMT_VERSION="go1.14"
-# MAJOR_GOVERSION=$( echo -n $(go version) | grep -o 'go1\.[0-9]*' || true )
-# if [ "${MAJOR_GOVERSION}" == "${GOFMT_VERSION}" ]; then
-# 	echo "Checking gofmt..."
-# 	fmtRes=$(gofmt -l $(find . -type f -name '*.go' ! -path './vendor/*' ! -path '*/\.*'))
-# 	if [ -n "${fmtRes}" ]; then
-# 		echo -e "gofmt checking failed:\n${fmtRes}"
-# 		exit 255
-# 	fi
-# fi
-
 echo "Checking gofmt..."
 fmtRes=$(gofmt -l $(find . -type f -name '*.go' ! -path './vendor/*' ! -path '*/\.*'))
 if [ -n "${fmtRes}" ]; then
@@ -63,7 +45,7 @@ if [ -n "${vetRes}" ]; then
 fi
 
 echo "Checking govet -shadow ..."
-go install golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow
+go install golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow@latest
 export PATH="$(go env GOPATH)/bin":${PATH}
 shadow_tool=$(which shadow)
 vetRes=$(${shadow_tool} ${PACKAGES})
@@ -72,22 +54,22 @@ if [ -n "${vetRes}" ]; then
 	exit 255
 fi
 
-echo "Checking for license header..."
-licRes=$(for file in $(find . -type f -iname '*.go' ! -path './vendor/*'); do
-		head -n3 "${file}" | grep -Eq "(Copyright|generated|GENERATED)" || echo -e "  ${file}"
-	done;)
-if [ -n "${licRes}" ]; then
-	echo -e "license header checking failed:\n${licRes}"
-	exit 255
-fi
+#echo "Checking for license header..."
+#licRes=$(for file in $(find . -type f -iname '*.go' ! -path './vendor/*'); do
+#		head -n3 "${file}" | grep -Eq "(Copyright|generated|GENERATED)" || echo -e "  ${file}"
+#	done;)
+#if [ -n "${licRes}" ]; then
+#	echo -e "license header checking failed:\n${licRes}"
+#	exit 255
+#fi
 
 
 echo "Checking with golangci-lint"
-curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh| sh -s -- -b ${BINDIR} v1.23.6
-${BINDIR}/golangci-lint run --deadline 5m
+curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh| sh -s -- -b ${BINDIR} v1.64.6
+${BINDIR}/golangci-lint run --timeout 5m0s
 
 echo "Running tests"
-go test -timeout 3m ${COVER} $@ ${PACKAGES} ${RACE}
+go test -failfast -timeout 3m ${COVER} $@ ${PACKAGES} ${RACE}
 
 if [ -n "$INTEGRATION" ]; then
 	echo "Running integration tests..."

@@ -24,7 +24,6 @@ import (
 
 	"github.com/sorintlab/stolon/internal/cluster"
 	"github.com/sorintlab/stolon/internal/common"
-	"github.com/sorintlab/stolon/internal/timer"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/google/go-cmp/cmp"
@@ -6117,7 +6116,7 @@ func TestUpdateCluster(t *testing.T) {
 
 		// Populate db convergence timers, these are populated with a negative timer to make them result like not converged.
 		for _, db := range tt.cd.DBs {
-			s.dbConvergenceInfos[db.UID] = &DBConvergenceInfo{Generation: 0, Timer: int64(-1000 * time.Hour)}
+			s.dbConvergenceInfos[db.UID] = &DBConvergenceInfo{Generation: 0, Timer: time.Now().Add(-1000 * time.Hour)}
 		}
 
 		fmt.Printf("test #%d\n", i)
@@ -6145,7 +6144,7 @@ func TestActiveProxiesInfos(t *testing.T) {
 	proxyInfo1 := cluster.ProxyInfo{UID: "proxy1", InfoUID: "infoUID1", ProxyTimeout: cluster.DefaultProxyTimeout}
 	proxyInfo2 := cluster.ProxyInfo{UID: "proxy2", InfoUID: "infoUID2", ProxyTimeout: cluster.DefaultProxyTimeout}
 	proxyInfoWithDifferentInfoUID := cluster.ProxyInfo{UID: "proxy2", InfoUID: "differentInfoUID"}
-	var secToNanoSecondMultiplier int64 = 1000000000
+
 	tests := []struct {
 		name                       string
 		proxyInfoHistories         ProxyInfoHistories
@@ -6169,21 +6168,24 @@ func TestActiveProxiesInfos(t *testing.T) {
 		},
 		{
 			name:                       "should update to histories if infoUID is different",
-			proxyInfoHistories:         ProxyInfoHistories{"proxy1": &ProxyInfoHistory{ProxyInfo: &proxyInfo1, Timer: timer.Now()}, "proxy2": &ProxyInfoHistory{ProxyInfo: &proxyInfo2, Timer: timer.Now()}},
+			proxyInfoHistories:         ProxyInfoHistories{"proxy1": &ProxyInfoHistory{ProxyInfo: &proxyInfo1, Timer: time.Now()}, "proxy2": &ProxyInfoHistory{ProxyInfo: &proxyInfo2, Timer: time.Now()}},
 			proxiesInfos:               cluster.ProxiesInfo{"proxy1": &proxyInfo1, "proxy2": &proxyInfoWithDifferentInfoUID},
 			expectedActiveProxies:      cluster.ProxiesInfo{"proxy1": &proxyInfo1, "proxy2": &proxyInfoWithDifferentInfoUID},
 			expectedProxyInfoHistories: ProxyInfoHistories{"proxy1": &ProxyInfoHistory{ProxyInfo: &proxyInfo1}, "proxy2": &ProxyInfoHistory{ProxyInfo: &proxyInfoWithDifferentInfoUID}},
 		},
 		{
-			name:                       "should remove from active proxies if is not updated for twice the DefaultProxyTimeout",
-			proxyInfoHistories:         ProxyInfoHistories{"proxy1": &ProxyInfoHistory{ProxyInfo: &proxyInfo1, Timer: timer.Now() - (3 * 15 * secToNanoSecondMultiplier)}, "proxy2": &ProxyInfoHistory{ProxyInfo: &proxyInfo2, Timer: timer.Now() - (1 * 15 * secToNanoSecondMultiplier)}},
+			name: "should remove from active proxies if is not updated for twice the DefaultProxyTimeout",
+			proxyInfoHistories: ProxyInfoHistories{
+				"proxy1": &ProxyInfoHistory{ProxyInfo: &proxyInfo1, Timer: time.Now().Add(-3 * 15 * time.Second)},
+				"proxy2": &ProxyInfoHistory{ProxyInfo: &proxyInfo2, Timer: time.Now().Add(-1 * 15 * time.Second)},
+			},
 			proxiesInfos:               cluster.ProxiesInfo{"proxy1": &proxyInfo1, "proxy2": &proxyInfo2},
 			expectedActiveProxies:      cluster.ProxiesInfo{"proxy2": &proxyInfo2},
 			expectedProxyInfoHistories: ProxyInfoHistories{"proxy1": &ProxyInfoHistory{ProxyInfo: &proxyInfo1}, "proxy2": &ProxyInfoHistory{ProxyInfo: &proxyInfo2}},
 		},
 		{
 			name:                       "should remove proxy from sentinel's local history if the proxy is removed in store",
-			proxyInfoHistories:         ProxyInfoHistories{"proxy1": &ProxyInfoHistory{ProxyInfo: &proxyInfo1, Timer: timer.Now()}, "proxy2": &ProxyInfoHistory{ProxyInfo: &proxyInfo2, Timer: timer.Now()}},
+			proxyInfoHistories:         ProxyInfoHistories{"proxy1": &ProxyInfoHistory{ProxyInfo: &proxyInfo1, Timer: time.Now()}, "proxy2": &ProxyInfoHistory{ProxyInfo: &proxyInfo2, Timer: time.Now()}},
 			proxiesInfos:               cluster.ProxiesInfo{"proxy2": &proxyInfo2},
 			expectedActiveProxies:      cluster.ProxiesInfo{"proxy2": &proxyInfo2},
 			expectedProxyInfoHistories: ProxyInfoHistories{"proxy2": &ProxyInfoHistory{ProxyInfo: &proxyInfo2}},

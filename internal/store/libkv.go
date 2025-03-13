@@ -17,16 +17,9 @@ package store
 import (
 	"context"
 
-	"github.com/docker/leadership"
-	libkvstore "github.com/docker/libkv/store"
-	"github.com/docker/libkv/store/consul"
-	"github.com/docker/libkv/store/etcd"
+	libkvstore "github.com/kvtools/valkeyrie/store"
+	"github.com/sorintlab/stolon/internal/leadership"
 )
-
-func init() {
-	etcd.Register()
-	consul.Register()
-}
 
 func fromLibKVStoreErr(err error) error {
 	switch err {
@@ -40,6 +33,7 @@ func fromLibKVStoreErr(err error) error {
 
 type libKVStore struct {
 	store libkvstore.Store
+	ctx   context.Context
 }
 
 func (s *libKVStore) Put(ctx context.Context, key string, value []byte, options *WriteOptions) error {
@@ -47,12 +41,12 @@ func (s *libKVStore) Put(ctx context.Context, key string, value []byte, options 
 	if options != nil {
 		libkvOptions = &libkvstore.WriteOptions{TTL: options.TTL}
 	}
-	err := s.store.Put(key, value, libkvOptions)
+	err := s.store.Put(s.ctx, key, value, libkvOptions)
 	return fromLibKVStoreErr(err)
 }
 
 func (s *libKVStore) Get(ctx context.Context, key string) (*KVPair, error) {
-	pair, err := s.store.Get(key)
+	pair, err := s.store.Get(s.ctx, key, nil)
 	if err != nil {
 		return nil, fromLibKVStoreErr(err)
 	}
@@ -60,7 +54,7 @@ func (s *libKVStore) Get(ctx context.Context, key string) (*KVPair, error) {
 }
 
 func (s *libKVStore) List(ctx context.Context, directory string) ([]*KVPair, error) {
-	pairs, err := s.store.List(directory)
+	pairs, err := s.store.List(s.ctx, directory, nil)
 	if err != nil {
 		return nil, fromLibKVStoreErr(err)
 	}
@@ -80,7 +74,7 @@ func (s *libKVStore) AtomicPut(ctx context.Context, key string, value []byte, pr
 	if options != nil {
 		libkvOptions = &libkvstore.WriteOptions{TTL: options.TTL}
 	}
-	_, pair, err := s.store.AtomicPut(key, value, libkvPrevious, libkvOptions)
+	_, pair, err := s.store.AtomicPut(s.ctx, key, value, libkvPrevious, libkvOptions)
 	if err != nil {
 		return nil, fromLibKVStoreErr(err)
 	}
@@ -88,7 +82,7 @@ func (s *libKVStore) AtomicPut(ctx context.Context, key string, value []byte, pr
 }
 
 func (s *libKVStore) Delete(ctx context.Context, key string) error {
-	return fromLibKVStoreErr(s.store.Delete(key))
+	return fromLibKVStoreErr(s.store.Delete(s.ctx, key))
 }
 
 func (s *libKVStore) Close() error {

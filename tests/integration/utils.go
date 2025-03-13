@@ -20,7 +20,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"os"
 	"os/exec"
@@ -1430,7 +1429,7 @@ func writeClusterSpec(dir string, cs *cluster.ClusterSpec) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	tmpFile, err := ioutil.TempFile(dir, "initial-cluster-spec.json")
+	tmpFile, err := os.CreateTemp(dir, "initial-cluster-spec.json")
 	if err != nil {
 		return "", err
 	}

@@ -17,7 +17,6 @@ package integration
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -33,7 +32,7 @@ import (
 func TestProxyListening(t *testing.T) {
 	t.Parallel()
 
-	dir, err := ioutil.TempDir("", "")
+	dir, err := os.MkdirTemp("", "")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}

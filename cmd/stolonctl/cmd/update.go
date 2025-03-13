@@ -18,7 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
 
 	cmdcommon "github.com/sorintlab/stolon/cmd"
@@ -66,7 +66,7 @@ func patchClusterSpec(cs *cluster.ClusterSpec, p []byte) (*cluster.ClusterSpec, 
 	return newcs, nil
 }
 
-func update(cmd *cobra.Command, args []string) {
+func update(_ *cobra.Command, args []string) {
 	if len(args) > 1 {
 		die("too many arguments")
 	}
@@ -83,12 +83,12 @@ func update(cmd *cobra.Command, args []string) {
 	} else {
 		var err error
 		if updateOpts.file == "-" {
-			data, err = ioutil.ReadAll(os.Stdin)
+			data, err = io.ReadAll(os.Stdin)
 			if err != nil {
 				die("cannot read from stdin: %v", err)
 			}
 		} else {
-			data, err = ioutil.ReadFile(updateOpts.file)
+			data, err = os.ReadFile(updateOpts.file)
 			if err != nil {
 				die("cannot read file: %v", err)
 			}

@@ -18,7 +18,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
-	"io/ioutil"
+	"os"
 )
 
 func NewTLSConfig(certFile, keyFile, caFile string, insecureSkipVerify bool) (*tls.Config, error) {
@@ -26,7 +26,7 @@ func NewTLSConfig(certFile, keyFile, caFile string, insecureSkipVerify bool) (*t
 
 	// Populate root CA certs
 	if caFile != "" {
-		pemBytes, err := ioutil.ReadFile(caFile)
+		pemBytes, err := os.ReadFile(caFile)
 		if err != nil {
 			return nil, err
 		}

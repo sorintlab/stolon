@@ -1,0 +1,289 @@
+---
+# Source: consul/templates/server-config-configmap.yaml
+# StatefulSet to run the actual Consul server cluster.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: consul-server-config
+  namespace: stolon
+  labels:
+    app: consul
+    chart: consul-helm
+    heritage: Helm
+    release: consul
+    component: server
+data:
+  server.json: |
+    {
+      "bind_addr": "0.0.0.0",
+      "bootstrap_expect": 1,
+      "client_addr": "0.0.0.0",
+      "connect": {
+        "enabled": true
+      },
+      "datacenter": "dc1",
+      "data_dir": "/consul/data",
+      "enable_debug": false,
+      "domain": "consul",
+      "limits": {
+        "request_limits": {
+          "mode": "disabled",
+          "read_rate": -1,
+          "write_rate": -1
+        }
+      },
+      "ports": {
+        "grpc": 8502,
+        "grpc_tls": -1,
+        "serf_lan": 8301
+      },
+      "recursors": [],
+      "server": true,
+      "leave_on_terminate": true,
+      "autopilot": {
+        "min_quorum": 1,
+        "disable_upgrade_migration": true
+      }
+    }
+  ui-config.json: |-
+    {
+      "ui_config": {
+        "enabled": true
+      }
+    }
+  central-config.json: |-
+    {
+      "enable_central_service_config": true
+    }
+---
+# Source: consul/templates/server-statefulset.yaml
+# StatefulSet to run the actual Consul server cluster.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: consul-server
+  namespace: stolon
+  labels:
+    app: consul
+    chart: consul-helm
+    heritage: Helm
+    release: consul
+    component: server
+spec:
+  serviceName: consul-server
+  podManagementPolicy: Parallel
+  replicas: 1
+  selector:
+    matchLabels:
+      app: consul
+      chart: consul-helm
+      release: consul
+      component: server
+      hasDNS: "true"
+  template:
+    metadata:
+      labels:
+        app: consul
+        chart: consul-helm
+        release: consul
+        component: server
+        hasDNS: "true"
+      annotations:
+        "consul.hashicorp.com/connect-inject": "false"
+        "consul.hashicorp.com/mesh-inject": "false"
+        "consul.hashicorp.com/config-checksum": 10fb767e4c6778bf0cdbe27e1421071a41ccec95a4480e41b1fcb2d3cc6e854e
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: consul
+                  release: "consul"
+                  component: server
+              topologyKey: kubernetes.io/hostname
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        fsGroup: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 100
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: config
+          configMap:
+            name: consul-server-config
+        - name: extra-config
+          emptyDir: {}
+#        - name: tmp-extra-config
+#          configMap:
+#            name: consul-server-tmp-extra-config
+      containers:
+        - name: consul
+          image: "hashicorp/consul:1.20.2"
+          
+
+          imagePullPolicy: 
+          env:
+            - name: ADVERTISE_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: HOST_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: CONSUL_DISABLE_PERM_MGMT
+              value: "true"
+            
+          command:
+            - "/bin/sh"
+            - "-ec"
+            - |
+              exec /usr/local/bin/docker-entrypoint.sh consul agent \
+                -advertise="${ADVERTISE_IP}" \
+                -config-dir=/consul/config \
+
+          volumeMounts:
+            - name: data-consul
+              mountPath: /consul/data
+            - name: config
+              mountPath: /consul/config
+#            - name: extra-config
+#              mountPath: /consul/extra-config
+#            - name: tmp-extra-config
+#              mountPath: /consul/tmp/extra-config
+            - name: tmp
+              mountPath: /tmp
+              readOnly: false
+          ports:
+            - name: http
+              containerPort: 8500
+            - name: grpc
+              containerPort: 8502
+              protocol: "TCP"
+            - name: serflan-tcp
+              containerPort: 8301
+              protocol: "TCP"
+            - name: serflan-udp
+              containerPort: 8301
+              protocol: "UDP"
+            - name: serfwan-tcp
+              containerPort: 8302
+              protocol: "TCP"
+            - name: serfwan-udp
+              containerPort: 8302
+              protocol: "UDP"
+            - name: server
+              containerPort: 8300
+            - name: dns-tcp
+              containerPort: 8600
+              protocol: "TCP"
+            - name: dns-udp
+              containerPort: 8600
+              protocol: "UDP"
+          readinessProbe:
+            # NOTE(mitchellh): when our HTTP status endpoints support the
+            # proper status codes, we should switch to that. This is temporary.
+            exec:
+              command:
+                - "/bin/sh"
+                - "-ec"
+                - |
+                  curl http://127.0.0.1:8500/v1/status/leader \
+                  2>/dev/null | grep -E '".+"'
+            failureThreshold: 2
+            initialDelaySeconds: 5
+            periodSeconds: 3
+            successThreshold: 1
+            timeoutSeconds: 5
+          resources:
+            limits:
+              cpu: 100m
+              memory: 200Mi
+            requests:
+              cpu: 100m
+              memory: 200Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+              - ALL
+              add:
+              - NET_BIND_SERVICE
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+            runAsUser: 100
+  volumeClaimTemplates:
+    - metadata:
+        name: data-consul
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: consul-server
+  namespace: stolon
+  labels:
+    app: consul
+    chart: consul-helm
+    heritage: Helm
+    release: consul
+    component: server
+  annotations:
+spec:
+  clusterIP: None
+  # We want the servers to become available even if they're not ready
+  # since this DNS is also used for join operations.
+  publishNotReadyAddresses: true
+  ports:
+    - name: http
+      port: 8500
+      targetPort: 8500
+    - name: grpc
+      port: 8502
+      targetPort: 8502
+    - name: serflan-tcp
+      protocol: "TCP"
+      port: 8301
+      targetPort: 8301
+    - name: serflan-udp
+      protocol: "UDP"
+      port: 8301
+      targetPort: 8301
+    - name: serfwan-tcp
+      protocol: "TCP"
+      port: 8302
+      targetPort: 8302
+    - name: serfwan-udp
+      protocol: "UDP"
+      port: 8302
+      targetPort: 8302
+    - name: server
+      port: 8300
+      targetPort: 8300
+    - name: dns-tcp
+      protocol: "TCP"
+      port: 8600
+      targetPort: dns-tcp
+    - name: dns-udp
+      protocol: "UDP"
+      port: 8600
+      targetPort: dns-udp
+  selector:
+    app: consul
+    release: "consul"
+    component: server

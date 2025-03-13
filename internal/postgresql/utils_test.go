@@ -17,8 +17,6 @@ package postgresql
 import (
 	"reflect"
 	"testing"
-
-	"github.com/davecgh/go-spew/spew"
 )
 
 func TestParseTimelineHistory(t *testing.T) {
@@ -59,7 +57,7 @@ func TestParseTimelineHistory(t *testing.T) {
 				t.Errorf("unexpected error: %v", err)
 			}
 			if !reflect.DeepEqual(tlsh, tt.tlsh) {
-				t.Errorf(spew.Sprintf("#%d: wrong timeline history: got: %#+v, want: %#+v", i, tlsh, tt.tlsh))
+				t.Errorf("#%d: wrong timeline history: got: %#+v, want: %#+v", i, tlsh, tt.tlsh)
 			}
 		}
 	}
