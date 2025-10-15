@@ -379,13 +379,18 @@ func (p *Manager) start(args ...string) error {
 }
 
 // Stop tries to stop an instance. An error will be returned if the instance isn't started, stop fails or
-// times out (60 second).
-func (p *Manager) Stop(fast bool) error {
+// times out (60 second). Optional timeout parameter can be provided.
+func (p *Manager) Stop(fast bool, timeout ...int) error {
 	log.Infow("stopping database")
 	name := filepath.Join(p.pgBinPath, "pg_ctl")
 	cmd := exec.Command(name, "stop", "-w", "-D", p.dataDir, "-o", "-c unix_socket_directories="+common.PgUnixSocketDirectories)
 	if fast {
 		cmd.Args = append(cmd.Args, "-m", "fast")
+	}
+
+	if len(timeout) > 0 && timeout[0] > 0 {
+		timeoutSeconds := timeout[0]
+		cmd.Args = append(cmd.Args, "-t", strconv.Itoa(timeoutSeconds))
 	}
 	log.Debugw("execing cmd", "cmd", cmd)
 
@@ -443,8 +448,8 @@ func (p *Manager) Reload() error {
 }
 
 // StopIfStarted checks if the instance is started, then calls stop and
-// then check if the instance is really stopped
-func (p *Manager) StopIfStarted(fast bool) error {
+// then check if the instance is really stopped. Optional timeout parameter can be provided.
+func (p *Manager) StopIfStarted(fast bool, timeout ...int) error {
 	// Stop will return an error if the instance isn't started, so first check
 	// if it's started
 	started, err := p.IsStarted()
@@ -459,7 +464,7 @@ func (p *Manager) StopIfStarted(fast bool) error {
 	if !started {
 		return nil
 	}
-	if err = p.Stop(fast); err != nil {
+	if err = p.Stop(fast, timeout...); err != nil {
 		return err
 	}
 	started, err = p.IsStarted()

@@ -1287,7 +1287,7 @@ func (p *PostgresKeeper) postgresKeeperSM(pctx context.Context) {
 				}
 			}
 
-			if err = pgm.StopIfStarted(true); err != nil {
+			if err = pgm.StopIfStarted(true, 900); err != nil {
 				log.Errorw("failed to stop pg instance", zap.Error(err))
 				return
 			}
