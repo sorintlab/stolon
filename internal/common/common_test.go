@@ -15,6 +15,7 @@
 package common_test
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/sorintlab/stolon/internal/common"
@@ -40,5 +41,25 @@ func TestDiffReturnsChangedParams(t *testing.T) {
 
 	if !util.CompareStringSliceNoOrder(expectedDiff, diff) {
 		t.Errorf("Expected diff is %v, but got %v", expectedDiff, diff)
+	}
+}
+
+func TestUID(t *testing.T) {
+	uids := []string{common.UID()}
+	for i := 0; i < 100; i++ {
+		uid := common.UID()
+		if slices.Contains(uids, uid) {
+			t.Errorf("Expected every new uid to be unique, but %s is duplicate after %d rounds", uid, len(uids))
+		}
+	}
+}
+
+func TestUUID(t *testing.T) {
+	uuids := []string{common.UUID()}
+	for i := 0; i < 100; i++ {
+		uuid := common.UUID()
+		if slices.Contains(uuids, uuid) {
+			t.Errorf("Expected every new uuid to be unique, but %s is duplicate after %d rounds", uuid, len(uuids))
+		}
 	}
 }

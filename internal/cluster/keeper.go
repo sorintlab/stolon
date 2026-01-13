@@ -71,18 +71,14 @@ type KeepersInfo map[string]*KeeperInfo
 
 // DeepCopy returns a copy of the KeepersInfo resource
 func (k KeepersInfo) DeepCopy() (dc KeepersInfo) {
-	var ok bool
 	if k == nil {
 		return nil
 	}
-	if nk, err := copystructure.Copy(k); err != nil {
-		panic(err)
-	} else if !reflect.DeepEqual(k, nk) {
-		panic("not equal")
-	} else if dc, ok = nk.(KeepersInfo); !ok {
-		panic("different type after copy")
+	nkis := KeepersInfo{}
+	for k, v := range k {
+		nkis[k] = v.DeepCopy()
 	}
-	return dc
+	return nkis
 }
 
 // KeeperInfo can store all info belonging to a Keeper
@@ -102,6 +98,8 @@ type KeeperInfo struct {
 	CanBeMaster             *bool `json:"canBeMaster,omitempty"`
 	CanBeSynchronousReplica *bool `json:"canBeSynchronousReplica,omitempty"`
 }
+
+// TODO: replace all specific DeepCopy method bodies with call of a generic function
 
 // DeepCopy returns a copy of the KeeperInfo resource
 func (k *KeeperInfo) DeepCopy() (dc *KeeperInfo) {

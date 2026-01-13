@@ -333,7 +333,11 @@ func (s *Spec) DeepCopy() (dc *Spec) {
 // DefSpec returns a new Spec with unspecified values populated with
 // their defaults
 func (c *Cluster) DefSpec() *Spec {
-	return c.Spec.WithDefaults()
+	s := c.Spec
+	if s == nil {
+		s = &Spec{}
+	}
+	return s.WithDefaults()
 }
 
 // WithDefaults returns a new Spec with unspecified values populated with

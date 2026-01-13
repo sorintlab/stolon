@@ -41,20 +41,12 @@ override:
 
   - path: ^internal/log/log.go
     threshold: 52
-  - path: ^internal/cluster/clusterdata.go
-    threshold: 69
-  - path: ^internal/cluster/keeper.go
-    threshold: 69
-  - path: ^internal/cluster/cluster.go
-    threshold: 41
   - path: ^internal/mock/store/store.go
     threshold: 22
   - path: ^internal/common/common.go
     threshold: 25
   - path: ^internal/postgresql/utils.go
     threshold: 12
-  - path: ^internal/cluster/member.go
-    threshold: 10
   - path: ^internal/common/tls.go
     threshold: 0
   - path: ^internal/flagutil/env.go
@@ -84,8 +76,6 @@ override:
     threshold: 58
   - path: ^internal/log$
     threshold: 52
-  - path: ^internal/cluster$
-    threshold: 33
   - path: ^internal/mock/store$
     threshold: 22
   - path: ^internal/common$
