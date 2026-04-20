@@ -1,3 +1,4 @@
+// Copyright 2026 PgVillage
 // Copyright 2016 Sorint.lab
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,20 +19,22 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
-	"io/ioutil"
+	"fmt"
+	"os"
 )
 
+// NewTLSConfig returns a freshly initialized TLSConfig resource
 func NewTLSConfig(certFile, keyFile, caFile string, insecureSkipVerify bool) (*tls.Config, error) {
 	tlsConfig := tls.Config{}
 
 	// Populate root CA certs
 	if caFile != "" {
-		pemBytes, err := ioutil.ReadFile(caFile)
+		pemBytes, err := os.ReadFile(caFile)
 		if err != nil {
 			return nil, err
 		}
 		roots := x509.NewCertPool()
-
+		certsLoaded := 0
 		for {
 			var block *pem.Block
 			block, pemBytes = pem.Decode(pemBytes)
@@ -43,11 +46,14 @@ func NewTLSConfig(certFile, keyFile, caFile string, insecureSkipVerify bool) (*t
 				return nil, err
 			}
 			roots.AddCert(cert)
+			certsLoaded++
+		}
+		if certsLoaded == 0 {
+			return nil, fmt.Errorf("no valid certificates found in CA file %q", caFile)
 		}
 
 		tlsConfig.RootCAs = roots
 	}
-
 	// Populate keypair
 	// both must be defined
 	if certFile != "" && keyFile != "" {

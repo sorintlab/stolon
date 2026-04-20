@@ -1,0 +1,56 @@
+name: Build add SBOM and LICENSES.md to release
+on:
+  release:
+    types:
+      - published
+
+jobs:
+  sbom:
+    name: Add files to release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    strategy:
+      matrix:
+        # build and publish in parallel: linux/386, linux/amd64, windows/386, windows/amd64, darwin/amd64
+        goos: [linux, darwin]
+        goarch: [amd64, arm64]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate SBOM
+        uses: CycloneDX/gh-gomod-generate-sbom@v2
+        with:
+          version: v1
+          # added assert-licenses as required by dependency-track
+          args: mod -licenses -assert-licenses -output sources_${{ matrix.goos }}_${{ matrix.goarch }}.sbom.xml
+        env:
+          GOARCH: ${{ matrix.goarch }}
+          GOOS: ${{ matrix.goos }}
+
+      - name: Generate LICENSES.md
+        if: ${{ matrix.goarch == 'amd64' && matrix.goos == 'linux' }}
+        uses: mvdkleijn/licenses-action@v1
+        with:
+          # We only use the linux_amd64 variant here for generating the LICENSES.md
+          sbom: sources_linux_amd64.sbom.xml
+          type: xml
+          filename: LICENSES.md
+          template: |
+            # Licenses
+
+            The following third-party licenses are applicable to this project:
+
+            {{range .SortedKeys}}## {{.}}
+
+            {{range index $.ComponentsByLicense .}}- {{.Name}} ({{.Version}})
+            {{end}}
+            {{end}}
+
+      - name: Add SBOM and LICENSES.md to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            sources_${{ matrix.goos }}_${{ matrix.goarch }}.sbom.xml
+            LICENSES.md

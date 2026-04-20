@@ -1,3 +1,4 @@
+// Copyright 2026 PgVillage
 // Copyright 2019 Sorint.lab
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,11 +13,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package cmd holds all CLI code for the keeper
 package cmd
 
 import (
+	"github.com/pgvillage-tools/stolon/internal/common"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/sorintlab/stolon/internal/common"
 )
 
 var (

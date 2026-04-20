@@ -1,3 +1,4 @@
+// Copyright 2026 PgVillage
 // Copyright 2015 Sorint.lab
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,6 +23,7 @@ import (
 )
 
 func TestParseTimelineHistory(t *testing.T) {
+	const someHugeSwitchPoint = 83886224
 	tests := []struct {
 		contents string
 		tlsh     []*TimelineHistory
@@ -37,7 +39,7 @@ func TestParseTimelineHistory(t *testing.T) {
 			tlsh: []*TimelineHistory{
 				{
 					TimelineID:  1,
-					SwitchPoint: 83886224,
+					SwitchPoint: someHugeSwitchPoint,
 					Reason:      "no recovery target specified",
 				},
 			},
@@ -59,11 +61,10 @@ func TestParseTimelineHistory(t *testing.T) {
 				t.Errorf("unexpected error: %v", err)
 			}
 			if !reflect.DeepEqual(tlsh, tt.tlsh) {
-				t.Errorf(spew.Sprintf("#%d: wrong timeline history: got: %#+v, want: %#+v", i, tlsh, tt.tlsh))
+				t.Error(spew.Sprintf("#%d: wrong timeline history: got: %#+v, want: %#+v", i, tlsh, tt.tlsh))
 			}
 		}
 	}
-
 }
 
 func TestValidReplSlotName(t *testing.T) {
@@ -89,7 +90,7 @@ func TestValidReplSlotName(t *testing.T) {
 	}
 }
 
-func TestExpand(t *testing.T) {
+func TestExpandRecoveryCommand(t *testing.T) {
 	tests := []struct {
 		in  string
 		out string
@@ -107,6 +108,10 @@ func TestExpand(t *testing.T) {
 			out: "/datadir",
 		},
 		{
+			in:  "%w",
+			out: "/waldir",
+		},
+		{
 			in:  "%%d",
 			out: "%d",
 		},
@@ -121,92 +126,9 @@ func TestExpand(t *testing.T) {
 	}
 
 	for i, tt := range tests {
-		out := expand(tt.in, "/datadir")
+		out := expandRecoveryCommand(tt.in, "/datadir", "/waldir")
 		if out != tt.out {
 			t.Errorf("#%d: wrong expanded string: got: %s, want: %s", i, out, tt.out)
-		}
-	}
-}
-
-func TestParseBinaryVersion(t *testing.T) {
-	tests := []struct {
-		in  string
-		maj int
-		min int
-		err error
-	}{
-		{
-			in:  "postgres (PostgreSQL) 9.5.7",
-			maj: 9,
-			min: 5,
-		},
-		{
-			in:  "postgres (PostgreSQL) 9.6.7\n",
-			maj: 9,
-			min: 6,
-		},
-		{
-			in:  "postgres (PostgreSQL) 10beta1",
-			maj: 10,
-			min: 0,
-		},
-		{
-			in:  "postgres (PostgreSQL) 10.1.2",
-			maj: 10,
-			min: 1,
-		},
-	}
-
-	for i, tt := range tests {
-		maj, min, err := ParseBinaryVersion(tt.in)
-		t.Logf("test #%d", i)
-		if tt.err != nil {
-			if err == nil {
-				t.Fatalf("got no error, wanted error: %v", tt.err)
-			} else if tt.err.Error() != err.Error() {
-				t.Fatalf("got error: %v, wanted error: %v", err, tt.err)
-			}
-		} else {
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if maj != tt.maj || min != tt.min {
-				t.Fatalf("#%d: wrong maj.min version: got: %d.%d, want: %d.%d", i, maj, min, tt.maj, tt.min)
-			}
-		}
-	}
-}
-
-func TestParseVersion(t *testing.T) {
-	tests := []struct {
-		in  string
-		maj int
-		min int
-		err error
-	}{
-		{
-			in:  "9.5.7",
-			maj: 9,
-			min: 5,
-		},
-	}
-
-	for i, tt := range tests {
-		maj, min, err := ParseVersion(tt.in)
-		t.Logf("test #%d", i)
-		if tt.err != nil {
-			if err == nil {
-				t.Fatalf("got no error, wanted error: %v", tt.err)
-			} else if tt.err.Error() != err.Error() {
-				t.Fatalf("got error: %v, wanted error: %v", err, tt.err)
-			}
-		} else {
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if maj != tt.maj || min != tt.min {
-				t.Fatalf("#%d: wrong maj.min versio : got: %d.%d, want: %d.%d", i, maj, min, tt.maj, tt.min)
-			}
 		}
 	}
 }

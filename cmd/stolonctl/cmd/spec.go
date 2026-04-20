@@ -1,3 +1,4 @@
+// Copyright 2026 PgVillage
 // Copyright 2015 Sorint.lab
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,10 +16,11 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 
-	cmdcommon "github.com/sorintlab/stolon/cmd"
-	"github.com/sorintlab/stolon/internal/cluster"
+	cluster "github.com/pgvillage-tools/stolon/api/v1"
+	cmdcommon "github.com/pgvillage-tools/stolon/cmd"
 
 	"github.com/spf13/cobra"
 )
@@ -41,6 +43,7 @@ func init() {
 	CmdStolonCtl.AddCommand(cmdSpec)
 }
 
+// ClusterSpecNoDefaults is used to mashal a json with a cluster spec if no defaults should be used
 type ClusterSpecNoDefaults struct {
 	SleepInterval                    *cluster.Duration         `json:"sleepInterval,omitempty"`
 	RequestTimeout                   *cluster.Duration         `json:"requestTimeout,omitempty"`
@@ -61,9 +64,9 @@ type ClusterSpecNoDefaults struct {
 	AdditionalWalSenders             *uint16                   `json:"additionalWalSenders,omitempty"`
 	AdditionalMasterReplicationSlots []string                  `json:"additionalMasterReplicationSlots,omitempty"`
 	UsePgrewind                      *bool                     `json:"usePgrewind,omitempty"`
-	InitMode                         *cluster.ClusterInitMode  `json:"initMode,omitempty"`
+	InitMode                         *cluster.InitMode         `json:"initMode,omitempty"`
 	MergePgParameters                *bool                     `json:"mergePgParameters,omitempty"`
-	Role                             *cluster.ClusterRole      `json:"role,omitempty"`
+	Role                             *cluster.Role             `json:"role,omitempty"`
 	NewConfig                        *cluster.NewConfig        `json:"newConfig,omitempty"`
 	PITRConfig                       *cluster.PITRConfig       `json:"pitrConfig,omitempty"`
 	ExistingConfig                   *cluster.ExistingConfig   `json:"existingConfig,omitempty"`
@@ -74,6 +77,7 @@ type ClusterSpecNoDefaults struct {
 	AutomaticPgRestart               *bool                     `json:"automaticPgRestart,omitempty"`
 }
 
+// ClusterSpecDefaults is used to mashal a json with a cluster spec if defaults should be used
 type ClusterSpecDefaults struct {
 	SleepInterval                    *cluster.Duration         `json:"sleepInterval"`
 	RequestTimeout                   *cluster.Duration         `json:"requestTimeout"`
@@ -94,9 +98,9 @@ type ClusterSpecDefaults struct {
 	AdditionalWalSenders             *uint16                   `json:"additionalWalSenders"`
 	AdditionalMasterReplicationSlots []string                  `json:"additionalMasterReplicationSlots"`
 	UsePgrewind                      *bool                     `json:"usePgrewind"`
-	InitMode                         *cluster.ClusterInitMode  `json:"initMode"`
+	InitMode                         *cluster.InitMode         `json:"initMode"`
 	MergePgParameters                *bool                     `json:"mergePgParameters"`
-	Role                             *cluster.ClusterRole      `json:"role"`
+	Role                             *cluster.Role             `json:"role"`
 	NewConfig                        *cluster.NewConfig        `json:"newConfig"`
 	PITRConfig                       *cluster.PITRConfig       `json:"pitrConfig"`
 	ExistingConfig                   *cluster.ExistingConfig   `json:"existingConfig"`
@@ -107,8 +111,10 @@ type ClusterSpecDefaults struct {
 	AutomaticPgRestart               *bool                     `json:"automaticPgRestart"`
 }
 
-func spec(cmd *cobra.Command, args []string) {
-	e, err := cmdcommon.NewStore(&cfg.CommonConfig)
+func spec(_ *cobra.Command, _ []string) {
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	defer cancelFunc()
+	e, err := cmdcommon.NewStore(ctx, &cfg.CommonConfig)
 	if err != nil {
 		die("%v", err)
 	}

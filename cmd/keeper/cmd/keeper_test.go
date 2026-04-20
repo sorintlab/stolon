@@ -1,3 +1,4 @@
+// Copyright 2026 PgVillage
 // Copyright 2017 Sorint.lab
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,17 +17,18 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"reflect"
 	"testing"
 
 	"github.com/golang/mock/gomock"
-	pgmocks "github.com/sorintlab/stolon/internal/mock/postgresql"
-	pg "github.com/sorintlab/stolon/internal/postgresql"
+	pgmocks "github.com/pgvillage-tools/stolon/internal/mock/postgresql"
+	pg "github.com/pgvillage-tools/stolon/internal/postgresql"
 
-	"github.com/sorintlab/stolon/internal/cluster"
-	"github.com/sorintlab/stolon/internal/common"
+	cluster "github.com/pgvillage-tools/stolon/api/v1"
+	"github.com/pgvillage-tools/stolon/internal/common"
 )
 
 func TestParseSynchronousStandbyNames(t *testing.T) {
@@ -82,43 +84,51 @@ func TestParseSynchronousStandbyNames(t *testing.T) {
 }
 
 func TestGenerateHBA(t *testing.T) {
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	defer cancelFunc()
+	const (
+		db1 = "db1"
+		db2 = "db2"
+		db3 = "db3"
+	)
+
 	// minimal clusterdata with only the fields used by generateHBA
-	cd := &cluster.ClusterData{
+	cd := &cluster.Data{
 		Cluster: &cluster.Cluster{
-			Spec:   &cluster.ClusterSpec{},
+			Spec:   &cluster.Spec{},
 			Status: cluster.ClusterStatus{},
 		},
 		Keepers: cluster.Keepers{},
 		DBs: cluster.DBs{
-			"db1": &cluster.DB{
-				UID: "db1",
+			db1: &cluster.DB{
+				UID: db1,
 				Spec: &cluster.DBSpec{
-					Role: common.RoleMaster,
+					Role: common.RolePrimary,
 				},
 				Status: cluster.DBStatus{
 					ListenAddress: "192.168.0.1",
 				},
 			},
-			"db2": &cluster.DB{
-				UID: "db2",
+			db2: &cluster.DB{
+				UID: db2,
 				Spec: &cluster.DBSpec{
-					Role: common.RoleStandby,
+					Role: common.RoleReplica,
 					FollowConfig: &cluster.FollowConfig{
 						Type:  cluster.FollowTypeInternal,
-						DBUID: "db1",
+						DBUID: db1,
 					},
 				},
 				Status: cluster.DBStatus{
 					ListenAddress: "192.168.0.2",
 				},
 			},
-			"db3": &cluster.DB{
-				UID: "db3",
+			db3: &cluster.DB{
+				UID: db3,
 				Spec: &cluster.DBSpec{
-					Role: common.RoleStandby,
+					Role: common.RoleReplica,
 					FollowConfig: &cluster.FollowConfig{
 						Type:  cluster.FollowTypeInternal,
-						DBUID: "db1",
+						DBUID: db1,
 					},
 				},
 				Status: cluster.DBStatus{
@@ -129,6 +139,10 @@ func TestGenerateHBA(t *testing.T) {
 		Proxy: &cluster.Proxy{},
 	}
 
+	const (
+		defaultLine1 = "local postgres superuser md5"
+		defaultLine2 = "local replication repluser md5"
+	)
 	tests := []struct {
 		DefaultSUReplAccessMode cluster.SUReplAccessMode
 		dbUID                   string
@@ -137,10 +151,10 @@ func TestGenerateHBA(t *testing.T) {
 	}{
 		{
 			DefaultSUReplAccessMode: cluster.SUReplAccessAll,
-			dbUID:                   "db1",
+			dbUID:                   db1,
 			out: []string{
-				"local postgres superuser md5",
-				"local replication repluser md5",
+				defaultLine1,
+				defaultLine2,
 				"host all superuser 0.0.0.0/0 md5",
 				"host all superuser ::0/0 md5",
 				"host replication repluser 0.0.0.0/0 md5",
@@ -151,10 +165,10 @@ func TestGenerateHBA(t *testing.T) {
 		},
 		{
 			DefaultSUReplAccessMode: cluster.SUReplAccessAll,
-			dbUID:                   "db2",
+			dbUID:                   db2,
 			out: []string{
-				"local postgres superuser md5",
-				"local replication repluser md5",
+				defaultLine1,
+				defaultLine2,
 				"host all superuser 0.0.0.0/0 md5",
 				"host all superuser ::0/0 md5",
 				"host replication repluser 0.0.0.0/0 md5",
@@ -165,13 +179,13 @@ func TestGenerateHBA(t *testing.T) {
 		},
 		{
 			DefaultSUReplAccessMode: cluster.SUReplAccessAll,
-			dbUID:                   "db1",
+			dbUID:                   db1,
 			pgHBA: []string{
 				"host all all 192.168.0.0/24 md5",
 			},
 			out: []string{
-				"local postgres superuser md5",
-				"local replication repluser md5",
+				defaultLine1,
+				defaultLine2,
 				"host all superuser 0.0.0.0/0 md5",
 				"host all superuser ::0/0 md5",
 				"host replication repluser 0.0.0.0/0 md5",
@@ -181,13 +195,13 @@ func TestGenerateHBA(t *testing.T) {
 		},
 		{
 			DefaultSUReplAccessMode: cluster.SUReplAccessAll,
-			dbUID:                   "db2",
+			dbUID:                   db2,
 			pgHBA: []string{
 				"host all all 192.168.0.0/24 md5",
 			},
 			out: []string{
-				"local postgres superuser md5",
-				"local replication repluser md5",
+				defaultLine1,
+				defaultLine2,
 				"host all superuser 0.0.0.0/0 md5",
 				"host all superuser ::0/0 md5",
 				"host replication repluser 0.0.0.0/0 md5",
@@ -197,10 +211,10 @@ func TestGenerateHBA(t *testing.T) {
 		},
 		{
 			DefaultSUReplAccessMode: cluster.SUReplAccessStrict,
-			dbUID:                   "db1",
+			dbUID:                   db1,
 			out: []string{
-				"local postgres superuser md5",
-				"local replication repluser md5",
+				defaultLine1,
+				defaultLine2,
 				"host all superuser 192.168.0.2/32 md5",
 				"host replication repluser 192.168.0.2/32 md5",
 				"host all superuser 192.168.0.3/32 md5",
@@ -211,10 +225,10 @@ func TestGenerateHBA(t *testing.T) {
 		},
 		{
 			DefaultSUReplAccessMode: cluster.SUReplAccessStrict,
-			dbUID:                   "db2",
+			dbUID:                   db2,
 			out: []string{
-				"local postgres superuser md5",
-				"local replication repluser md5",
+				defaultLine1,
+				defaultLine2,
 				"host all all 0.0.0.0/0 md5",
 				"host all all ::0/0 md5",
 			},
@@ -223,10 +237,14 @@ func TestGenerateHBA(t *testing.T) {
 
 	for i, tt := range tests {
 		p := &PostgresKeeper{
-			pgSUAuthMethod:   "md5",
-			pgSUUsername:     "superuser",
-			pgReplAuthMethod: "md5",
-			pgReplUsername:   "repluser",
+			pgSUConnType:          "host",
+			pgSULocalAuthMethod:   "md5",
+			pgSUAuthMethod:        "md5",
+			pgSUUsername:          "superuser",
+			pgReplConnType:        "host",
+			pgReplLocalAuthMethod: "md5",
+			pgReplAuthMethod:      "md5",
+			pgReplUsername:        "repluser",
 		}
 
 		cd.Cluster.Spec.DefaultSUReplAccessMode = &tt.DefaultSUReplAccessMode
@@ -234,7 +252,7 @@ func TestGenerateHBA(t *testing.T) {
 		db := cd.DBs[tt.dbUID]
 		db.Spec.PGHBA = tt.pgHBA
 
-		out := p.generateHBA(cd, db, false)
+		out := p.generateHBA(ctx, cd, db, false)
 
 		if !reflect.DeepEqual(out, tt.out) {
 			var b bytes.Buffer
@@ -242,22 +260,24 @@ func TestGenerateHBA(t *testing.T) {
 			for _, o := range out {
 				b.WriteString(fmt.Sprintf("%s\n", o))
 			}
-			b.WriteString(fmt.Sprintf("\nwant:\n"))
+			b.WriteString("\nwant:\n")
 			for _, o := range tt.out {
 				b.WriteString(fmt.Sprintf("%s\n", o))
 			}
-			t.Errorf(b.String())
+			t.Error(b.String())
 		}
 	}
 }
 
 func TestGetTimeLinesHistory(t *testing.T) {
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	defer cancelFunc()
 	t.Run("should return empty if timelineID is not greater than 1", func(t *testing.T) {
 		pgState := &cluster.PostgresState{
 			TimelineID: 1,
 		}
 
-		ctlsh, err := getTimeLinesHistory(pgState, nil, 3)
+		ctlsh, err := getTimeLinesHistory(ctx, pgState, nil, 3)
 
 		if err != nil {
 			t.Errorf("err should be nil, but got %v", err)
@@ -277,8 +297,10 @@ func TestGetTimeLinesHistory(t *testing.T) {
 		defer ctrl.Finish()
 
 		pgm := pgmocks.NewMockPGManager(ctrl)
-		pgm.EXPECT().GetTimelinesHistory(timelineID).Return([]*pg.TimelineHistory{}, fmt.Errorf("failed to get timeline history"))
-		ctlsh, err := getTimeLinesHistory(pgState, pgm, 3)
+		pgm.EXPECT().GetTimelinesHistory(timelineID).Return(
+			[]*pg.TimelineHistory{},
+			errors.New("failed to get timeline history"))
+		ctlsh, err := getTimeLinesHistory(ctx, pgState, pgm, 3)
 
 		if err == nil {
 			t.Errorf("err should be not be nil")
@@ -291,117 +313,122 @@ func TestGetTimeLinesHistory(t *testing.T) {
 		}
 	})
 
-	t.Run("should return timeline history as is if the given length is less than maxPostgresTimelinesHistory", func(t *testing.T) {
-		var timelineID uint64 = 2
-		pgState := &cluster.PostgresState{
-			TimelineID: timelineID,
-		}
+	t.Run(
+		"should return timeline history as is if the given length is less than maxPostgresTimelinesHistory",
+		func(t *testing.T) {
+			var timelineID uint64 = 2
+			pgState := &cluster.PostgresState{
+				TimelineID: timelineID,
+			}
 
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
 
-		pgm := pgmocks.NewMockPGManager(ctrl)
-		timelineHistories := []*pg.TimelineHistory{
-			{
-				TimelineID:  1,
-				SwitchPoint: 1,
-				Reason:      "reason1",
-			},
-			{
-				TimelineID:  2,
-				SwitchPoint: 2,
-				Reason:      "reason2",
-			},
-		}
-		pgm.EXPECT().GetTimelinesHistory(timelineID).Return(timelineHistories, nil)
-		ctlsh, err := getTimeLinesHistory(pgState, pgm, 3)
+			pgm := pgmocks.NewMockPGManager(ctrl)
+			timelineHistories := []*pg.TimelineHistory{
+				{
+					TimelineID:  1,
+					SwitchPoint: 1,
+					Reason:      "reason1",
+				},
+				{
+					TimelineID:  2,
+					SwitchPoint: 2,
+					Reason:      "reason2",
+				},
+			}
+			pgm.EXPECT().GetTimelinesHistory(timelineID).Return(timelineHistories, nil)
+			ctlsh, err := getTimeLinesHistory(ctx, pgState, pgm, 3)
 
-		if err != nil {
-			t.Errorf("err should be not be nil")
-		}
-		if len(ctlsh) != 2 {
-			t.Errorf("expecting length of ctlsh to be 2, but got %d", len(ctlsh))
-		}
-		expectedTimelineHistories := cluster.PostgresTimelinesHistory{
-			&cluster.PostgresTimelineHistory{
-				TimelineID:  1,
-				SwitchPoint: 1,
-				Reason:      "reason1",
-			},
-			&cluster.PostgresTimelineHistory{
-				TimelineID:  2,
-				SwitchPoint: 2,
-				Reason:      "reason2",
-			},
-		}
-		fmt.Println(ctlsh, expectedTimelineHistories)
-		if *ctlsh[0] != *expectedTimelineHistories[0] {
-			t.Errorf("expected %v, but got %v ", *expectedTimelineHistories[0], *ctlsh[0])
-		}
-		if *ctlsh[1] != *expectedTimelineHistories[1] {
-			t.Errorf("expected %v, but got %v ", *expectedTimelineHistories[1], *ctlsh[1])
-		}
-	})
+			if err != nil {
+				t.Errorf("err should be not be nil")
+			}
+			if len(ctlsh) != 2 {
+				t.Errorf("expecting length of ctlsh to be 2, but got %d", len(ctlsh))
+			}
+			expectedTimelineHistories := cluster.PostgresTimelinesHistory{
+				&cluster.PostgresTimelineHistory{
+					TimelineID:  1,
+					SwitchPoint: 1,
+					Reason:      "reason1",
+				},
+				&cluster.PostgresTimelineHistory{
+					TimelineID:  2,
+					SwitchPoint: 2,
+					Reason:      "reason2",
+				},
+			}
+			fmt.Println(ctlsh, expectedTimelineHistories)
+			if *ctlsh[0] != *expectedTimelineHistories[0] {
+				t.Errorf("expected %v, but got %v ", *expectedTimelineHistories[0], *ctlsh[0])
+			}
+			if *ctlsh[1] != *expectedTimelineHistories[1] {
+				t.Errorf("expected %v, but got %v ", *expectedTimelineHistories[1], *ctlsh[1])
+			}
+		})
 
-	t.Run("should return timeline history with last maxPostgresTimelinesHistory elements if timeline history length is greater than maxPostgresTimelinesHistory", func(t *testing.T) {
-		var timelineID uint64 = 4
-		pgState := &cluster.PostgresState{
-			TimelineID: timelineID,
-		}
+	t.Run(
+		// revive:disable-next-line
+		"should return timeline history with last maxPostgresTimelinesHistory elements if timeline history length is greater than maxPostgresTimelinesHistory",
+		func(t *testing.T) {
+			var timelineID uint64 = 4
+			pgState := &cluster.PostgresState{
+				TimelineID: timelineID,
+			}
 
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
 
-		pgm := pgmocks.NewMockPGManager(ctrl)
-		timelineHistories := []*pg.TimelineHistory{
-			{
-				TimelineID:  1,
-				SwitchPoint: 1,
-				Reason:      "reason1",
-			},
-			{
-				TimelineID:  2,
-				SwitchPoint: 2,
-				Reason:      "reason2",
-			},
-			{
-				TimelineID:  3,
-				SwitchPoint: 3,
-				Reason:      "reason3",
-			},
-			{
-				TimelineID:  4,
-				SwitchPoint: 4,
-				Reason:      "reason4",
-			},
-		}
-		pgm.EXPECT().GetTimelinesHistory(timelineID).Return(timelineHistories, nil)
-		ctlsh, err := getTimeLinesHistory(pgState, pgm, 2)
+			pgm := pgmocks.NewMockPGManager(ctrl)
+			timelineHistories := []*pg.TimelineHistory{
+				{
+					TimelineID:  1,
+					SwitchPoint: 1,
+					Reason:      "reason1",
+				},
+				{
+					TimelineID:  2,
+					SwitchPoint: 2,
+					Reason:      "reason2",
+				},
+				{
+					TimelineID:  3,
+					SwitchPoint: 3,
+					Reason:      "reason3",
+				},
+				{
+					TimelineID:  4,
+					SwitchPoint: 4,
+					Reason:      "reason4",
+				},
+			}
+			pgm.EXPECT().GetTimelinesHistory(timelineID).Return(timelineHistories, nil)
+			ctlsh, err := getTimeLinesHistory(ctx, pgState, pgm, 2)
 
-		if err != nil {
-			t.Errorf("err should be not be nil")
-		}
-		if len(ctlsh) != 2 {
-			t.Errorf("expecting length of ctlsh to be 2, but got %d", len(ctlsh))
-		}
-		expectedTimelineHistories := cluster.PostgresTimelinesHistory{
-			&cluster.PostgresTimelineHistory{
-				TimelineID:  3,
-				SwitchPoint: 3,
-				Reason:      "reason3",
-			},
-			&cluster.PostgresTimelineHistory{
-				TimelineID:  4,
-				SwitchPoint: 4,
-				Reason:      "reason4",
-			},
-		}
-		fmt.Println(ctlsh, expectedTimelineHistories)
-		if *ctlsh[0] != *expectedTimelineHistories[0] {
-			t.Errorf("expected %v, but got %v ", *expectedTimelineHistories[0], *ctlsh[0])
-		}
-		if *ctlsh[1] != *expectedTimelineHistories[1] {
-			t.Errorf("expected %v, but got %v ", *expectedTimelineHistories[1], *ctlsh[1])
-		}
-	})
+			if err != nil {
+				t.Errorf("err should be not be nil")
+			}
+			if len(ctlsh) != 2 {
+				t.Errorf("expecting length of ctlsh to be 2, but got %d", len(ctlsh))
+			}
+			expectedTimelineHistories := cluster.PostgresTimelinesHistory{
+				&cluster.PostgresTimelineHistory{
+					TimelineID:  3,
+					SwitchPoint: 3,
+					Reason:      "reason3",
+				},
+				&cluster.PostgresTimelineHistory{
+					TimelineID:  4,
+					SwitchPoint: 4,
+					Reason:      "reason4",
+				},
+			}
+			fmt.Println(ctlsh, expectedTimelineHistories)
+			if *ctlsh[0] != *expectedTimelineHistories[0] {
+				t.Errorf("expected %v, but got %v ", *expectedTimelineHistories[0], *ctlsh[0])
+			}
+			if *ctlsh[1] != *expectedTimelineHistories[1] {
+				t.Errorf("expected %v, but got %v ", *expectedTimelineHistories[1], *ctlsh[1])
+			}
+		})
 }

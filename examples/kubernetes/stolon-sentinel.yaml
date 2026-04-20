@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
         - name: stolon-sentinel
-          image: sorintlab/stolon:master-pg10
+          image: ghcr.io/pgvillage-tools/stolon-keeper:17-latest
           command:
             - "/bin/bash"
             - "-ec"

@@ -7,17 +7,15 @@ set -e
 
 VERSION=$1
 if [ -z "${VERSION}" ]; then
-	echo "Usage: ${0} VERSION" >> /dev/stderr
+	echo "Usage: ${0} VERSION" >>/dev/stderr
 	exit 255
 fi
 
-BASEDIR=$(readlink -f $(dirname $0))/..
-BINDIR=${BASEDIR}/bin
+BASEDIR=$(readlink -f "$(dirname "$0")")/..
 
-if [ $PWD != $BASEDIR ]; then
-	cd $BASEDIR
+if [ "$PWD" != "$BASEDIR" ]; then
+	cd "$BASEDIR"
 fi
 
-
 echo Building stolon binary...
-./scripts/build-binary ${VERSION}
+./scripts/build-binary "${VERSION}"

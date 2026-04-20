@@ -26,7 +26,7 @@ make PGVERSION=10 TAG=stolon:master-pg10 docker
 
 Once the image is built you should push it to the docker registry used by your swarm infrastructure.
 
-The provided example uses `sorintlab/stolon:master-pg10`
+The provided example uses `ghcr.io/pgvillage-tools/stolon-keeper:17-latest`
 
 
 ## Cluster setup and tests

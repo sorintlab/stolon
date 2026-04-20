@@ -1,0 +1,332 @@
+name: CI run on PR
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+env:
+  # Golang version to use across CI steps
+  GOLANG_VERSION: '1.25' # As we have go toolchain 1.25 specified in go.mod
+  DOWNLOAD_URL: https://github.com/etcd-io/etcd/releases/download
+  ETCD_VER: v3.6.8
+  ETCD_PATH: /usr/local/bin/
+  ETCD_BIN: /usr/local/bin/etcd
+
+permissions:
+  contents: read
+
+jobs:
+  codechanges:
+    runs-on: ubuntu-22.04
+    outputs:
+      backend: ${{ steps.filter.outputs.backend_any_changed }}
+      ci: ${{ steps.filter.outputs.ci_any_changed }}
+    steps:
+      - uses: actions/checkout@8410ad0602e1e429cee44a835ae9f77f654a6694 # v4.0.0
+      - uses: tj-actions/changed-files@e9772d140489982e0e3704fea5ee93d536f1e275 # v45.0.1
+        id: filter
+        with:
+          # Any file which is not under docs/, examples/, or is not a markdown file is counted as a backend file
+          # Also run when ci-run-on-pr has been changed to validate it is working
+          files_yaml: |
+            backend:
+              - '!**.md'
+              - '!**/*.md'
+              - '!docs/**'
+              - '!examples/**'
+              - '!.github/**'
+            ci:
+              - '.github/workflows/ci-run-on-pr.yaml'
+
+  check-go:
+    name: Ensure Go modules synchronicity
+    runs-on: ubuntu-22.04
+    needs:
+      - codechanges
+    if: ${{ (needs.codechanges.outputs.backend == 'true' || needs.codechanges.outputs.ci == 'true') && github.event.pull_request.draft == false}}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@8410ad0602e1e429cee44a835ae9f77f654a6694 # v4.0.0
+      - name: Setup Golang
+        uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32 # v5.0.2
+        with:
+          go-version: ${{ env.GOLANG_VERSION }}
+      - name: Download all Go modules
+        run: |
+          go mod download
+      - name: Check for tidiness of go.mod and go.sum
+        run: |
+          go mod tidy
+          git diff --exit-code -- .
+
+  lint-go:
+    name: Lint Go code
+    runs-on: ubuntu-22.04
+    needs:
+      - codechanges
+    if: ${{ (needs.codechanges.outputs.backend == 'true' || needs.codechanges.outputs.ci == 'true') && github.event.pull_request.draft == false}}
+    permissions:
+      contents: read # for actions/checkout to fetch code
+      pull-requests: read # for golangci/golangci-lint-action to fetch pull requests
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v4.0.0
+      - name: Setup Golang
+        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
+        with:
+          go-version: ${{ env.GOLANG_VERSION }}
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9.2.0
+        with:
+          args: --verbose --timeout=10m
+
+  shellcheck:
+    name: Shellcheck
+    needs:
+      - codechanges
+    if: ${{ (needs.codechanges.outputs.backend == 'true' || needs.codechanges.outputs.ci == 'true') && github.event.pull_request.draft == false}}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run ShellCheck
+        uses: ludeeus/action-shellcheck@master
+
+  unit-test:
+    name: Run unit tests
+    runs-on: ubuntu-latest
+    needs:
+      - codechanges
+    permissions:
+      pull-requests: write
+    if: ${{ (needs.codechanges.outputs.backend == 'true' || needs.codechanges.outputs.ci == 'true') && github.event.pull_request.draft == false}}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v4.0.0
+      - name: Setup Golang
+        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
+        with:
+          go-version: ${{ env.GOLANG_VERSION }}
+      - name: Test
+        run: make test
+      - name: check test coverage
+        id: coverage
+        uses: vladopajic/go-test-coverage@v2
+        with:
+          config: .testcoverage.yaml
+          profile: cover.out
+          continue-on-error: true # Should fail after coverage comment is posted
+      - name: Generate test results artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: unittests-coverage
+          path: cover.out
+      - name: find pull request ID
+        run: |
+          PR_ID=${GITHUB_REF_NAME%%/merge}
+          echo "PR_ID: $PR_ID"
+
+          if [ "$PR_ID" != "null" ]; then
+            echo "pull_request_id=$PR_ID" >> $GITHUB_ENV
+          else
+            echo "No open pull request found for this branch."
+          fi
+      - name: create badge
+        uses: vladopajic/go-test-coverage@v2
+        with:
+          profile: cover.out
+          threshold-total: 26
+          git-token: ${{ github.ref_name == 'main' && secrets.GITHUB_TOKEN || '' }}
+          git-branch: badges
+      - name: post coverage report
+        if: env.pull_request_id
+        uses: thollander/actions-comment-pull-request@v3
+        continue-on-error: true #we need pull_request_target or this will fail when not running pr in BD organisation
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          comment-tag: coverage-report
+          pr-number: ${{ env.pull_request_id }}
+          message: |
+            go-test-coverage report:
+            ```
+            ${{ fromJSON(steps.coverage.outputs.report) }}```
+      - name: 'finally check coverage'
+        if: steps.coverage.outcome == 'failure'
+        shell: bash
+        run: echo "coverage check failed" && exit 1
+
+  e2e-keeper-images:
+    name: Build keeper images for running e2e
+    runs-on: ubuntu-22.04
+    needs:
+      - codechanges
+    if: ${{ (needs.codechanges.outputs.backend == 'true' || needs.codechanges.outputs.ci == 'true') && github.event.pull_request.draft == false}}
+    strategy:
+      matrix:
+        pgversion: ['14','15','16','17','18']
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@8410ad0602e1e429cee44a835ae9f77f654a6694 # v4.0.0
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Docker meta
+        id: stolon-meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            name=keeper-${{ matrix.pgversion }},enable=true
+          tags: |
+            type=semver,pattern={{raw}}
+            type=raw,value=latest
+            type=sha
+
+      - name: Build stolon images
+        uses: docker/build-push-action@v6
+        with:
+          load: true
+          build-args: PGVERSION=${{ matrix.pgversion }}
+          context: .
+          file: ./Dockerfile.keeper
+          push: false
+          platforms: linux/amd64
+          tags: ${{ steps.stolon-meta.outputs.tags }}
+          labels: ${{ steps.stolon-meta.outputs.labels }}
+
+      - name: Save image to tar
+        run: docker save keeper-${{ matrix.pgversion }} > keeper-${{ matrix.pgversion }}.tar
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: keeper-image-${{ matrix.pgversion }}
+          path: keeper-${{ matrix.pgversion }}.tar
+
+  e2e-other-images:
+    name: Build other images for running e2e
+    runs-on: ubuntu-22.04
+    needs:
+      - codechanges
+    if: ${{ (needs.codechanges.outputs.backend == 'true' || needs.codechanges.outputs.ci == 'true') && github.event.pull_request.draft == false}}
+    strategy:
+      matrix:
+        image:
+          - proxy
+          - sentinel
+          - stolonctl
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@8410ad0602e1e429cee44a835ae9f77f654a6694 # v4.0.0
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Docker meta
+        id: stolon-meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            name=${{ matrix.image }},enable=true
+          tags: |
+            type=semver,pattern={{raw}}
+            type=raw,value=latest
+            type=sha
+
+      - name: Build stolon images
+        uses: docker/build-push-action@v6
+        with:
+          load: true
+          context: .
+          file: ./Dockerfile.${{ matrix.image }}
+          push: false
+          platforms: linux/amd64
+          tags: ${{ steps.stolon-meta.outputs.tags }}
+          labels: ${{ steps.stolon-meta.outputs.labels }}
+
+      - name: Save image to tar
+        run: docker save ${{ matrix.image }} > ${{ matrix.image }}.tar
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.image }}-image
+          path: ${{ matrix.image }}.tar
+
+  e2e-test:
+    name: Run e2e tests
+    runs-on: ubuntu-22.04
+    needs:
+      - codechanges
+      - e2e-keeper-images
+      - e2e-other-images
+    if: ${{ (needs.codechanges.outputs.backend == 'true' || needs.codechanges.outputs.ci == 'true') && github.event.pull_request.draft == false}}
+    strategy:
+      matrix:
+        pgversion: ['14','15','16','17','18']
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@8410ad0602e1e429cee44a835ae9f77f654a6694 # v4.0.0
+
+      - name: Setup Golang
+        uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32 # v5.0.2
+        with:
+          go-version: ${{ env.GOLANG_VERSION }}
+
+      - name: installe etcd
+        run: |
+          curl -L ${DOWNLOAD_URL}/${ETCD_VER}/etcd-${ETCD_VER}-linux-amd64.tar.gz -o /tmp/etcd-${ETCD_VER}-linux-amd64.tar.gz
+          tar xzvf /tmp/etcd-${ETCD_VER}-linux-amd64.tar.gz -C "${ETCD_PATH}" --strip-components=1 --no-same-owner
+          rm -f /tmp/etcd-${ETCD_VER}-linux-amd64.tar.gz
+
+      - name: Download keeper artifact
+        uses: actions/download-artifact@v4
+        with:
+          path: images
+          merge-multiple: true
+          pattern: keeper-image-${{ matrix.pgversion }}
+
+      - name: Download other artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: images
+          merge-multiple: true
+          pattern: '*-image'
+
+      - name: Load image
+        run: |
+          for f in images/*.tar; do
+            if [ -f "$f" ]; then
+              echo "Loading $f..."
+              docker load < "$f"
+            fi
+          done
+
+      - name: Test
+        run: make e2e-test
+        env:
+          PGVERSION: ${{ matrix.pgversion }}
+          STOLON_TEST_STORE_BACKEND: etcdv3
+
+  license-header-test:
+    name: License header test
+    runs-on: ubuntu-22.04
+    needs:
+      - codechanges
+    if: ${{ (needs.codechanges.outputs.backend == 'true' || needs.codechanges.outputs.ci == 'true') && github.event.pull_request.draft == false}}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@8410ad0602e1e429cee44a835ae9f77f654a6694 # v4.0.0
+      - name: Test
+        run: |
+          function go_files_without_license_info() {
+          	find . -type f -iname '*.go' ! -path './vendor/*' ! -path './tests/*' ! -name '*_test.go' | while read -r file; do
+          		head -n3 "${file}" | grep -Eq "(Copyright|generated|GENERATED)" || echo -e "  ${file}"
+          	done
+          }
+          
+          echo "Checking for license header..."
+          IFS=$'\n' read -r -d '' -a licRes < <(go_files_without_license_info) || true
+          if ((${#licRes[@]})); then
+          	echo -e "license header checking failed:\n${licRes[*]}"
+          	exit 255
+          fi
+
+          echo Success

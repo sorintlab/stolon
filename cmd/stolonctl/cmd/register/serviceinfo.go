@@ -1,3 +1,4 @@
+// Copyright 2026 PgVillage
 // Copyright 2019 Sorint.lab
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,7 +23,7 @@ import (
 	"strings"
 
 	"github.com/hashicorp/consul/api"
-	"github.com/sorintlab/stolon/internal/cluster"
+	cluster "github.com/pgvillage-tools/stolon/api/v1"
 )
 
 // HealthCheck holds necessary information for performing
@@ -87,7 +88,7 @@ func (info *ServiceInfo) Compare(target ServiceInfo) bool {
 func NewServiceInfo(name string, db *cluster.DB, tags []string, isMaster bool) (*ServiceInfo, error) {
 	port, err := strconv.Atoi(db.Status.Port)
 	if err != nil {
-		return nil, fmt.Errorf(fmt.Sprintf("invalid database port '%s' for %s with uid %s", db.Status.Port, name, db.UID))
+		return nil, fmt.Errorf("invalid database port '%s' for %s with uid %s", db.Status.Port, name, db.UID)
 	}
 	return &ServiceInfo{
 		Name:     name,

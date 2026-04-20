@@ -1,3 +1,4 @@
+// Copyright 2026 PgVillage
 // Copyright 2019 Sorint.lab
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,27 +13,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package register will register all components for stolon-ctl
 package register
 
 import (
 	"context"
 	"errors"
 
-	"github.com/sorintlab/stolon/internal/cluster"
-	"github.com/sorintlab/stolon/internal/store"
+	cluster "github.com/pgvillage-tools/stolon/api/v1"
+	stolonstore "github.com/pgvillage-tools/stolon/internal/store"
 )
 
 // Cluster type exposes necessary methods to find master and slave
 // from underlying store
 type Cluster struct {
 	name        string
-	cd          *cluster.ClusterData
+	cd          *cluster.Data
 	tagMasterAs Tags
 	tagSlaveAs  Tags
 }
 
 // NewCluster returns an new instance of Cluster
-func NewCluster(name string, rCfg Config, store store.Store) (*Cluster, error) {
+func NewCluster(name string, rCfg Config, store stolonstore.Store) (*Cluster, error) {
 	cd, _, err := store.GetClusterData(context.TODO())
 
 	if err != nil {
@@ -40,7 +42,8 @@ func NewCluster(name string, rCfg Config, store store.Store) (*Cluster, error) {
 	} else if cd == nil {
 		return nil, errors.New("no cluster data available")
 	}
-	return &Cluster{name: name, cd: cd, tagMasterAs: NewTags(rCfg.TagMasterAs), tagSlaveAs: NewTags(rCfg.TagSlaveAs)}, nil
+	return &Cluster{name: name, cd: cd, tagMasterAs: NewTags(rCfg.TagMasterAs),
+		tagSlaveAs: NewTags(rCfg.TagSlaveAs)}, nil
 }
 
 // ServiceInfos returns all the service information from the cluster data in underlying store

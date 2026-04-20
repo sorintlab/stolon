@@ -1,3 +1,4 @@
+// Copyright 2026 PgVillage
 // Copyright 2015 Sorint.lab
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,13 +19,15 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 
-	"github.com/sorintlab/stolon/cmd"
-	"github.com/sorintlab/stolon/internal/cluster"
-	"github.com/sorintlab/stolon/internal/flagutil"
-	"github.com/sorintlab/stolon/internal/store"
+	cluster "github.com/pgvillage-tools/stolon/api/v1"
+	"github.com/pgvillage-tools/stolon/cmd"
+	"github.com/pgvillage-tools/stolon/internal/flagutil"
+	"github.com/pgvillage-tools/stolon/internal/logging"
+	"github.com/pgvillage-tools/stolon/internal/store"
 
 	"github.com/spf13/cobra"
 )
@@ -33,19 +36,20 @@ const (
 	maxRetries = 3
 )
 
+// CmdStolonCtl defines a cobra command to execute when running stolonctl
 var CmdStolonCtl = &cobra.Command{
 	Use:     "stolonctl",
 	Short:   "stolon command line client",
 	Version: cmd.Version,
-	PersistentPreRun: func(c *cobra.Command, args []string) {
+	PersistentPreRun: func(c *cobra.Command, _ []string) {
 		if c.Name() != "stolonctl" && c.Name() != "version" {
 			if err := cmd.CheckCommonConfig(&cfg.CommonConfig); err != nil {
-				die(err.Error())
+				die("%s", err.Error())
 			}
 		}
 	},
 	// just defined to make --version work
-	Run: func(c *cobra.Command, args []string) { _ = c.Help() },
+	Run: func(c *cobra.Command, _ []string) { _ = c.Help() },
 }
 
 type config struct {
@@ -60,8 +64,10 @@ func init() {
 }
 
 var cmdVersion = &cobra.Command{
-	Use:   "version",
-	Run:   versionCommand,
+	Use: "version",
+	Run: func(_ *cobra.Command, _ []string) {
+		stdout("stolonctl version %s", cmd.Version)
+	},
 	Short: "Display the version",
 }
 
@@ -69,35 +75,35 @@ func init() {
 	CmdStolonCtl.AddCommand(cmdVersion)
 }
 
-func versionCommand(c *cobra.Command, args []string) {
-	stdout("stolonctl version %s", cmd.Version)
-}
-
+// Execute is run when stolonctl is executed
 func Execute() {
+	_, logger := logging.GetLogComponent(context.Background(), logging.CmdComponent)
 	if err := flagutil.SetFlagsFromEnv(CmdStolonCtl.PersistentFlags(), "STOLONCTL"); err != nil {
-		log.Fatal(err)
+		logger.Fatal().AnErr("err", err).Msg("")
 	}
 	if err := CmdStolonCtl.Execute(); err != nil {
-		log.Fatal(err)
+		logger.Fatal().AnErr("err", err).Msg("")
 	}
 }
 
-func stderr(format string, a ...interface{}) {
+func stderr(format string, a ...any) {
 	out := fmt.Sprintf(format, a...)
 	fmt.Fprintln(os.Stderr, strings.TrimSuffix(out, "\n"))
 }
 
-func stdout(format string, a ...interface{}) {
+func stdout(format string, a ...any) {
 	out := fmt.Sprintf(format, a...)
-	fmt.Fprintln(os.Stdout, strings.TrimSuffix(out, "\n"))
+	if _, err := fmt.Fprintln(os.Stdout, strings.TrimSuffix(out, "\n")); err != nil {
+		log.Fatalf("failed to write to stdout: %v", err)
+	}
 }
 
-func die(format string, a ...interface{}) {
+func die(format string, a ...any) {
 	stderr(format, a...)
 	os.Exit(1)
 }
 
-func getClusterData(e store.Store) (*cluster.ClusterData, *store.KVPair, error) {
+func getClusterData(e store.Store) (*cluster.Data, *store.KVPair, error) {
 	cd, pair, err := e.GetClusterData(context.TODO())
 	if err != nil {
 		return nil, nil, fmt.Errorf("cannot get cluster data: %v", err)
@@ -117,7 +123,9 @@ func getClusterData(e store.Store) (*cluster.ClusterData, *store.KVPair, error) 
 func askConfirmation(message string) (bool, error) {
 	in := bufio.NewReader(os.Stdin)
 	for {
-		fmt.Fprint(os.Stdout, message)
+		if _, err := fmt.Fprint(os.Stdout, message); err != nil {
+			log.Fatalf("failed to print to stdout: %v", err)
+		}
 		input, err := in.ReadString('\n')
 		if err != nil {
 			return false, fmt.Errorf("error reading input: %v", err)

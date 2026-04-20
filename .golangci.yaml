@@ -1,0 +1,112 @@
+---
+version: '2'
+run:
+  allow-parallel-runners: true
+linters:
+  default: none
+  enable:
+    - errcheck
+    #- ginkgolinter
+    #- gocyclo
+    #- govet
+    #- ineffassign
+    #- misspell
+    - revive
+    #- staticcheck
+    #- unused
+  settings:
+    govet:
+      enable:
+        - shadow
+      settings:
+        shadow:
+          # Whether to be strict about shadowing; can be noisy.
+          # Default: false
+          strict: true
+    revive:
+      rules:
+        - name: add-constant
+          arguments:
+            - allowInts: 0,1,2,3
+              allowStrs: '"","error: %v"'
+              ignoreFuncs: assert\.Len,require\.Len
+              maxLitCount: '5'
+        - name: line-length-limit
+          arguments:
+            - 120
+          severity: warning
+          exclude:
+            - ''
+        - name: comment-spacings
+        - name: indent-error-flow
+        - name: use-errors-new
+        - name: bare-return
+        - name: cognitive-complexity
+          # TODO: wait for https://github.com/golangci/golangci-lint/pull/5663
+          disabled: true
+        - name: context-as-argument
+        - name: cyclomatic
+          disabled: true
+        - name: dot-imports
+          arguments:
+            - allowedPackages:
+                - github.com/onsi/ginkgo/v2
+                - github.com/onsi/gomega
+        - name: early-return
+        - name: empty-block
+        - name: empty-lines
+        - name: exported
+        #- name: function-length
+        - name: if-return
+        - name: import-alias-naming
+        - name: import-shadowing
+        - name: increment-decrement
+        #- name: max-control-nesting
+        - name: max-public-structs
+          arguments:
+            - 14
+        - name: redefines-builtin-id
+        - name: receiver-naming
+        - name: redundant-import-alias
+        - name: struct-tag
+        - name: superfluous-else
+        - name: unchecked-type-assertion
+        - name: unexported-naming
+    staticcheck:
+      checks:
+        - all
+        - '-ST1000'
+        - '-ST1003'
+        - '-ST1016'
+        - '-SA1019'
+        - '-ST1020'
+        - '-ST1021'
+        - '-ST1022'
+  exclusions:
+    generated: lax
+    rules:
+      - linters:
+          - dupl
+        path: internal/*
+      # Exclude some linters from running on tests files.
+      - path: _test\.go
+        linters:
+          - errcheck
+          - revive
+      - path: tests/
+        linters:
+          - errcheck
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

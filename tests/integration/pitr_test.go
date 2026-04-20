@@ -1,3 +1,4 @@
+// Copyright 2026 PgVillage
 // Copyright 2016 Sorint.lab
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,16 +18,15 @@ package integration
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/sorintlab/stolon/internal/cluster"
-	"github.com/sorintlab/stolon/internal/common"
-	"github.com/sorintlab/stolon/internal/store"
+	cluster "github.com/pgvillage-tools/stolon/api/v1"
+	"github.com/pgvillage-tools/stolon/internal/common"
+	"github.com/pgvillage-tools/stolon/internal/store"
 
 	"github.com/gofrs/uuid"
 )
@@ -44,17 +44,17 @@ func TestPITRRecoveryTarget(t *testing.T) {
 }
 
 func testPITR(t *testing.T, recoveryTarget bool) {
-	dir, err := ioutil.TempDir("", "stolon")
+	dir, err := os.MkdirTemp("", "stolon")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	defer os.RemoveAll(dir)
 
-	baseBackupDir, err := ioutil.TempDir(dir, "basebackup")
+	baseBackupDir, err := os.MkdirTemp(dir, "basebackup")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	archiveBackupDir, err := ioutil.TempDir(dir, "archivebackup")
+	archiveBackupDir, err := os.MkdirTemp(dir, "archivebackup")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -70,8 +70,8 @@ func testPITR(t *testing.T, recoveryTarget bool) {
 
 	sm := store.NewKVBackedStore(tstore.store, storePath)
 
-	initialClusterSpec := &cluster.ClusterSpec{
-		InitMode:           cluster.ClusterInitModeP(cluster.ClusterInitModeNew),
+	initialClusterSpec := &cluster.Spec{
+		InitMode:           &newCluster,
 		SleepInterval:      &cluster.Duration{Duration: 2 * time.Second},
 		FailInterval:       &cluster.Duration{Duration: 5 * time.Second},
 		ConvergenceTimeout: &cluster.Duration{Duration: 30 * time.Second},
@@ -85,7 +85,7 @@ func testPITR(t *testing.T, recoveryTarget bool) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	tk, err := NewTestKeeper(t, dir, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, tstore.storeBackend, storeEndpoints)
+	tk, err := newTestKeeper(t, dir, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, tstore.storeBackend, storeEndpoints)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -94,7 +94,7 @@ func testPITR(t *testing.T, recoveryTarget bool) {
 	}
 	defer tk.Stop()
 
-	ts, err := NewTestSentinel(t, dir, clusterName, tstore.storeBackend, storeEndpoints, fmt.Sprintf("--initial-cluster-spec=%s", initialClusterSpecFile))
+	ts, err := newTestSentinel(t, dir, clusterName, tstore.storeBackend, storeEndpoints, fmt.Sprintf("--initial-cluster-spec=%s", initialClusterSpecFile))
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -103,14 +103,14 @@ func testPITR(t *testing.T, recoveryTarget bool) {
 	}
 
 	// Wait for clusterView containing a master
-	_, err = WaitClusterDataWithMaster(sm, 30*time.Second)
+	_, err = waitClusterDataWithMaster(sm, 30*time.Second)
 	if err != nil {
 		t.Fatal("expected a master in cluster view")
 	}
 	if err := tk.WaitDBUp(60 * time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	if err := tk.WaitDBRole(common.RoleMaster, nil, 30*time.Second); err != nil {
+	if err := tk.WaitDBRole(common.RolePrimary, nil, 30*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	if err := populate(t, tk); err != nil {
@@ -124,7 +124,7 @@ func testPITR(t *testing.T, recoveryTarget bool) {
 	now := time.Now()
 
 	// ioutil.Tempfile already creates files with 0600 permissions
-	pgpass, err := ioutil.TempFile("", "pgpass")
+	pgpass, err := os.CreateTemp("", "pgpass")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -156,8 +156,8 @@ func testPITR(t *testing.T, recoveryTarget bool) {
 	}
 
 	// Now initialize a new cluster with the existing keeper
-	initialClusterSpec = &cluster.ClusterSpec{
-		InitMode:           cluster.ClusterInitModeP(cluster.ClusterInitModePITR),
+	initialClusterSpec = &cluster.Spec{
+		InitMode:           &pitrCluster,
 		SleepInterval:      &cluster.Duration{Duration: 2 * time.Second},
 		FailInterval:       &cluster.Duration{Duration: 5 * time.Second},
 		ConvergenceTimeout: &cluster.Duration{Duration: 30 * time.Second},
@@ -185,7 +185,7 @@ func testPITR(t *testing.T, recoveryTarget bool) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	ts, err = NewTestSentinel(t, dir, clusterName, tstore.storeBackend, storeEndpoints, fmt.Sprintf("--initial-cluster-spec=%s", initialClusterSpecFile))
+	ts, err = newTestSentinel(t, dir, clusterName, tstore.storeBackend, storeEndpoints, fmt.Sprintf("--initial-cluster-spec=%s", initialClusterSpecFile))
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -194,17 +194,17 @@ func testPITR(t *testing.T, recoveryTarget bool) {
 	}
 	defer ts.Stop()
 
-	if err := WaitClusterPhase(sm, cluster.ClusterPhaseNormal, 60*time.Second); err != nil {
+	if err := waitClusterPhase(sm, cluster.Normal, 60*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	_, err = WaitClusterDataWithMaster(sm, 30*time.Second)
+	_, err = waitClusterDataWithMaster(sm, 30*time.Second)
 	if err != nil {
 		t.Fatal("expected a master in cluster view")
 	}
 	if err := tk.WaitDBUp(60 * time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	if err := tk.WaitDBRole(common.RoleMaster, nil, 30*time.Second); err != nil {
+	if err := tk.WaitDBRole(common.RolePrimary, nil, 30*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 

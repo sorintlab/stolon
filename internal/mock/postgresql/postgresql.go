@@ -5,9 +5,11 @@
 package mocks
 
 import (
-	gomock "github.com/golang/mock/gomock"
-	postgresql "github.com/sorintlab/stolon/internal/postgresql"
+	"context"
 	reflect "reflect"
+
+	gomock "github.com/golang/mock/gomock"
+	postgresql "github.com/pgvillage-tools/stolon/internal/postgresql"
 )
 
 // MockPGManager is a mock of PGManager interface
@@ -34,7 +36,7 @@ func (m *MockPGManager) EXPECT() *MockPGManagerMockRecorder {
 }
 
 // GetTimelinesHistory mocks base method
-func (m *MockPGManager) GetTimelinesHistory(timeline uint64) ([]*postgresql.TimelineHistory, error) {
+func (m *MockPGManager) GetTimelinesHistory(_ context.Context, timeline uint64) ([]*postgresql.TimelineHistory, error) {
 	ret := m.ctrl.Call(m, "GetTimelinesHistory", timeline)
 	ret0, _ := ret[0].([]*postgresql.TimelineHistory)
 	ret1, _ := ret[1].(error)
@@ -42,6 +44,6 @@ func (m *MockPGManager) GetTimelinesHistory(timeline uint64) ([]*postgresql.Time
 }
 
 // GetTimelinesHistory indicates an expected call of GetTimelinesHistory
-func (mr *MockPGManagerMockRecorder) GetTimelinesHistory(timeline interface{}) *gomock.Call {
+func (mr *MockPGManagerMockRecorder) GetTimelinesHistory(timeline any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTimelinesHistory", reflect.TypeOf((*MockPGManager)(nil).GetTimelinesHistory), timeline)
 }

@@ -1,3 +1,4 @@
+// Copyright 2026 PgVillage
 // Copyright 2017 Sorint.lab
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,19 +13,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package cmd is a package which provides utilities that underly the specific command
 package cmd
 
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 
-	cmdcommon "github.com/sorintlab/stolon/cmd"
-	"github.com/sorintlab/stolon/internal/cluster"
-	"github.com/sorintlab/stolon/internal/store"
+	cluster "github.com/pgvillage-tools/stolon/api/v1"
+	cmdcommon "github.com/pgvillage-tools/stolon/cmd"
+	"github.com/pgvillage-tools/stolon/internal/logging"
+	ststore "github.com/pgvillage-tools/stolon/internal/store"
 
 	"github.com/spf13/cobra"
 )
@@ -60,18 +63,37 @@ var cmdWriteClusterData = &cobra.Command{
 }
 
 func init() {
-	cmdReadClusterData.PersistentFlags().BoolVar(&readClusterdataOpts.pretty, "pretty", false, "pretty print")
+	cmdReadClusterData.PersistentFlags().BoolVar(
+		&readClusterdataOpts.pretty,
+		"pretty",
+		false,
+		"pretty print",
+	)
 	cmdClusterData.AddCommand(cmdReadClusterData)
 
-	cmdWriteClusterData.PersistentFlags().StringVarP(&writeClusterdataOpts.file, "file", "f", "", "file containing the new cluster data")
-	cmdWriteClusterData.PersistentFlags().BoolVarP(&writeClusterdataOpts.forceYes, "yes", "y", false, "don't ask for confirmation")
+	cmdWriteClusterData.PersistentFlags().StringVarP(
+		&writeClusterdataOpts.file,
+		"file",
+		"f",
+		"",
+		"file containing the new cluster data",
+	)
+	cmdWriteClusterData.PersistentFlags().BoolVarP(
+		&writeClusterdataOpts.forceYes,
+		"yes",
+		"y",
+		false,
+		"don't ask for confirmation",
+	)
 	cmdClusterData.AddCommand(cmdWriteClusterData)
 
 	CmdStolonCtl.AddCommand(cmdClusterData)
 }
 
-func readClusterdata(cmd *cobra.Command, args []string) {
-	e, err := cmdcommon.NewStore(&cfg.CommonConfig)
+func readClusterdata(_ *cobra.Command, _ []string) {
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	defer cancelFunc()
+	e, err := cmdcommon.NewStore(ctx, &cfg.CommonConfig)
 	if err != nil {
 		die("%v", err)
 	}
@@ -98,27 +120,26 @@ func readClusterdata(cmd *cobra.Command, args []string) {
 	stdout("%s", clusterdataj)
 }
 
-func isSafeToWriteClusterData(store store.Store) error {
+func isSafeToWriteClusterData(store ststore.Store) error {
 	if cd, _, err := store.GetClusterData(context.TODO()); err != nil {
 		return err
 	} else if cd != nil {
 		if !writeClusterdataOpts.forceYes {
-			return fmt.Errorf("WARNING: cluster data already available use --yes to override")
-		} else {
-			stdout("WARNING: The current cluster data will be removed")
+			return errors.New("WARNING: cluster data already available use --yes to override")
 		}
+		stdout("WARNING: The current cluster data will be removed")
 	}
 	return nil
 }
 
-func clusterData(data []byte) (*cluster.ClusterData, error) {
-	cd := cluster.ClusterData{}
+func clusterData(data []byte) (*cluster.Data, error) {
+	cd := cluster.Data{}
 	err := json.Unmarshal(data, &cd)
 	return &cd, err
 }
 
-func writeClusterdata(reader io.Reader, s store.Store) error {
-	data, err := ioutil.ReadAll(reader)
+func writeClusterdata(reader io.Reader, s ststore.Store) error {
+	data, err := io.ReadAll(reader)
 	if err != nil {
 		return fmt.Errorf("error while reading data: %v", err)
 	}
@@ -143,6 +164,9 @@ func writeClusterdata(reader io.Reader, s store.Store) error {
 }
 
 func runWriteClusterdata(_ *cobra.Command, _ []string) {
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	defer cancelFunc()
+	_, logger := logging.GetLogComponent(ctx, logging.CmdComponent)
 	var reader io.Reader
 	if writeClusterdataOpts.file == "" || writeClusterdataOpts.file == "-" {
 		reader = os.Stdin
@@ -151,10 +175,12 @@ func runWriteClusterdata(_ *cobra.Command, _ []string) {
 		if err != nil {
 			die("cannot read file: %v", err)
 		}
-		defer file.Close()
+		if err := file.Close(); err != nil {
+			logger.Fatal().AnErr("err", err).Msg("closing file failed")
+		}
 		reader = file
 	}
-	s, err := cmdcommon.NewStore(&cfg.CommonConfig)
+	s, err := cmdcommon.NewStore(ctx, &cfg.CommonConfig)
 	if err != nil {
 		die("failed to create new store %v", err)
 	}

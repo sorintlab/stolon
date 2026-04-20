@@ -1,3 +1,4 @@
+// Copyright 2026 PgVillage
 // Copyright 2016 Sorint.lab
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,12 +18,12 @@ package cmd
 import (
 	"context"
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"os"
 
-	cmdcommon "github.com/sorintlab/stolon/cmd"
-	"github.com/sorintlab/stolon/internal/cluster"
-	"github.com/sorintlab/stolon/internal/common"
+	cluster "github.com/pgvillage-tools/stolon/api/v1"
+	cmdcommon "github.com/pgvillage-tools/stolon/cmd"
+	"github.com/pgvillage-tools/stolon/internal/common"
 	"github.com/spf13/cobra"
 )
 
@@ -32,6 +33,7 @@ var cmdInit = &cobra.Command{
 	Short: "Initialize a new cluster",
 }
 
+// InitOptions is a struct which can contain initiation options
 type InitOptions struct {
 	file     string
 	forceYes bool
@@ -46,7 +48,9 @@ func init() {
 	CmdStolonCtl.AddCommand(cmdInit)
 }
 
-func initCluster(cmd *cobra.Command, args []string) {
+func initCluster(_ *cobra.Command, args []string) {
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	defer cancelFunc()
 	if len(args) > 1 {
 		die("too many arguments")
 	}
@@ -62,12 +66,12 @@ func initCluster(cmd *cobra.Command, args []string) {
 			dataSupplied = true
 			var err error
 			if initOpts.file == "-" {
-				data, err = ioutil.ReadAll(os.Stdin)
+				data, err = io.ReadAll(os.Stdin)
 				if err != nil {
 					die("cannot read from stdin: %v", err)
 				}
 			} else {
-				data, err = ioutil.ReadFile(initOpts.file)
+				data, err = os.ReadFile(initOpts.file)
 				if err != nil {
 					die("cannot read file: %v", err)
 				}
@@ -75,7 +79,7 @@ func initCluster(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	e, err := cmdcommon.NewStore(&cfg.CommonConfig)
+	e, err := cmdcommon.NewStore(ctx, &cfg.CommonConfig)
 	if err != nil {
 		die("%v", err)
 	}
@@ -106,15 +110,16 @@ func initCluster(cmd *cobra.Command, args []string) {
 		die("cannot get cluster data: %v", err)
 	}
 
-	var cs *cluster.ClusterSpec
+	var cs *cluster.Spec
 	if dataSupplied {
 		if err := json.Unmarshal(data, &cs); err != nil {
 			die("failed to unmarshal cluster spec: %v", err)
 		}
 	} else {
 		// Define a new cluster spec with initMode "new"
-		cs = &cluster.ClusterSpec{}
-		cs.InitMode = cluster.ClusterInitModeP(cluster.ClusterInitModeNew)
+		cs = &cluster.Spec{}
+		newCluster := cluster.New
+		cs.InitMode = &newCluster
 	}
 
 	if err := cs.Validate(); err != nil {

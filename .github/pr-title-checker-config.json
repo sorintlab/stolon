@@ -1,0 +1,16 @@
+{
+  "LABEL": {
+    "name": "title needs formatting",
+    "color": "EEEEEE"
+  },
+  "CHECKS": {
+    "prefixes": ["[Bot] docs: "],
+    "regexp": "^(feat|perf|fix|hotfix|bug|docs|test|revert|refactor|ci|build|chore)!?(\\(.*\\))?!?:.*"
+  },
+  "MESSAGES": {
+    "success": "PR title is valid",
+    "failure": "PR title is invalid",
+    "notice": "PR Title needs to pass regex '^(feat|perf|fix|hotfix|bug|docs|test|revert|refactor|ci|build|chore)!?(\\(.*\\))?!?:.*"
+  }
+}
+

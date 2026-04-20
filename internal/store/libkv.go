@@ -1,3 +1,4 @@
+// Copyright 2026 PgVillage
 // Copyright 2017 Sorint.lab
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,19 +15,13 @@
 
 package store
 
+// TODO: implement context
+
 import (
 	"context"
 
-	"github.com/docker/leadership"
-	libkvstore "github.com/docker/libkv/store"
-	"github.com/docker/libkv/store/consul"
-	"github.com/docker/libkv/store/etcd"
+	libkvstore "github.com/kvtools/valkeyrie/store"
 )
-
-func init() {
-	etcd.Register()
-	consul.Register()
-}
 
 func fromLibKVStoreErr(err error) error {
 	switch err {
@@ -47,12 +42,12 @@ func (s *libKVStore) Put(ctx context.Context, key string, value []byte, options 
 	if options != nil {
 		libkvOptions = &libkvstore.WriteOptions{TTL: options.TTL}
 	}
-	err := s.store.Put(key, value, libkvOptions)
+	err := s.store.Put(ctx, key, value, libkvOptions)
 	return fromLibKVStoreErr(err)
 }
 
 func (s *libKVStore) Get(ctx context.Context, key string) (*KVPair, error) {
-	pair, err := s.store.Get(key)
+	pair, err := s.store.Get(ctx, key, &libkvstore.ReadOptions{})
 	if err != nil {
 		return nil, fromLibKVStoreErr(err)
 	}
@@ -60,7 +55,7 @@ func (s *libKVStore) Get(ctx context.Context, key string) (*KVPair, error) {
 }
 
 func (s *libKVStore) List(ctx context.Context, directory string) ([]*KVPair, error) {
-	pairs, err := s.store.List(directory)
+	pairs, err := s.store.List(ctx, directory, &libkvstore.ReadOptions{})
 	if err != nil {
 		return nil, fromLibKVStoreErr(err)
 	}
@@ -71,7 +66,13 @@ func (s *libKVStore) List(ctx context.Context, directory string) ([]*KVPair, err
 	return kvPairs, nil
 }
 
-func (s *libKVStore) AtomicPut(ctx context.Context, key string, value []byte, previous *KVPair, options *WriteOptions) (*KVPair, error) {
+func (s *libKVStore) AtomicPut(
+	ctx context.Context,
+	key string,
+	value []byte,
+	previous *KVPair,
+	options *WriteOptions,
+) (*KVPair, error) {
 	var libkvPrevious *libkvstore.KVPair
 	if previous != nil {
 		libkvPrevious = &libkvstore.KVPair{Key: previous.Key, LastIndex: previous.LastIndex}
@@ -80,7 +81,7 @@ func (s *libKVStore) AtomicPut(ctx context.Context, key string, value []byte, pr
 	if options != nil {
 		libkvOptions = &libkvstore.WriteOptions{TTL: options.TTL}
 	}
-	_, pair, err := s.store.AtomicPut(key, value, libkvPrevious, libkvOptions)
+	_, pair, err := s.store.AtomicPut(ctx, key, value, libkvPrevious, libkvOptions)
 	if err != nil {
 		return nil, fromLibKVStoreErr(err)
 	}
@@ -88,22 +89,22 @@ func (s *libKVStore) AtomicPut(ctx context.Context, key string, value []byte, pr
 }
 
 func (s *libKVStore) Delete(ctx context.Context, key string) error {
-	return fromLibKVStoreErr(s.store.Delete(key))
+	return fromLibKVStoreErr(s.store.Delete(ctx, key))
 }
 
 func (s *libKVStore) Close() error {
-	s.store.Close()
-	return nil
+	// TODO: implement zerolog
+	return s.store.Close()
 }
 
 type libkvElection struct {
 	store     *libKVStore
 	path      string
-	candidate *leadership.Candidate
+	candidate *Candidate
 }
 
-func (e *libkvElection) RunForElection() (<-chan bool, <-chan error) {
-	return e.candidate.RunForElection()
+func (e *libkvElection) RunForElection(ctx context.Context) (<-chan bool, <-chan error) {
+	return e.candidate.RunForElection(ctx)
 }
 
 func (e *libkvElection) Stop() {

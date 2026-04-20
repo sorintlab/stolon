@@ -1,3 +1,4 @@
+// Copyright 2026 PgVillage
 // Copyright 2017 Sorint.lab
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +18,7 @@ package cmd
 import (
 	"context"
 
-	cmdcommon "github.com/sorintlab/stolon/cmd"
+	cmdcommon "github.com/pgvillage-tools/stolon/cmd"
 	"github.com/spf13/cobra"
 )
 
@@ -32,6 +33,8 @@ func init() {
 }
 
 func removeKeeper(_ *cobra.Command, args []string) {
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	defer cancelFunc()
 	if len(args) > 1 {
 		die("too many arguments")
 	}
@@ -42,7 +45,7 @@ func removeKeeper(_ *cobra.Command, args []string) {
 
 	keeperID := args[0]
 
-	store, err := cmdcommon.NewStore(&cfg.CommonConfig)
+	store, err := cmdcommon.NewStore(ctx, &cfg.CommonConfig)
 	if err != nil {
 		die("%v", err)
 	}

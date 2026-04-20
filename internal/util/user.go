@@ -1,3 +1,4 @@
+// Copyright 2026 PgVillage
 // Copyright 2016 Sorint.lab
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,13 +16,16 @@
 package util
 
 import (
-	"fmt"
+	"errors"
 	"os"
 	"os/user"
 )
 
+var currentUserFunc = user.Current
+
+// GetUser returns the linux username running stolon
 func GetUser() (string, error) {
-	u, err := user.Current()
+	u, err := currentUserFunc()
 	if err == nil {
 		return u.Username, nil
 	}
@@ -31,5 +35,5 @@ func GetUser() (string, error) {
 		return name, nil
 	}
 
-	return "", fmt.Errorf("cannot detect current user")
+	return "", errors.New("cannot detect current user")
 }

@@ -1,3 +1,4 @@
+// Copyright 2026 PgVillage
 // Copyright 2015 Sorint.lab
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,20 +13,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package integration holds all integration tests
 package integration
 
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/sorintlab/stolon/internal/cluster"
-	"github.com/sorintlab/stolon/internal/common"
-	"github.com/sorintlab/stolon/internal/store"
+	cluster "github.com/pgvillage-tools/stolon/api/v1"
+	"github.com/pgvillage-tools/stolon/internal/common"
+	pg "github.com/pgvillage-tools/stolon/internal/postgresql"
+	"github.com/pgvillage-tools/stolon/internal/store"
 
 	"github.com/gofrs/uuid"
 )
@@ -33,13 +35,13 @@ import (
 func TestServerParameters(t *testing.T) {
 	t.Parallel()
 
-	dir, err := ioutil.TempDir("", "")
+	dir, err := os.MkdirTemp("", "")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	defer os.RemoveAll(dir)
 
-	tstore, err := NewTestStore(t, dir)
+	tstore, err := newTestStore(t, dir)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -58,8 +60,8 @@ func TestServerParameters(t *testing.T) {
 
 	sm := store.NewKVBackedStore(tstore.store, storePath)
 
-	initialClusterSpec := &cluster.ClusterSpec{
-		InitMode:           cluster.ClusterInitModeP(cluster.ClusterInitModeNew),
+	initialClusterSpec := &cluster.Spec{
+		InitMode:           &newCluster,
 		SleepInterval:      &cluster.Duration{Duration: 2 * time.Second},
 		FailInterval:       &cluster.Duration{Duration: 5 * time.Second},
 		ConvergenceTimeout: &cluster.Duration{Duration: 30 * time.Second},
@@ -68,14 +70,14 @@ func TestServerParameters(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	ts, err := NewTestSentinel(t, dir, clusterName, tstore.storeBackend, storeEndpoints, fmt.Sprintf("--initial-cluster-spec=%s", initialClusterSpecFile))
+	ts, err := newTestSentinel(t, dir, clusterName, tstore.storeBackend, storeEndpoints, fmt.Sprintf("--initial-cluster-spec=%s", initialClusterSpecFile))
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	if err := ts.Start(); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	tk, err := NewTestKeeper(t, dir, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, tstore.storeBackend, storeEndpoints)
+	tk, err := newTestKeeper(t, dir, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, tstore.storeBackend, storeEndpoints)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -83,14 +85,14 @@ func TestServerParameters(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	if err := WaitClusterPhase(sm, cluster.ClusterPhaseNormal, 60*time.Second); err != nil {
+	if err := waitClusterPhase(sm, cluster.Normal, 60*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	if err := tk.WaitDBUp(60 * time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	err = StolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "pgParameters" : { "unexistent_parameter": "value" } }`)
+	err = stolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "pgParameters" : { "unexistent_parameter": "value" } }`)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -117,7 +119,7 @@ func TestServerParameters(t *testing.T) {
 	}
 
 	// Fix wrong parameters
-	err = StolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "pgParameters" : null }`)
+	err = stolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "pgParameters" : null }`)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -130,13 +132,13 @@ func TestServerParameters(t *testing.T) {
 func TestWalLevel(t *testing.T) {
 	t.Parallel()
 
-	dir, err := ioutil.TempDir("", "")
+	dir, err := os.MkdirTemp("", "")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	defer os.RemoveAll(dir)
 
-	tstore, err := NewTestStore(t, dir)
+	tstore, err := newTestStore(t, dir)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -155,8 +157,8 @@ func TestWalLevel(t *testing.T) {
 
 	sm := store.NewKVBackedStore(tstore.store, storePath)
 
-	initialClusterSpec := &cluster.ClusterSpec{
-		InitMode:           cluster.ClusterInitModeP(cluster.ClusterInitModeNew),
+	initialClusterSpec := &cluster.Spec{
+		InitMode:           &newCluster,
 		SleepInterval:      &cluster.Duration{Duration: 2 * time.Second},
 		FailInterval:       &cluster.Duration{Duration: 5 * time.Second},
 		ConvergenceTimeout: &cluster.Duration{Duration: 30 * time.Second},
@@ -165,14 +167,14 @@ func TestWalLevel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	ts, err := NewTestSentinel(t, dir, clusterName, tstore.storeBackend, storeEndpoints, fmt.Sprintf("--initial-cluster-spec=%s", initialClusterSpecFile))
+	ts, err := newTestSentinel(t, dir, clusterName, tstore.storeBackend, storeEndpoints, fmt.Sprintf("--initial-cluster-spec=%s", initialClusterSpecFile))
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	if err := ts.Start(); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	tk, err := NewTestKeeper(t, dir, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, tstore.storeBackend, storeEndpoints)
+	tk, err := newTestKeeper(t, dir, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, tstore.storeBackend, storeEndpoints)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -180,7 +182,7 @@ func TestWalLevel(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	if err := WaitClusterPhase(sm, cluster.ClusterPhaseNormal, 60*time.Second); err != nil {
+	if err := waitClusterPhase(sm, cluster.Normal, 60*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	if err := tk.WaitDBUp(60 * time.Second); err != nil {
@@ -188,7 +190,7 @@ func TestWalLevel(t *testing.T) {
 	}
 
 	// "archive" isn't an accepted wal_level
-	err = StolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "pgParameters" : { "wal_level": "archive" } }`)
+	err = stolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "pgParameters" : { "wal_level": "archive" } }`)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -215,7 +217,7 @@ func TestWalLevel(t *testing.T) {
 	}
 
 	// "logical" is an accepted wal_level
-	err = StolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "pgParameters" : { "wal_level": "logical" } }`)
+	err = stolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "pgParameters" : { "wal_level": "logical" } }`)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -245,13 +247,13 @@ func TestWalLevel(t *testing.T) {
 func TestWalKeepSegments(t *testing.T) {
 	t.Parallel()
 
-	dir, err := ioutil.TempDir("", "")
+	dir, err := os.MkdirTemp("", "")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	defer os.RemoveAll(dir)
 
-	tstore, err := NewTestStore(t, dir)
+	tstore, err := newTestStore(t, dir)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -270,8 +272,8 @@ func TestWalKeepSegments(t *testing.T) {
 
 	sm := store.NewKVBackedStore(tstore.store, storePath)
 
-	initialClusterSpec := &cluster.ClusterSpec{
-		InitMode:           cluster.ClusterInitModeP(cluster.ClusterInitModeNew),
+	initialClusterSpec := &cluster.Spec{
+		InitMode:           &newCluster,
 		SleepInterval:      &cluster.Duration{Duration: 2 * time.Second},
 		FailInterval:       &cluster.Duration{Duration: 5 * time.Second},
 		ConvergenceTimeout: &cluster.Duration{Duration: 30 * time.Second},
@@ -280,14 +282,14 @@ func TestWalKeepSegments(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	ts, err := NewTestSentinel(t, dir, clusterName, tstore.storeBackend, storeEndpoints, fmt.Sprintf("--initial-cluster-spec=%s", initialClusterSpecFile))
+	ts, err := newTestSentinel(t, dir, clusterName, tstore.storeBackend, storeEndpoints, fmt.Sprintf("--initial-cluster-spec=%s", initialClusterSpecFile))
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	if err := ts.Start(); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	tk, err := NewTestKeeper(t, dir, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, tstore.storeBackend, storeEndpoints)
+	tk, err := newTestKeeper(t, dir, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, tstore.storeBackend, storeEndpoints)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -295,23 +297,23 @@ func TestWalKeepSegments(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	if err := WaitClusterPhase(sm, cluster.ClusterPhaseNormal, 60*time.Second); err != nil {
+	if err := waitClusterPhase(sm, cluster.Normal, 60*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	if err := tk.WaitDBUp(60 * time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	maj, _, err := tk.PGDataVersion()
+	version, err := tk.PGDataVersion()
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	if maj >= 13 {
-		t.Skipf("skipping since postgres version %d >= 13", maj)
+	if version.GreaterThanEqual(pg.V13) {
+		t.Skipf("skipping since postgres version %s >= 13", version)
 	}
 
 	// "archive" isn't an accepted wal_level
-	err = StolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "pgParameters" : { "wal_level": "archive" } }`)
+	err = stolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "pgParameters" : { "wal_level": "archive" } }`)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -338,7 +340,7 @@ func TestWalKeepSegments(t *testing.T) {
 	}
 
 	// test setting a wal_keep_segments value greater than the default
-	err = StolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "pgParameters" : { "wal_keep_segments": "20" } }`)
+	err = stolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "pgParameters" : { "wal_keep_segments": "20" } }`)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -365,7 +367,7 @@ func TestWalKeepSegments(t *testing.T) {
 	}
 
 	// test setting a wal_keep_segments value less than the default
-	err = StolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "pgParameters" : { "wal_keep_segments": "5" } }`)
+	err = stolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "pgParameters" : { "wal_keep_segments": "5" } }`)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -392,7 +394,7 @@ func TestWalKeepSegments(t *testing.T) {
 	}
 
 	// test setting a bad wal_keep_segments value
-	err = StolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "pgParameters" : { "wal_keep_segments": "badvalue" } }`)
+	err = stolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "pgParameters" : { "wal_keep_segments": "badvalue" } }`)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -418,13 +420,13 @@ func TestWalKeepSegments(t *testing.T) {
 func TestAlterSystem(t *testing.T) {
 	t.Parallel()
 
-	dir, err := ioutil.TempDir("", "")
+	dir, err := os.MkdirTemp("", "")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	defer os.RemoveAll(dir)
 
-	tstore, err := NewTestStore(t, dir)
+	tstore, err := newTestStore(t, dir)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -443,8 +445,8 @@ func TestAlterSystem(t *testing.T) {
 
 	sm := store.NewKVBackedStore(tstore.store, storePath)
 
-	initialClusterSpec := &cluster.ClusterSpec{
-		InitMode:           cluster.ClusterInitModeP(cluster.ClusterInitModeNew),
+	initialClusterSpec := &cluster.Spec{
+		InitMode:           &newCluster,
 		SleepInterval:      &cluster.Duration{Duration: 2 * time.Second},
 		FailInterval:       &cluster.Duration{Duration: 5 * time.Second},
 		ConvergenceTimeout: &cluster.Duration{Duration: 30 * time.Second},
@@ -453,14 +455,14 @@ func TestAlterSystem(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	ts, err := NewTestSentinel(t, dir, clusterName, tstore.storeBackend, storeEndpoints, fmt.Sprintf("--initial-cluster-spec=%s", initialClusterSpecFile))
+	ts, err := newTestSentinel(t, dir, clusterName, tstore.storeBackend, storeEndpoints, fmt.Sprintf("--initial-cluster-spec=%s", initialClusterSpecFile))
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	if err := ts.Start(); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	tk, err := NewTestKeeper(t, dir, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, tstore.storeBackend, storeEndpoints)
+	tk, err := newTestKeeper(t, dir, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, tstore.storeBackend, storeEndpoints)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -468,7 +470,7 @@ func TestAlterSystem(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	if err := WaitClusterPhase(sm, cluster.ClusterPhaseNormal, 60*time.Second); err != nil {
+	if err := waitClusterPhase(sm, cluster.Normal, 60*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	if err := tk.WaitDBUp(60 * time.Second); err != nil {
@@ -503,7 +505,7 @@ func TestAlterSystem(t *testing.T) {
 func TestAdditionalReplicationSlots(t *testing.T) {
 	t.Parallel()
 
-	dir, err := ioutil.TempDir("", "stolon")
+	dir, err := os.MkdirTemp("", "stolon")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -551,7 +553,7 @@ func TestAdditionalReplicationSlots(t *testing.T) {
 	}
 
 	// create additional replslots on master
-	err = StolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "additionalMasterReplicationSlots" : [ "replslot01", "replslot02" ] }`)
+	err = stolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "additionalMasterReplicationSlots" : [ "replslot01", "replslot02" ] }`)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -564,7 +566,7 @@ func TestAdditionalReplicationSlots(t *testing.T) {
 	}
 
 	// remove replslot02
-	err = StolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "additionalMasterReplicationSlots" : [ "replslot01" ] }`)
+	err = stolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "additionalMasterReplicationSlots" : [ "replslot01" ] }`)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -577,7 +579,7 @@ func TestAdditionalReplicationSlots(t *testing.T) {
 	}
 
 	// remove additional replslots on master
-	err = StolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "additionalMasterReplicationSlots" : null }`)
+	err = stolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "additionalMasterReplicationSlots" : null }`)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -590,7 +592,7 @@ func TestAdditionalReplicationSlots(t *testing.T) {
 	}
 
 	// create additional replslots on master
-	err = StolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "additionalMasterReplicationSlots" : [ "replslot01", "replslot02" ] }`)
+	err = stolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "additionalMasterReplicationSlots" : [ "replslot01", "replslot02" ] }`)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -623,10 +625,10 @@ func TestAdditionalReplicationSlots(t *testing.T) {
 	master.Stop()
 
 	// Wait for cluster data containing standby as master
-	if err := WaitClusterDataMaster(standby.uid, sm, 30*time.Second); err != nil {
+	if err := waitClusterDataMaster(standby.uid, sm, 30*time.Second); err != nil {
 		t.Fatalf("expected master %q in cluster view", standby.uid)
 	}
-	if err := standby.WaitDBRole(common.RoleMaster, nil, 30*time.Second); err != nil {
+	if err := standby.WaitDBRole(common.RolePrimary, nil, 30*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
@@ -639,13 +641,13 @@ func TestAdditionalReplicationSlots(t *testing.T) {
 func TestAutomaticPgRestart(t *testing.T) {
 	t.Parallel()
 
-	dir, err := ioutil.TempDir("", "")
+	dir, err := os.MkdirTemp("", "")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	defer os.RemoveAll(dir)
 
-	tstore, err := NewTestStore(t, dir)
+	tstore, err := newTestStore(t, dir)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -666,8 +668,8 @@ func TestAutomaticPgRestart(t *testing.T) {
 	automaticPgRestart := true
 	pgParameters := map[string]string{"max_connections": "100"}
 
-	initialClusterSpec := &cluster.ClusterSpec{
-		InitMode:           cluster.ClusterInitModeP(cluster.ClusterInitModeNew),
+	initialClusterSpec := &cluster.Spec{
+		InitMode:           &newCluster,
 		AutomaticPgRestart: &automaticPgRestart,
 		PGParameters:       pgParameters,
 	}
@@ -676,7 +678,7 @@ func TestAutomaticPgRestart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	ts, err := NewTestSentinel(t, dir, clusterName, tstore.storeBackend, storeEndpoints, fmt.Sprintf("--initial-cluster-spec=%s", initialClusterSpecFile))
+	ts, err := newTestSentinel(t, dir, clusterName, tstore.storeBackend, storeEndpoints, fmt.Sprintf("--initial-cluster-spec=%s", initialClusterSpecFile))
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -685,7 +687,7 @@ func TestAutomaticPgRestart(t *testing.T) {
 	}
 	defer ts.Stop()
 
-	tk, err := NewTestKeeper(t, dir, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, tstore.storeBackend, storeEndpoints)
+	tk, err := newTestKeeper(t, dir, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, tstore.storeBackend, storeEndpoints)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -694,14 +696,14 @@ func TestAutomaticPgRestart(t *testing.T) {
 	}
 	defer tk.Stop()
 
-	if err := WaitClusterPhase(sm, cluster.ClusterPhaseNormal, 60*time.Second); err != nil {
+	if err := waitClusterPhase(sm, cluster.Normal, 60*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	if err := tk.WaitDBUp(60 * time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	err = StolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "pgParameters" : { "max_connections": "150" } }`)
+	err = stolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "pgParameters" : { "max_connections": "150" } }`)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -728,12 +730,12 @@ func TestAutomaticPgRestart(t *testing.T) {
 	}
 
 	// Allow users to opt out
-	err = StolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "automaticPgRestart" : false }`)
+	err = stolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "automaticPgRestart" : false }`)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	err = StolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "pgParameters" : { "max_connections": "200" } }`)
+	err = stolonCtl(t, clusterName, tstore.storeBackend, storeEndpoints, "update", "--patch", `{ "pgParameters" : { "max_connections": "200" } }`)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -763,13 +765,13 @@ func TestAutomaticPgRestart(t *testing.T) {
 func TestAdvertise(t *testing.T) {
 	t.Parallel()
 
-	dir, err := ioutil.TempDir("", "")
+	dir, err := os.MkdirTemp("", "")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	defer os.RemoveAll(dir)
 
-	tstore, err := NewTestStore(t, dir)
+	tstore, err := newTestStore(t, dir)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -788,8 +790,8 @@ func TestAdvertise(t *testing.T) {
 
 	sm := store.NewKVBackedStore(tstore.store, storePath)
 
-	initialClusterSpec := &cluster.ClusterSpec{
-		InitMode:           cluster.ClusterInitModeP(cluster.ClusterInitModeNew),
+	initialClusterSpec := &cluster.Spec{
+		InitMode:           &newCluster,
 		SleepInterval:      &cluster.Duration{Duration: 2 * time.Second},
 		FailInterval:       &cluster.Duration{Duration: 5 * time.Second},
 		ConvergenceTimeout: &cluster.Duration{Duration: 30 * time.Second},
@@ -798,7 +800,7 @@ func TestAdvertise(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	ts, err := NewTestSentinel(t, dir, clusterName, tstore.storeBackend, storeEndpoints, fmt.Sprintf("--initial-cluster-spec=%s", initialClusterSpecFile))
+	ts, err := newTestSentinel(t, dir, clusterName, tstore.storeBackend, storeEndpoints, fmt.Sprintf("--initial-cluster-spec=%s", initialClusterSpecFile))
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -809,7 +811,7 @@ func TestAdvertise(t *testing.T) {
 
 	// Start keeper with advertise config
 	advertiseConfig := []string{"--pg-advertise-address=6.6.6.6", "--pg-advertise-port=6666"}
-	tk, err := NewTestKeeper(t, dir, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, tstore.storeBackend, storeEndpoints, advertiseConfig...)
+	tk, err := newTestKeeper(t, dir, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, tstore.storeBackend, storeEndpoints, advertiseConfig...)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -818,7 +820,7 @@ func TestAdvertise(t *testing.T) {
 	}
 	defer tk.Stop()
 
-	if err := WaitClusterPhase(sm, cluster.ClusterPhaseNormal, 60*time.Second); err != nil {
+	if err := waitClusterPhase(sm, cluster.Normal, 60*time.Second); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	if err := tk.WaitDBUp(60 * time.Second); err != nil {
@@ -843,5 +845,84 @@ func TestAdvertise(t *testing.T) {
 		if db.Status.ListenAddress != "6.6.6.6" || db.Status.Port != "6666" {
 			t.Fatalf("Expected advertised address and port to be 6.6.6.6 and 6666. Got %s and %s", db.Status.ListenAddress, db.Status.Port)
 		}
+	}
+}
+
+func TestKeeperBootsWithWalDir(t *testing.T) {
+	var uid uuid.UUID
+	t.Parallel()
+
+	dir, err := os.MkdirTemp("", "")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer os.RemoveAll(dir)
+
+	tstore, err := newTestStore(t, dir)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := tstore.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := tstore.WaitUp(10 * time.Second); err != nil {
+		t.Fatalf("error waiting on store up: %v", err)
+	}
+	storeEndpoints := fmt.Sprintf("%s:%s", tstore.listenAddress, tstore.port)
+	defer tstore.Stop()
+	if uid, err = uuid.NewV4(); err != nil {
+		t.Fatalf("error getting new UUD: %v", err)
+	}
+	clusterName := uid.String()
+
+	storePath := filepath.Join(common.StorePrefix, clusterName)
+
+	sm := store.NewKVBackedStore(tstore.store, storePath)
+	automaticPgRestart := true
+	pgParameters := map[string]string{"max_connections": "100"}
+
+	initialClusterSpec := &cluster.Spec{
+		InitMode:           &newCluster,
+		AutomaticPgRestart: &automaticPgRestart,
+		PGParameters:       pgParameters,
+	}
+
+	initialClusterSpecFile, err := writeClusterSpec(dir, initialClusterSpec)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	ts, err := newTestSentinel(t, dir, clusterName, tstore.storeBackend, storeEndpoints, fmt.Sprintf("--initial-cluster-spec=%s", initialClusterSpecFile))
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := ts.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer ts.Stop()
+
+	waldir, err := os.MkdirTemp("", "")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	tk, err := newTestKeeper(t, dir, clusterName, pgSUUsername, pgSUPassword, pgReplUsername, pgReplPassword, tstore.storeBackend, storeEndpoints, "--wal-dir", waldir)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := tk.Start(); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	defer tk.Stop()
+
+	if err := waitClusterPhase(sm, cluster.Normal, 60*time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if err := tk.WaitDBUp(60 * time.Second); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// Test that the Keeper is accepting queries
+	if _, err := tk.Exec("select now()"); err != nil {
+		t.Fatalf("unexpected err: %v", err)
 	}
 }

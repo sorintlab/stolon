@@ -1,3 +1,4 @@
+// Copyright 2026 PgVillage
 // Copyright 2015 Sorint.lab
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,10 +13,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package main is a package that provides functionality concerning postgresSQL lifecycles
 package main
 
 import (
-	"github.com/sorintlab/stolon/cmd/stolonctl/cmd"
+	"github.com/pgvillage-tools/stolon/cmd/stolonctl/cmd"
 )
 
 func main() {

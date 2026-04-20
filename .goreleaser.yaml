@@ -1,0 +1,103 @@
+# This is an example .goreleaser.yml file with some sensible defaults.
+# Make sure to check the documentation at https://goreleaser.com
+
+# The lines below are called `modelines`. See `:help modeline`
+# Feel free to remove those if you don't want/need to use them.
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+# vim: set ts=2 sw=2 tw=0 fo=cnqoj
+
+version: 2
+
+before:
+  hooks:
+    # You may remove this if you don't use go modules.
+    - go mod tidy
+
+builds:
+  - id: stolon-keeper
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    main: ./cmd/keeper
+    binary: stolon-keeper
+    ldflags:
+      - -s -w -X "cmd.Version={{.Version}}"
+  - id: stolon-proxy
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    main: ./cmd/proxy
+    binary: stolon-proxy
+    ldflags:
+      - -s -w -X "cmd.Version={{.Version}}"
+  - id: stolon-sentinel
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    main: ./cmd/sentinel
+    binary: stolon-sentinel
+    ldflags:
+      - -s -w -X "cmd.Version={{.Version}}"
+  - id: stolonctl
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    main: ./cmd/stolonctl
+    binary: stolonctl
+    ldflags:
+      - -s -w -X "cmd.Version={{.Version}}"
+
+archives:
+  - formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    # this name template makes the OS and Arch compatible with the results of `uname`.
+    name_template: stolon_v{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}{{ with .Mips }}_{{ . }}{{ end }}{{ if not (eq .Amd64 "v1") }}{{ .Amd64 }}{{ end }}
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+
+# Please see https://github.com/CycloneDX/cyclonedx-gomod?tab=readme-ov-file#goreleaser-
+sboms:
+  - artifacts: binary
+    documents:
+      - '{{ .Binary }}_v{{ .Version }}_{{ .Os }}_{{ .Arch }}.sbom.json'
+    cmd: cyclonedx-gomod
+    # changes: xml instead of json, and assert-licenses to add licen info per component
+    args:
+      [
+        'mod',
+        '-licenses',
+        '-assert-licenses',
+        '-std',
+        '-output',
+        '$document',
+        '../',
+      ]

@@ -1,3 +1,4 @@
+// Copyright 2026 PgVillage
 // Copyright 2018 Sorint.lab
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,6 +17,7 @@ package util
 
 import "sort"
 
+// StringInSlice checks for a string in a string slice
 func StringInSlice(s []string, e string) bool {
 	for _, v := range s {
 		if v == e {
@@ -39,7 +41,8 @@ func CompareStringSlice(a []string, b []string) bool {
 	return true
 }
 
-// CompareStringSliceNoOrder compares two slices of strings regardless of their order, a nil slice is considered an empty one
+// CompareStringSliceNoOrder compares two slices of strings regardless of their order, a nil slice is considered an
+// empty one
 func CompareStringSliceNoOrder(a []string, b []string) bool {
 	if len(a) != len(b) {
 		return false

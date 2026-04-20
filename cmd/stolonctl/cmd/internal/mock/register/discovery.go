@@ -7,7 +7,7 @@ package mock_register
 import (
 	gomock "github.com/golang/mock/gomock"
 	api "github.com/hashicorp/consul/api"
-	register "github.com/sorintlab/stolon/cmd/stolonctl/cmd/register"
+	register "github.com/pgvillage-tools/stolon/cmd/stolonctl/cmd/register"
 	reflect "reflect"
 )
 
@@ -42,7 +42,7 @@ func (m *MockServiceDiscovery) Register(info *register.ServiceInfo) error {
 }
 
 // Register indicates an expected call of Register
-func (mr *MockServiceDiscoveryMockRecorder) Register(info interface{}) *gomock.Call {
+func (mr *MockServiceDiscoveryMockRecorder) Register(info any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Register", reflect.TypeOf((*MockServiceDiscovery)(nil).Register), info)
 }
 
@@ -55,7 +55,7 @@ func (m *MockServiceDiscovery) Services(name string) (register.ServiceInfos, err
 }
 
 // Services indicates an expected call of Services
-func (mr *MockServiceDiscoveryMockRecorder) Services(name interface{}) *gomock.Call {
+func (mr *MockServiceDiscoveryMockRecorder) Services(name any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Services", reflect.TypeOf((*MockServiceDiscovery)(nil).Services), name)
 }
 
@@ -67,7 +67,7 @@ func (m *MockServiceDiscovery) DeRegister(info *register.ServiceInfo) error {
 }
 
 // DeRegister indicates an expected call of DeRegister
-func (mr *MockServiceDiscoveryMockRecorder) DeRegister(info interface{}) *gomock.Call {
+func (mr *MockServiceDiscoveryMockRecorder) DeRegister(info any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeRegister", reflect.TypeOf((*MockServiceDiscovery)(nil).DeRegister), info)
 }
 
@@ -102,7 +102,7 @@ func (m *MockConsulAgent) ServiceRegister(service *api.AgentServiceRegistration)
 }
 
 // ServiceRegister indicates an expected call of ServiceRegister
-func (mr *MockConsulAgentMockRecorder) ServiceRegister(service interface{}) *gomock.Call {
+func (mr *MockConsulAgentMockRecorder) ServiceRegister(service any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ServiceRegister", reflect.TypeOf((*MockConsulAgent)(nil).ServiceRegister), service)
 }
 
@@ -114,7 +114,7 @@ func (m *MockConsulAgent) ServiceDeregister(serviceID string) error {
 }
 
 // ServiceDeregister indicates an expected call of ServiceDeregister
-func (mr *MockConsulAgentMockRecorder) ServiceDeregister(serviceID interface{}) *gomock.Call {
+func (mr *MockConsulAgentMockRecorder) ServiceDeregister(serviceID any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ServiceDeregister", reflect.TypeOf((*MockConsulAgent)(nil).ServiceDeregister), serviceID)
 }
 
@@ -164,6 +164,6 @@ func (m *MockConsulCatalog) Service(service, tag string, q *api.QueryOptions) ([
 }
 
 // Service indicates an expected call of Service
-func (mr *MockConsulCatalogMockRecorder) Service(service, tag, q interface{}) *gomock.Call {
+func (mr *MockConsulCatalogMockRecorder) Service(service, tag, q any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Service", reflect.TypeOf((*MockConsulCatalog)(nil).Service), service, tag, q)
 }

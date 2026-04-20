@@ -1,0 +1,97 @@
+name-template: 'v$RESOLVED_VERSION 🌈'
+tag-template: 'v$RESOLVED_VERSION'
+exclude-labels:
+  - 'skip-changelog'
+replacers:
+  - search: '/CVE-(\d{4})-(\d+)/g'
+    replace: 'https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-$1-$2'
+categories:
+  - title: '💥 BREAKING CHANGES'
+    labels:
+      - 'breaking'
+  - title: '🚀 Features'
+    labels:
+      - 'feature'
+      - 'enhancement'
+  - title: '🐛 Bug Fixes'
+    labels:
+      - 'fix'
+      - 'bugfix'
+      - 'bug'
+  - title: '🧰 Maintenance'
+    labels:
+      - 'chore'
+      - 'documentation'
+      - 'ci'
+      - 'refactor'
+      - 'style'
+      - 'test'
+  - title: '🔒 Security'
+    labels:
+      - 'dependencies'
+      - 'security'
+change-template: '- $TITLE @$AUTHOR (#$NUMBER)'
+change-title-escapes: '\<*_&' # You can add # and @ to disable mentions, and add ` to disable code blocks.
+version-resolver:
+  major:
+    labels:
+      - 'major'
+      - 'breaking'
+  minor:
+    labels:
+      - 'minor'
+      - 'refactor'
+      - 'enhancement'
+  patch:
+    labels:
+      - 'patch'
+      - 'documentation'
+      - 'ci'
+      - 'style'
+      - 'test'
+  default: patch
+autolabeler:
+  - label: 'breaking'
+    title:
+      - '/!:/'
+    body:
+      - '/BREAKING CHANGE/'
+  - label: 'chore'
+    title:
+      - '/^chore(\([a-z]*\))?!?:/i'
+  - label: 'ci'
+    title:
+      - '/^(ci|build)(\([a-z]*\))?!?:/i'
+    files:
+      - '.github/*'
+      - '.github/**/*'
+  - label: 'documentation'
+    title:
+      - '/^docs(\([a-z]*\))?!?:/i'
+    files:
+      - 'docs/*'
+      - 'docs/**/*'
+      - '*.md'
+      - '**/*.md'
+  - label: 'enhancement'
+    title:
+      - '/^(feat|perf)(\([a-z]*\))?!?:/i'
+  - label: 'bug'
+    title:
+      - '/^(fix|hotfix|bug)(\([a-z]*\))?!?:/i'
+  - label: 'refactor'
+    title:
+      - '/^refactor(\([a-z]*\))?!?:/i'
+  - label: 'revert'
+    title:
+      - '/^revert(\([a-z]*\))?!?:/i'
+  - label: 'style'
+    title:
+      - '/^style(\([a-z]*\))?!?:/i'
+  - label: 'test'
+    title:
+      - '/^test(\([a-z]*\))?!?:/i'
+template: |
+  ## Changes
+
+  $CHANGES

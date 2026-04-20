@@ -1,0 +1,91 @@
+# (mandatory)
+# Path to coverage profile file (output of `go test -coverprofile` command).
+#
+# For cases where there are many coverage profiles, such as when running
+# unit tests and integration tests separately, you can combine all those
+# profiles into one. In this case, the profile should have a comma-separated list
+# of profile files, e.g., 'cover_unit.out,cover_integration.out'.
+profile: cover.out
+
+# (optional; but recommended to set)
+# When specified reported file paths will not contain local prefix in the output.
+local-prefix: 'github.com/pgvillage-tools/stolon'
+
+# Holds coverage thresholds percentages, values should be in range [0-100].
+threshold:
+  # (optional; default 0)
+  # Minimum coverage percentage required for individual files.
+  file: 70
+
+  # (optional; default 0)
+  # Minimum coverage percentage required for each package.
+  package: 80
+
+  # (optional; default 0)
+  # Minimum overall project coverage percentage required.
+  #total: 80
+  total: 29
+
+# Holds regexp rules which will override thresholds for matched files or packages
+# using their paths.
+#
+# First rule from this list that matches file or package is going to apply
+# new threshold to it. If project has multiple rules that match same path,
+# override rules should be listed in order from specific to more general rules.
+override:
+  # Increase coverage threshold to 100% for `foo` package
+  # (default is 80, as configured above in this example).
+  #- path: ^pkg/lib/foo$
+  #  threshold: 100
+  - path: ^cmd
+
+  - path: ^internal/mock/store/store.go
+    threshold: 22
+  - path: ^internal/postgresql/main.go
+    threshold: 25
+  - path: ^internal/postgresql/manager.go
+    threshold: 0
+  - path: ^internal/postgresql/recovery_options.go
+    threshold: 0
+  - path: ^internal/flagutil/env.go
+    threshold: 0
+  - path: ^internal/store/election.go
+    threshold: 0
+  - path: ^internal/store/etcdv3.go
+    threshold: 0
+  - path: ^internal/store/k8s.go
+    threshold: 0
+  - path: ^internal/store/kvbacked.go
+    threshold: 0
+  - path: ^internal/store/libkv.go
+    threshold: 0
+  - path: scripts/gen_commands_doc.go
+    threshold: 0
+
+  - path: ^internal/mock/store$
+    threshold: 22
+  - path: ^internal/postgresql$
+    threshold: 13.9
+  - path: ^internal/flagutil$
+    threshold: 0
+  - path: ^internal/store$
+    threshold: 0
+  - path: ^scripts$
+    threshold: 0
+
+# Holds regexp rules which will exclude matched files or packages
+# from coverage statistics.
+exclude:
+  # Exclude files or packages matching their paths
+  paths:
+    - cmd
+    - e2e
+
+# File name of go-test-coverage breakdown file, which can be used to
+# analyze coverage difference.
+breakdown-file-name: ''
+
+diff:
+  # File name of go-test-coverage breakdown file which will be used to
+  # report coverage difference.
+  base-breakdown-file-name: ''

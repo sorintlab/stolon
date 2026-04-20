@@ -1,3 +1,4 @@
+// Copyright 2026 PgVillage
 // Copyright 2019 Sorint.lab
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,8 +21,8 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/hashicorp/consul/api"
-	"github.com/sorintlab/stolon/cmd/stolonctl/cmd/internal/mock/register"
-	"github.com/sorintlab/stolon/cmd/stolonctl/cmd/register"
+	mock_register "github.com/pgvillage-tools/stolon/cmd/stolonctl/cmd/internal/mock/register"
+	"github.com/pgvillage-tools/stolon/cmd/stolonctl/cmd/register"
 )
 
 func TestNewServiceDiscovery(t *testing.T) {

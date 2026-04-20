@@ -1,3 +1,4 @@
+// Copyright 2026 PgVillage
 // Copyright 2016 Sorint.lab
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,9 +19,9 @@ import (
 	"context"
 	"os"
 
-	cmdcommon "github.com/sorintlab/stolon/cmd"
-	"github.com/sorintlab/stolon/internal/cluster"
-	"github.com/sorintlab/stolon/internal/store"
+	cluster "github.com/pgvillage-tools/stolon/api/v1"
+	cmdcommon "github.com/pgvillage-tools/stolon/cmd"
+	"github.com/pgvillage-tools/stolon/internal/store"
 
 	"github.com/spf13/cobra"
 )
@@ -37,12 +38,14 @@ func init() {
 	CmdStolonCtl.AddCommand(cmdPromote)
 }
 
-func promote(cmd *cobra.Command, args []string) {
+func promote(_ *cobra.Command, args []string) {
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	defer cancelFunc()
 	if len(args) > 0 {
 		die("too many arguments")
 	}
 
-	e, err := cmdcommon.NewStore(&cfg.CommonConfig)
+	e, err := cmdcommon.NewStore(ctx, &cfg.CommonConfig)
 	if err != nil {
 		die("%v", err)
 	}
@@ -73,11 +76,12 @@ func promote(cmd *cobra.Command, args []string) {
 		}
 
 		ds := cd.Cluster.DefSpec()
-		if *ds.Role == cluster.ClusterRoleMaster {
+		if *ds.Role == cluster.Primary {
 			stderr("cluster spec role already set to master")
 			os.Exit(0)
 		}
-		cd.Cluster.Spec.Role = cluster.ClusterRoleP(cluster.ClusterRoleMaster)
+		primaryRole := cluster.Primary
+		cd.Cluster.Spec.Role = &primaryRole
 
 		if err = cd.Cluster.UpdateSpec(cd.Cluster.Spec); err != nil {
 			die("Cannot update cluster spec: %v", err)

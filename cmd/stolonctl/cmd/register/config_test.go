@@ -1,3 +1,4 @@
+// Copyright 2026 PgVillage
 // Copyright 2019 Sorint.lab
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -39,7 +40,8 @@ func TestRegisterConfig(t *testing.T) {
 			config := Config{Backend: "consul", Endpoints: "http://127.0.0.1:8500,http://127.0.0.2:8500"}
 			err := config.Validate()
 
-			if err == nil || err.Error() != "consul does not support multiple endpoints: http://127.0.0.1:8500,http://127.0.0.2:8500" {
+			if err == nil || err.Error() !=
+				"consul does not support multiple endpoints: http://127.0.0.1:8500,http://127.0.0.2:8500" {
 				t.Errorf("expected unknown register backend but got %s", err.Error())
 			}
 		})

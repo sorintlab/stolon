@@ -33,7 +33,7 @@ $kubectl exec -i -t stolon-proxy-669f7b54fd-9psm2 -- stolonctl --cluster-name=ku
 
 Same `stolonctl` command as a one shot:
 ```
-kubectl run -i -t stolonctl --image=sorintlab/stolon:master-pg9.6 --restart=Never --rm -- /usr/local/bin/stolonctl --cluster-name=kube-stolon --store-backend=kubernetes --kube-resource-kind=configmap status
+kubectl run -i -t stolonctl --image=ghcr.io/pgvillage-tools/stolon-keeper:17-latest --restart=Never --rm -- /usr/local/bin/stolonctl --cluster-name=kube-stolon --store-backend=kubernetes --kube-resource-kind=configmap status
 ```
 
 ### See also

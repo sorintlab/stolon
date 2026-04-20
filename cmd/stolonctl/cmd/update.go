@@ -1,3 +1,4 @@
+// Copyright 2026 PgVillage
 // Copyright 2016 Sorint.lab
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,12 +19,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
 
-	cmdcommon "github.com/sorintlab/stolon/cmd"
-	"github.com/sorintlab/stolon/internal/cluster"
-	"github.com/sorintlab/stolon/internal/store"
+	cluster "github.com/pgvillage-tools/stolon/api/v1"
+	cmdcommon "github.com/pgvillage-tools/stolon/cmd"
+	"github.com/pgvillage-tools/stolon/internal/store"
 
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/util/strategicpatch"
@@ -43,30 +44,34 @@ type updateOptions struct {
 var updateOpts updateOptions
 
 func init() {
-	cmdUpdate.PersistentFlags().BoolVarP(&updateOpts.patch, "patch", "p", false, "patch the current cluster specification instead of replacing it")
-	cmdUpdate.PersistentFlags().StringVarP(&updateOpts.file, "file", "f", "", "file containing a complete cluster specification or a patch to apply to the current cluster specification")
+	cmdUpdate.PersistentFlags().BoolVarP(&updateOpts.patch, "patch", "p", false,
+		"patch the current cluster specification instead of replacing it")
+	cmdUpdate.PersistentFlags().StringVarP(&updateOpts.file, "file", "f", "",
+		"file containing a complete cluster specification or a patch to apply to the current cluster specification")
 
 	CmdStolonCtl.AddCommand(cmdUpdate)
 }
 
-func patchClusterSpec(cs *cluster.ClusterSpec, p []byte) (*cluster.ClusterSpec, error) {
+func patchClusterSpec(cs *cluster.Spec, p []byte) (*cluster.Spec, error) {
 	csj, err := json.Marshal(cs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal cluster spec: %v", err)
 	}
 
-	newcsj, err := strategicpatch.StrategicMergePatch(csj, p, &cluster.ClusterSpec{})
+	newcsj, err := strategicpatch.StrategicMergePatch(csj, p, &cluster.Spec{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to merge patch cluster spec: %v", err)
 	}
-	var newcs *cluster.ClusterSpec
+	var newcs *cluster.Spec
 	if err := json.Unmarshal(newcsj, &newcs); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal patched cluster spec: %v", err)
 	}
 	return newcs, nil
 }
 
-func update(cmd *cobra.Command, args []string) {
+func update(_ *cobra.Command, args []string) {
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	defer cancelFunc()
 	if len(args) > 1 {
 		die("too many arguments")
 	}
@@ -83,19 +88,19 @@ func update(cmd *cobra.Command, args []string) {
 	} else {
 		var err error
 		if updateOpts.file == "-" {
-			data, err = ioutil.ReadAll(os.Stdin)
+			data, err = io.ReadAll(os.Stdin)
 			if err != nil {
 				die("cannot read from stdin: %v", err)
 			}
 		} else {
-			data, err = ioutil.ReadFile(updateOpts.file)
+			data, err = os.ReadFile(updateOpts.file)
 			if err != nil {
 				die("cannot read file: %v", err)
 			}
 		}
 	}
 
-	e, err := cmdcommon.NewStore(&cfg.CommonConfig)
+	e, err := cmdcommon.NewStore(ctx, &cfg.CommonConfig)
 	if err != nil {
 		die("%v", err)
 	}
@@ -113,7 +118,7 @@ func update(cmd *cobra.Command, args []string) {
 			die("no cluster spec available")
 		}
 
-		var newcs *cluster.ClusterSpec
+		var newcs *cluster.Spec
 		if updateOpts.patch {
 			newcs, err = patchClusterSpec(cd.Cluster.Spec, data)
 			if err != nil {

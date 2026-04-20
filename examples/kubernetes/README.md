@@ -26,7 +26,7 @@ make PGVERSION=10 TAG=stolon:master-pg10 docker
 
 Once the image is built you should push it to the docker registry used by your kubernetes infrastructure.
 
-The provided example uses `sorintlab/stolon:master-pg10`
+The provided example uses `ghcr.io/pgvillage-tools/stolon-keeper:17-latest`
 
 
 ## Cluster setup and tests
@@ -47,7 +47,7 @@ You can execute stolonctl in different ways:
 * as a one shot command executed inside a temporary pod:
 
 ```
-kubectl run -i -t stolonctl --image=sorintlab/stolon:master-pg10 --restart=Never --rm -- /usr/local/bin/stolonctl --cluster-name=kube-stolon --store-backend=kubernetes --kube-resource-kind=configmap init
+kubectl run -i -t stolonctl --image=ghcr.io/pgvillage-tools/stolon-keeper:17-latest --restart=Never --rm -- /usr/local/bin/stolonctl --cluster-name=kube-stolon --store-backend=kubernetes --kube-resource-kind=configmap init
 ```
 
 * from a machine that can access the store backend:

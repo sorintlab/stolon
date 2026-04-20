@@ -1,3 +1,4 @@
+// Copyright 2026 PgVillage
 // Copyright 2018 Sorint.lab
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,6 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package main is a package that provides functionality concerning postgresSQL lifecycles
 package main
 
 import (
@@ -19,10 +21,10 @@ import (
 	"log"
 	"os"
 
-	keepercmd "github.com/sorintlab/stolon/cmd/keeper/cmd"
-	proxycmd "github.com/sorintlab/stolon/cmd/proxy/cmd"
-	sentinelcmd "github.com/sorintlab/stolon/cmd/sentinel/cmd"
-	stolonctlcmd "github.com/sorintlab/stolon/cmd/stolonctl/cmd"
+	keepercmd "github.com/pgvillage-tools/stolon/cmd/keeper/cmd"
+	proxycmd "github.com/pgvillage-tools/stolon/cmd/proxy/cmd"
+	sentinelcmd "github.com/pgvillage-tools/stolon/cmd/sentinel/cmd"
+	stolonctlcmd "github.com/pgvillage-tools/stolon/cmd/stolonctl/cmd"
 
 	"github.com/spf13/cobra/doc"
 )
@@ -30,12 +32,11 @@ import (
 func main() {
 	// use os.Args instead of "flags" because "flags" will mess up the man pages!
 	var outDir string
-	if len(os.Args) == 2 {
-		outDir = os.Args[1]
-	} else {
+	if len(os.Args) != 2 {
 		fmt.Fprintf(os.Stderr, "usage: %s [output directory]", os.Args[0])
 		os.Exit(1)
 	}
+	outDir = os.Args[1]
 
 	if err := doc.GenMarkdownTree(keepercmd.CmdKeeper, outDir); err != nil {
 		log.Fatal(err)

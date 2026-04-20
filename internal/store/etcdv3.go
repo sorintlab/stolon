@@ -1,3 +1,4 @@
+// Copyright 2026 PgVillage
 // Copyright 2017 Sorint.lab
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,15 +13,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package store contains all code regarding consensus stores
 package store
 
 import (
 	"context"
+	"log"
 	"time"
 
-	etcdclientv3 "go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/clientv3/concurrency"
-	"go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
+	"go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
+	etcdclientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/client/v3/concurrency"
 )
 
 func fromEtcV3Error(err error) error {
@@ -85,7 +88,13 @@ func (s *etcdV3Store) List(pctx context.Context, directory string) ([]*KVPair, e
 	return kvPairs, nil
 }
 
-func (s *etcdV3Store) AtomicPut(pctx context.Context, key string, value []byte, previous *KVPair, options *WriteOptions) (*KVPair, error) {
+func (s *etcdV3Store) AtomicPut(
+	pctx context.Context,
+	key string,
+	value []byte,
+	previous *KVPair,
+	options *WriteOptions,
+) (*KVPair, error) {
 	etcdv3Options := []etcdclientv3.OpOption{}
 	if options != nil {
 		if options.TTL > 0 {
@@ -148,7 +157,7 @@ type etcdv3Election struct {
 	cancel context.CancelFunc
 }
 
-func (e *etcdv3Election) RunForElection() (<-chan bool, <-chan error) {
+func (e *etcdv3Election) RunForElection(_ context.Context) (<-chan bool, <-chan error) {
 	if e.running {
 		panic("already running")
 	}
@@ -176,7 +185,11 @@ func (e *etcdv3Election) Leader() (string, error) {
 	if err != nil {
 		return "", fromEtcV3Error(err)
 	}
-	defer s.Close()
+	defer func() {
+		if err := s.Close(); err != nil {
+			log.Fatalf("Failed to close session: %v", err)
+		}
+	}()
 
 	etcdElection := concurrency.NewElection(s, e.path)
 

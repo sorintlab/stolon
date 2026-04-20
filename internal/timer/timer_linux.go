@@ -1,3 +1,4 @@
+// Copyright 2026 PgVillage
 // Copyright 2016 Sorint.lab
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,6 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:build linux
 // +build linux
 
 package timer
@@ -22,10 +24,11 @@ import (
 )
 
 const (
-	// from /usr/include/linux/time.h
+	// CLOCK_MONOTONIC as defined in /usr/include/linux/time.h
 	CLOCK_MONOTONIC = 1
 )
 
+// Now uses a syscall to return the linux timestamp
 // TODO(sgotti) for the moment just use a syscall so it'll work on all linux
 // architectures. It's slower than using a vdso but we don't have such performance
 // needs. Let's wait for a stdlib native monotonic clock.

@@ -1,3 +1,4 @@
+// Copyright 2026 PgVillage
 // Copyright 2018 Sorint.lab
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -8,92 +9,91 @@
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
 package util
 
-import "testing"
+import (
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+)
 
-func TestCompareStringSlice(t *testing.T) {
-	tests := []struct {
-		a  []string
-		b  []string
-		ok bool
-	}{
-		{[]string{}, []string{}, true},
-		{[]string{"", ""}, []string{""}, false},
-		{[]string{"", ""}, []string{"", ""}, true},
-		{[]string{"a", "b"}, []string{"a", "b"}, true},
-		{[]string{"a", "b"}, []string{"b", "a"}, false},
-		{[]string{"a", "b", "c"}, []string{"a", "b"}, false},
-		{[]string{"a", "b", "c"}, []string{"a", "b", "c"}, true},
-		{[]string{"a", "b", "c"}, []string{"b", "c", "a"}, false},
-		{[]string{"a", "b", "c", "a"}, []string{"a", "c", "b", "b"}, false},
-		{[]string{"a", "b", "c", "a"}, []string{"a", "c", "b", "b"}, false},
-	}
+var _ = Describe("Slice", func() {
+	Describe("CompareStringSlice", func() {
+		It("should correctly compare string slices", func() {
+			tests := []struct {
+				a  []string
+				b  []string
+				ok bool
+			}{
+				{[]string{}, []string{}, true},
+				{[]string{"", ""}, []string{""}, false},
+				{[]string{"", ""}, []string{"", ""}, true},
+				{[]string{"a", "b"}, []string{"a", "b"}, true},
+				{[]string{"a", "b"}, []string{"b", "a"}, false},
+				{[]string{"a", "b", "c"}, []string{"a", "b"}, false},
+				{[]string{"a", "b", "c"}, []string{"a", "b", "c"}, true},
+				{[]string{"a", "b", "c"}, []string{"b", "c", "a"}, false},
+				{[]string{"a", "b", "c", "a"}, []string{"a", "c", "b", "b"}, false},
+			}
 
-	for i, tt := range tests {
-		ok := CompareStringSlice(tt.a, tt.b)
-		if ok != tt.ok {
-			t.Errorf("%d: got %t but wanted: %t a: %v, b: %v", i, ok, tt.ok, tt.a, tt.b)
-		}
-	}
-}
+			for _, tt := range tests {
+				Expect(CompareStringSlice(tt.a, tt.b)).To(Equal(tt.ok))
+			}
+		})
+	})
 
-func TestCompareStringSliceNoOrder(t *testing.T) {
-	tests := []struct {
-		a  []string
-		b  []string
-		ok bool
-	}{
-		{[]string{}, []string{}, true},
-		{[]string{"", ""}, []string{""}, false},
-		{[]string{"", ""}, []string{"", ""}, true},
-		{[]string{"a", "b"}, []string{"a", "b"}, true},
-		{[]string{"a", "b"}, []string{"b", "a"}, true},
-		{[]string{"a", "b", "c"}, []string{"a", "b"}, false},
-		{[]string{"a", "b", "c"}, []string{"a", "b", "c"}, true},
-		{[]string{"a", "b", "c"}, []string{"b", "c", "a"}, true},
-		{[]string{"a", "b", "c", "a"}, []string{"a", "c", "b", "b"}, false},
-		{[]string{"a", "b", "c", "a"}, []string{"a", "c", "b", "b"}, false},
-	}
+	Describe("CompareStringSliceNoOrder", func() {
+		It("should correctly compare string slices ignoring order", func() {
+			tests := []struct {
+				a  []string
+				b  []string
+				ok bool
+			}{
+				{[]string{}, []string{}, true},
+				{[]string{"", ""}, []string{""}, false},
+				{[]string{"", ""}, []string{"", ""}, true},
+				{[]string{"a", "b"}, []string{"a", "b"}, true},
+				{[]string{"a", "b"}, []string{"b", "a"}, true},
+				{[]string{"a", "b", "c"}, []string{"a", "b"}, false},
+				{[]string{"a", "b", "c"}, []string{"a", "b", "c"}, true},
+				{[]string{"a", "b", "c"}, []string{"b", "c", "a"}, true},
+				{[]string{"a", "b", "c", "a"}, []string{"a", "c", "b", "b"}, false},
+			}
 
-	for i, tt := range tests {
-		ok := CompareStringSliceNoOrder(tt.a, tt.b)
-		if ok != tt.ok {
-			t.Errorf("%d: got %t but wanted: %t a: %v, b: %v", i, ok, tt.ok, tt.a, tt.b)
-		}
-	}
-}
+			for _, tt := range tests {
+				Expect(CompareStringSliceNoOrder(tt.a, tt.b)).To(Equal(tt.ok))
+			}
+		})
+	})
 
-func TestDifference(t *testing.T) {
-	tests := []struct {
-		a []string
-		b []string
-		r []string
-	}{
-		{[]string{}, []string{}, []string{}},
-		{[]string{"", ""}, []string{""}, []string{}},
-		{[]string{"", ""}, []string{"", ""}, []string{}},
-		{[]string{"", ""}, []string{"a", "", "b"}, []string{}},
-		{[]string{"a", "b"}, []string{"a", "b"}, []string{}},
-		{[]string{"a", "b"}, []string{"b", "a"}, []string{}},
-		{[]string{"a", "b", "c"}, []string{}, []string{"a", "b", "c"}},
-		{[]string{"a", "b", "c"}, []string{"a", "b"}, []string{"c"}},
-		{[]string{"a", "b"}, []string{"a", "b", "c"}, []string{}},
-		{[]string{"a", "b"}, []string{"c", "a", "b"}, []string{}},
-		{[]string{"a", "b", "c"}, []string{"a", "b", "c"}, []string{}},
-		{[]string{"a", "b", "c"}, []string{"b", "c", "a"}, []string{}},
-		{[]string{"a", "b", "c", "a"}, []string{"a", "c", "b", "b"}, []string{}},
-		{[]string{"a", "b", "c", "a"}, []string{"a", "c", "b", "b"}, []string{}},
-	}
+	Describe("Difference", func() {
+		It("should return the difference between two string slices", func() {
+			tests := []struct {
+				a []string
+				b []string
+				r []string
+			}{
+				{[]string{}, []string{}, []string{}},
+				{[]string{"", ""}, []string{""}, []string{}},
+				{[]string{"", ""}, []string{"", ""}, []string{}},
+				{[]string{"", ""}, []string{"a", "", "b"}, []string{}},
+				{[]string{"a", "b"}, []string{"a", "b"}, []string{}},
+				{[]string{"a", "b"}, []string{"b", "a"}, []string{}},
+				{[]string{"a", "b", "c"}, []string{}, []string{"a", "b", "c"}},
+				{[]string{"a", "b", "c"}, []string{"a", "b"}, []string{"c"}},
+				{[]string{"a", "b"}, []string{"a", "b", "c"}, []string{}},
+				{[]string{"a", "b"}, []string{"c", "a", "b"}, []string{}},
+				{[]string{"a", "b", "c"}, []string{"a", "b", "c"}, []string{}},
+				{[]string{"a", "b", "c"}, []string{"b", "c", "a"}, []string{}},
+				{[]string{"a", "b", "c", "a"}, []string{"a", "c", "b", "b"}, []string{}},
+			}
 
-	for i, tt := range tests {
-		r := Difference(tt.a, tt.b)
-		if !CompareStringSliceNoOrder(r, tt.r) {
-			t.Errorf("%d: got %v but wanted: %v a: %v, b: %v", i, r, tt.r, tt.a, tt.b)
-		}
-	}
-}
+			for _, tt := range tests {
+				Expect(Difference(tt.a, tt.b)).To(ConsistOf(tt.r))
+			}
+		})
+	})
+})

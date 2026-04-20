@@ -6,8 +6,8 @@ apk add make jq
 
 echo -n "Waiting for docker to be ready"
 until curl -s --fail http://127.0.0.1:10080/docker-ready; do
-    sleep 1;
-    echo -n "."
+	sleep 1
+	echo -n "."
 done
 echo " Ready"
 
@@ -19,14 +19,14 @@ pushd examples/kubernetes
 
 echo -n "Waiting for kubernetes to be ready"
 until curl -s --fail http://127.0.0.1:10080/kubernetes-ready; do
-   sleep 1;
-   echo -n "."
+	sleep 1
+	echo -n "."
 done
 echo " Ready"
 
-sed -i 's#sorintlab/stolon:master-pg10#stolon:master-pg11#' *.yaml
+sed -i 's#pgvillage-tools/stolon-keeper:17#spgvillage-tools/stolon-keeper:16#' ./*.yaml
 
-for i in role.yaml role-binding.yaml secret.yaml stolon-sentinel.yaml stolon-keeper.yaml stolon-proxy.yaml stolon-proxy-service.yaml ; do
+for i in role.yaml role-binding.yaml secret.yaml stolon-sentinel.yaml stolon-keeper.yaml stolon-proxy.yaml stolon-proxy-service.yaml; do
 	kubectl apply -f $i
 done
 
