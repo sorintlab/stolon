@@ -26,7 +26,9 @@ jobs:
         id: filter
         with:
           # Any file which is not under docs/, examples/, or is not a markdown file is counted as a backend file
-          # Also run when ci-run-on-pr has been changed to validate it is working
+          # Also run on any change under .github/ (workflows, action bumps, dependabot config):
+          # otherwise all jobs are skipped, the matrix jobs never report their required
+          # 'Run e2e tests (NN)' checks and the PR can never merge.
           files_yaml: |
             backend:
               - '!**.md'
@@ -35,7 +37,7 @@ jobs:
               - '!examples/**'
               - '!.github/**'
             ci:
-              - '.github/workflows/ci-run-on-pr.yaml'
+              - '.github/**'
 
   check-go:
     name: Ensure Go modules synchronicity
