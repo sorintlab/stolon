@@ -280,14 +280,14 @@ jobs:
           rm -f /tmp/etcd-${ETCD_VER}-linux-amd64.tar.gz
 
       - name: Download keeper artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: images
           merge-multiple: true
           pattern: keeper-image-${{ matrix.pgversion }}
 
       - name: Download other artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: images
           merge-multiple: true
