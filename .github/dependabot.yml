@@ -19,14 +19,6 @@ updates:
       prefix: "fix"
       prefix-development: "chore"
       include: "scope"
-  - package-ecosystem: "pip"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-    commit-message:
-      prefix: "fix"
-      prefix-development: "chore"
-      include: "scope"
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
