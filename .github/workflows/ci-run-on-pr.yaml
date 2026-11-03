@@ -186,7 +186,7 @@ jobs:
             type=sha
 
       - name: Build stolon images
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           load: true
           build-args: PGVERSION=${{ matrix.pgversion }}
@@ -236,7 +236,7 @@ jobs:
             type=sha
 
       - name: Build stolon images
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           load: true
           context: .
