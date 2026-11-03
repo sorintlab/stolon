@@ -77,6 +77,9 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9.2.0
         with:
+          # Pin golangci-lint itself; the action otherwise installs the latest
+          # release, and new linter rules then break CI on unrelated PRs.
+          version: v2.13.2
           args: --verbose --timeout=10m
 
   shellcheck:
