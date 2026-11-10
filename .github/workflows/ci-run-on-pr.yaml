@@ -36,6 +36,7 @@ jobs:
               - '!docs/**'
               - '!examples/**'
               - '!.github/**'
+              - '.testcoverage.yml'
             ci:
               - '.github/**'
 

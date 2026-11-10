@@ -9,7 +9,7 @@ profile: cover.out
 
 # (optional; but recommended to set)
 # When specified reported file paths will not contain local prefix in the output.
-local-prefix: 'github.com/pgvillage-tools/stolon'
+# local-prefix: 'github.com/pgvillage-tools/stolon'
 
 # Holds coverage thresholds percentages, values should be in range [0-100].
 threshold:
